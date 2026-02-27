@@ -1,0 +1,167 @@
+#include "VulkanDebugOverlay.h"
+#include "VulkanFramebuffer.h"
+#include "VulkanInstance.h"
+#include "VulkanSwapchain.h"
+#include <fstream>
+
+std::vector<uint32_t> VulkanDebugOverlay::LoadSpv(const std::string& path)
+{
+    std::ifstream file(path, std::ios::binary | std::ios::ate);
+    if (!file.is_open())
+        throw std::runtime_error("VulkanDebugOverlay: cannot open shader: " + path);
+    size_t size = static_cast<size_t>(file.tellg());
+    std::vector<uint32_t> buf(size / sizeof(uint32_t));
+    file.seekg(0);
+    file.read(reinterpret_cast<char*>(buf.data()), size);
+    return buf;
+}
+
+void VulkanDebugOverlay::Create(vk::Format swapchainFormat, vk::Format depthFormat)
+{
+    auto& device = VulkanInstance::Get().GetDevice();
+
+    vk::DescriptorSetLayoutBinding samplerBinding{};
+    samplerBinding.binding         = 0;
+    samplerBinding.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+    samplerBinding.descriptorCount = 1;
+    samplerBinding.stageFlags      = vk::ShaderStageFlagBits::eFragment;
+
+    vk::DescriptorSetLayoutCreateInfo dslInfo{};
+    dslInfo.bindingCount = 1;
+    dslInfo.pBindings    = &samplerBinding;
+    descriptorSetLayout = vk::raii::DescriptorSetLayout(device, dslInfo);
+
+    vk::DescriptorSetLayout dsl = *descriptorSetLayout;
+    vk::PipelineLayoutCreateInfo layoutInfo{};
+    layoutInfo.setLayoutCount = 1;
+    layoutInfo.pSetLayouts    = &dsl;
+    pipelineLayout = vk::raii::PipelineLayout(device, layoutInfo);
+
+    vk::DescriptorPoolSize poolSize{ vk::DescriptorType::eCombinedImageSampler, 1 };
+    vk::DescriptorPoolCreateInfo poolInfo{};
+    poolInfo.flags         = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+    poolInfo.maxSets       = 1;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes    = &poolSize;
+    descriptorPool = vk::raii::DescriptorPool(device, poolInfo);
+
+    vk::DescriptorSetAllocateInfo allocInfo{};
+    allocInfo.descriptorPool     = *descriptorPool;
+    allocInfo.descriptorSetCount = 1;
+    allocInfo.pSetLayouts        = &dsl;
+    auto sets     = device.allocateDescriptorSets(allocInfo);
+    descriptorSet = std::move(sets[0]);
+
+    auto vertCode = LoadSpv("shaders/debug.vert.spv");
+    auto fragCode = LoadSpv("shaders/debug.frag.spv");
+
+    auto mkModule = [&](const std::vector<uint32_t>& code) {
+        vk::ShaderModuleCreateInfo ci{};
+        ci.codeSize = code.size() * sizeof(uint32_t);
+        ci.pCode    = code.data();
+        return vk::raii::ShaderModule(device, ci);
+    };
+    auto vertMod = mkModule(vertCode);
+    auto fragMod = mkModule(fragCode);
+
+    vk::PipelineShaderStageCreateInfo stages[2]{};
+    stages[0].stage  = vk::ShaderStageFlagBits::eVertex;
+    stages[0].module = *vertMod;
+    stages[0].pName  = "main";
+    stages[1].stage  = vk::ShaderStageFlagBits::eFragment;
+    stages[1].module = *fragMod;
+    stages[1].pName  = "main";
+
+    vk::PipelineVertexInputStateCreateInfo   vertexInput{};
+    vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
+    inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
+
+    vk::PipelineViewportStateCreateInfo viewportState{};
+    viewportState.viewportCount = 1;
+    viewportState.scissorCount  = 1;
+
+    vk::PipelineRasterizationStateCreateInfo rasterizer{};
+    rasterizer.polygonMode = vk::PolygonMode::eFill;
+    rasterizer.cullMode    = vk::CullModeFlagBits::eNone;
+    rasterizer.lineWidth   = 1.0f;
+
+    vk::PipelineMultisampleStateCreateInfo multisampling{};
+    multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
+
+    vk::PipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.depthTestEnable  = vk::False;
+    depthStencil.depthWriteEnable = vk::False;
+
+    vk::PipelineColorBlendAttachmentState colorBlendAtt{};
+    colorBlendAtt.colorWriteMask =
+        vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+        vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+
+    vk::PipelineColorBlendStateCreateInfo colorBlending{};
+    colorBlending.attachmentCount = 1;
+    colorBlending.pAttachments    = &colorBlendAtt;
+
+    std::array<vk::DynamicState, 2> dynStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+    vk::PipelineDynamicStateCreateInfo dynamicState{};
+    dynamicState.dynamicStateCount = static_cast<uint32_t>(dynStates.size());
+    dynamicState.pDynamicStates    = dynStates.data();
+
+    vk::PipelineRenderingCreateInfo renderingInfo{};
+    renderingInfo.colorAttachmentCount    = 1;
+    renderingInfo.pColorAttachmentFormats = &swapchainFormat;
+    renderingInfo.depthAttachmentFormat   = depthFormat;
+
+    vk::GraphicsPipelineCreateInfo pipelineInfo{};
+    pipelineInfo.pNext               = &renderingInfo;
+    pipelineInfo.stageCount          = 2;
+    pipelineInfo.pStages             = stages;
+    pipelineInfo.pVertexInputState   = &vertexInput;
+    pipelineInfo.pInputAssemblyState = &inputAssembly;
+    pipelineInfo.pViewportState      = &viewportState;
+    pipelineInfo.pRasterizationState = &rasterizer;
+    pipelineInfo.pMultisampleState   = &multisampling;
+    pipelineInfo.pDepthStencilState  = &depthStencil;
+    pipelineInfo.pColorBlendState    = &colorBlending;
+    pipelineInfo.pDynamicState       = &dynamicState;
+    pipelineInfo.layout              = *pipelineLayout;
+
+    pipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
+}
+
+void VulkanDebugOverlay::Draw(vk::CommandBuffer cmd, VulkanFramebuffer& framebuffer)
+{
+    vk::DescriptorImageInfo imgInfo{};
+    imgInfo.sampler     = framebuffer.GetSampler();
+    imgInfo.imageView   = framebuffer.GetColorView();
+    imgInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+    vk::WriteDescriptorSet write{};
+    write.dstSet          = *descriptorSet;
+    write.dstBinding      = 0;
+    write.descriptorCount = 1;
+    write.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+    write.pImageInfo      = &imgInfo;
+    VulkanInstance::Get().GetDevice().updateDescriptorSets(write, nullptr);
+
+    auto& swapchain = VulkanSwapchain::Get();
+    vk::Viewport vp{};
+    vp.width    = static_cast<float>(swapchain.GetExtent().width);
+    vp.height   = static_cast<float>(swapchain.GetExtent().height);
+    vp.minDepth = 0.0f;
+    vp.maxDepth = 1.0f;
+    cmd.setViewport(0, vp);
+    cmd.setScissor(0, vk::Rect2D{ {0,0}, swapchain.GetExtent() });
+
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout, 0, *descriptorSet, nullptr);
+    cmd.draw(6, 1, 0, 0);
+}
+
+void VulkanDebugOverlay::Destroy()
+{
+    descriptorSet       = nullptr;
+    descriptorPool      = nullptr;
+    pipeline            = nullptr;
+    pipelineLayout      = nullptr;
+    descriptorSetLayout = nullptr;
+}

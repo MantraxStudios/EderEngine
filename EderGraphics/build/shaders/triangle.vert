@@ -31,6 +31,8 @@ void main()
 {
     gl_Position   = push.mvp * vec4(inPosition, 1.0);
     fragNormal    = normalize(mat3(transpose(inverse(push.model))) * inNormal);
+    // Invierte normales si es necesario para ver el modelo
+    fragNormal    = -fragNormal;
     fragUV        = inUV;
     fragColor    = inColor * material.albedo;
     fragRoughness = material.roughness;

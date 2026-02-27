@@ -98,6 +98,7 @@ void VulkanInstance::CreateDeviceLogic()
     vulkan13Features.dynamicRendering = vk::True;
 
     vk::PhysicalDeviceFeatures2 features{};
+    features.features.samplerAnisotropy = vk::True;
     features.pNext = &vulkan13Features;
 
     float queuePriority = 1.0f;

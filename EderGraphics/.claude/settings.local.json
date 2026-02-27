@@ -1,0 +1,12 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(glslc triangle.vert -o triangle.vert.spv)",
+      "Bash(glslc triangle.frag -o triangle.frag.spv)",
+      "Bash(spirv-dis \"c:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build/shaders/triangle.frag.spv\")",
+      "Bash(glslc debug.vert -o debug.vert.spv)",
+      "Bash(glslc debug.frag -o debug.frag.spv)",
+      "Bash(cmake ..)"
+    ]
+  }
+}

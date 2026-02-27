@@ -19,6 +19,24 @@
 },
 {
   "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -TP -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\vendor\\include -O0 -g -Xclang -gcodeview -std:c++20 -MDd /EHsc /W0 /Od /Zi /FoCMakeFiles\\EderGraphics.dir\\src\\Renderer\\Vulkan\\VulkanDebugOverlay.cpp.obj /FdCMakeFiles\\EderGraphics.dir\\ -c -- C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src\\Renderer\\Vulkan\\VulkanDebugOverlay.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src/Renderer/Vulkan/VulkanDebugOverlay.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build/CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanDebugOverlay.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -TP -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\vendor\\include -O0 -g -Xclang -gcodeview -std:c++20 -MDd /EHsc /W0 /Od /Zi /FoCMakeFiles\\EderGraphics.dir\\src\\Renderer\\Vulkan\\VulkanDepthBuffer.cpp.obj /FdCMakeFiles\\EderGraphics.dir\\ -c -- C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src\\Renderer\\Vulkan\\VulkanDepthBuffer.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src/Renderer/Vulkan/VulkanDepthBuffer.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build/CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanDepthBuffer.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -TP -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\vendor\\include -O0 -g -Xclang -gcodeview -std:c++20 -MDd /EHsc /W0 /Od /Zi /FoCMakeFiles\\EderGraphics.dir\\src\\Renderer\\Vulkan\\VulkanFramebuffer.cpp.obj /FdCMakeFiles\\EderGraphics.dir\\ -c -- C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src\\Renderer\\Vulkan\\VulkanFramebuffer.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src/Renderer/Vulkan/VulkanFramebuffer.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build/CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanFramebuffer.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build",
   "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -TP -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\vendor\\include -O0 -g -Xclang -gcodeview -std:c++20 -MDd /EHsc /W0 /Od /Zi /FoCMakeFiles\\EderGraphics.dir\\src\\Renderer\\Vulkan\\VulkanInstance.cpp.obj /FdCMakeFiles\\EderGraphics.dir\\ -c -- C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src\\Renderer\\Vulkan\\VulkanInstance.cpp",
   "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src/Renderer/Vulkan/VulkanInstance.cpp",
   "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build/CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanInstance.cpp.obj"
@@ -40,6 +58,12 @@
   "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -TP -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\vendor\\include -O0 -g -Xclang -gcodeview -std:c++20 -MDd /EHsc /W0 /Od /Zi /FoCMakeFiles\\EderGraphics.dir\\src\\Renderer\\Vulkan\\VulkanSwapchain.cpp.obj /FdCMakeFiles\\EderGraphics.dir\\ -c -- C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src\\Renderer\\Vulkan\\VulkanSwapchain.cpp",
   "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src/Renderer/Vulkan/VulkanSwapchain.cpp",
   "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build/CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSwapchain.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -TP -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\vendor\\include -O0 -g -Xclang -gcodeview -std:c++20 -MDd /EHsc /W0 /Od /Zi /FoCMakeFiles\\EderGraphics.dir\\src\\Renderer\\Vulkan\\VulkanTexture.cpp.obj /FdCMakeFiles\\EderGraphics.dir\\ -c -- C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src\\Renderer\\Vulkan\\VulkanTexture.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src/Renderer/Vulkan/VulkanTexture.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build/CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanTexture.cpp.obj"
 },
 {
   "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build",

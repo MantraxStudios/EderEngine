@@ -7,6 +7,10 @@ void VulkanRenderer::Init()
     CreateCommandPool();
     CreateCommandBuffers();
     CreateSyncObjects();
+
+    auto ext = VulkanSwapchain::Get().GetExtent();
+    depthBuffer.Create(ext.width, ext.height);
+
     std::cout << "[Vulkan] Renderer OK" << std::endl;
 }
 
@@ -59,6 +63,8 @@ void VulkanRenderer::BeginFrame()
             framebufferResized = false;
             device.waitIdle();
             swapchain.Recreate(window);
+            auto ext = swapchain.GetExtent();
+            depthBuffer.Recreate(ext.width, ext.height);
             return;
         }
 
@@ -68,6 +74,8 @@ void VulkanRenderer::BeginFrame()
     {
         device.waitIdle();
         swapchain.Recreate(window);
+        auto ext = swapchain.GetExtent();
+        depthBuffer.Recreate(ext.width, ext.height);
         return;
     }
 
@@ -76,28 +84,27 @@ void VulkanRenderer::BeginFrame()
 
     auto& cmd = commandBuffers[currentFrame];
     cmd.reset();
+    cmd.begin(vk::CommandBufferBeginInfo{});
+    frameStarted = true;
+}
 
-    vk::CommandBufferBeginInfo beginInfo{};
-    cmd.begin(beginInfo);
+void VulkanRenderer::BeginMainPass()
+{
+    auto& swapchain = VulkanSwapchain::Get();
+    auto& cmd       = commandBuffers[currentFrame];
 
-    vk::ImageMemoryBarrier barrier{};
-    barrier.oldLayout           = vk::ImageLayout::eUndefined;
-    barrier.newLayout           = vk::ImageLayout::eColorAttachmentOptimal;
-    barrier.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
-    barrier.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
-    barrier.image               = swapchain.GetImages()[imageIndex];
-    barrier.subresourceRange.aspectMask     = vk::ImageAspectFlagBits::eColor;
-    barrier.subresourceRange.baseMipLevel   = 0;
-    barrier.subresourceRange.levelCount     = 1;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount     = 1;
-    barrier.srcAccessMask = vk::AccessFlagBits::eNone;
-    barrier.dstAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-
-    cmd.pipelineBarrier(
-        vk::PipelineStageFlagBits::eTopOfPipe,
-        vk::PipelineStageFlagBits::eColorAttachmentOutput,
-        {}, {}, {}, barrier);
+    vk::ImageMemoryBarrier colorBarrier{};
+    colorBarrier.oldLayout           = vk::ImageLayout::eUndefined;
+    colorBarrier.newLayout           = vk::ImageLayout::eColorAttachmentOptimal;
+    colorBarrier.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
+    colorBarrier.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
+    colorBarrier.image               = swapchain.GetImages()[imageIndex];
+    colorBarrier.subresourceRange    = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
+    colorBarrier.srcAccessMask       = vk::AccessFlagBits::eNone;
+    colorBarrier.dstAccessMask       = vk::AccessFlagBits::eColorAttachmentWrite;
+    cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
+                        vk::PipelineStageFlagBits::eColorAttachmentOutput,
+                        {}, {}, {}, colorBarrier);
 
     vk::RenderingAttachmentInfo colorAttachment{};
     colorAttachment.imageView   = *swapchain.GetImageViews()[imageIndex];
@@ -106,15 +113,21 @@ void VulkanRenderer::BeginFrame()
     colorAttachment.storeOp     = vk::AttachmentStoreOp::eStore;
     colorAttachment.clearValue  = vk::ClearColorValue{ std::array<float,4>{ 0.1f, 0.1f, 0.1f, 1.0f } };
 
+    vk::RenderingAttachmentInfo depthAttachment{};
+    depthAttachment.imageView   = depthBuffer.GetImageView();
+    depthAttachment.imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+    depthAttachment.loadOp      = vk::AttachmentLoadOp::eClear;
+    depthAttachment.storeOp     = vk::AttachmentStoreOp::eDontCare;
+    depthAttachment.clearValue  = vk::ClearDepthStencilValue{ 1.0f, 0 };
+
     vk::RenderingInfo renderingInfo{};
-    renderingInfo.renderArea.offset        = vk::Offset2D{ 0, 0 };
-    renderingInfo.renderArea.extent        = swapchain.GetExtent();
-    renderingInfo.layerCount               = 1;
-    renderingInfo.colorAttachmentCount     = 1;
-    renderingInfo.pColorAttachments        = &colorAttachment;
+    renderingInfo.renderArea.extent    = swapchain.GetExtent();
+    renderingInfo.layerCount           = 1;
+    renderingInfo.colorAttachmentCount = 1;
+    renderingInfo.pColorAttachments    = &colorAttachment;
+    renderingInfo.pDepthAttachment     = &depthAttachment;
 
     cmd.beginRendering(renderingInfo);
-    frameStarted = true;
 }
 
 void VulkanRenderer::EndFrame()
@@ -133,13 +146,9 @@ void VulkanRenderer::EndFrame()
     barrier.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
     barrier.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
     barrier.image               = swapchain.GetImages()[imageIndex];
-    barrier.subresourceRange.aspectMask     = vk::ImageAspectFlagBits::eColor;
-    barrier.subresourceRange.baseMipLevel   = 0;
-    barrier.subresourceRange.levelCount     = 1;
-    barrier.subresourceRange.baseArrayLayer = 0;
-    barrier.subresourceRange.layerCount     = 1;
-    barrier.srcAccessMask = vk::AccessFlagBits::eColorAttachmentWrite;
-    barrier.dstAccessMask = vk::AccessFlagBits::eNone;
+    barrier.subresourceRange    = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
+    barrier.srcAccessMask       = vk::AccessFlagBits::eColorAttachmentWrite;
+    barrier.dstAccessMask       = vk::AccessFlagBits::eNone;
 
     cmd.pipelineBarrier(
         vk::PipelineStageFlagBits::eColorAttachmentOutput,
@@ -175,12 +184,16 @@ void VulkanRenderer::EndFrame()
         {
             VulkanInstance::Get().GetDevice().waitIdle();
             swapchain.Recreate(window);
+            auto ext = swapchain.GetExtent();
+            depthBuffer.Recreate(ext.width, ext.height);
         }
     }
     catch (const vk::OutOfDateKHRError&)
     {
         VulkanInstance::Get().GetDevice().waitIdle();
         swapchain.Recreate(window);
+        auto ext = swapchain.GetExtent();
+        depthBuffer.Recreate(ext.width, ext.height);
     }
 
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
@@ -189,4 +202,5 @@ void VulkanRenderer::EndFrame()
 void VulkanRenderer::Shutdown()
 {
     VulkanInstance::Get().GetDevice().waitIdle();
+    depthBuffer.Destroy();
 }

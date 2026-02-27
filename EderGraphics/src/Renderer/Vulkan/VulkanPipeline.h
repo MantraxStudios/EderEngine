@@ -6,7 +6,7 @@
 class VulkanPipeline
 {
 public:
-    void Create(const std::string& vertPath, const std::string& fragPath, vk::Format swapchainFormat);
+    void Create(const std::string& vertPath, const std::string& fragPath, vk::Format swapchainFormat, vk::Format depthFormat);
     void Bind   (vk::CommandBuffer cmd);
     void Destroy();
 

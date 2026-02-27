@@ -24,7 +24,7 @@ vk::raii::ShaderModule VulkanPipeline::CreateShaderModule(const std::vector<uint
     return vk::raii::ShaderModule(VulkanInstance::Get().GetDevice(), createInfo);
 }
 
-void VulkanPipeline::Create(const std::string& vertPath, const std::string& fragPath, vk::Format swapchainFormat)
+void VulkanPipeline::Create(const std::string& vertPath, const std::string& fragPath, vk::Format swapchainFormat, vk::Format depthFormat)
 {
     auto& device = VulkanInstance::Get().GetDevice();
 
@@ -95,9 +95,17 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
     uboBinding.descriptorCount = 1;
     uboBinding.stageFlags      = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
+    vk::DescriptorSetLayoutBinding samplerBinding{};
+    samplerBinding.binding         = 1;
+    samplerBinding.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+    samplerBinding.descriptorCount = 1;
+    samplerBinding.stageFlags      = vk::ShaderStageFlagBits::eFragment;
+
+    std::array<vk::DescriptorSetLayoutBinding, 2> bindings = { uboBinding, samplerBinding };
+
     vk::DescriptorSetLayoutCreateInfo dslInfo{};
-    dslInfo.bindingCount = 1;
-    dslInfo.pBindings    = &uboBinding;
+    dslInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+    dslInfo.pBindings    = bindings.data();
 
     descriptorSetLayout = vk::raii::DescriptorSetLayout(device, dslInfo);
 
@@ -116,9 +124,17 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
 
     pipelineLayout = vk::raii::PipelineLayout(device, layoutInfo);
 
+    vk::PipelineDepthStencilStateCreateInfo depthStencil{};
+    depthStencil.depthTestEnable       = vk::True;
+    depthStencil.depthWriteEnable      = vk::True;
+    depthStencil.depthCompareOp        = vk::CompareOp::eLess;
+    depthStencil.depthBoundsTestEnable = vk::False;
+    depthStencil.stencilTestEnable     = vk::False;
+
     vk::PipelineRenderingCreateInfo renderingInfo{};
     renderingInfo.colorAttachmentCount    = 1;
     renderingInfo.pColorAttachmentFormats = &swapchainFormat;
+    renderingInfo.depthAttachmentFormat   = depthFormat;
 
     vk::GraphicsPipelineCreateInfo pipelineInfo{};
     pipelineInfo.pNext               = &renderingInfo;
@@ -129,6 +145,7 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
     pipelineInfo.pViewportState      = &viewportState;
     pipelineInfo.pRasterizationState = &rasterizer;
     pipelineInfo.pMultisampleState   = &multisampling;
+    pipelineInfo.pDepthStencilState  = &depthStencil;
     pipelineInfo.pColorBlendState    = &colorBlending;
     pipelineInfo.pDynamicState       = &dynamicState;
     pipelineInfo.layout              = *pipelineLayout;
