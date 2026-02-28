@@ -1,60 +1,55 @@
-==================================================
-                RENDERING ENGINE
-==================================================
+# 🚀 Rendering Engine
 
-A modern real-time rendering engine built with 
-performance and scalability in mind.
+A modern real-time rendering engine built with performance and scalability in mind.
 
+---
 
-====================
-REQUIREMENTS
-====================
+## 🛠 Requirements
 
-Before compiling the project, make sure you have
-the following installed and added to your system
-Environment PATH:
+Make sure you have the following installed and added to your system **Environment PATH**:
 
-- LLVM
-- Ninja
-- CMake
+- LLVM  
+- Ninja  
+- CMake  
 
+---
 
-====================
-BUILD INSTRUCTIONS
-====================
+## 🔨 Build Instructions
 
-Run the following commands:
+Clone the repository and run:
 
+```bash
 cmake -B build -G Ninja
 cmake --build build
+```
 
-The compiled binaries will be generated inside 
-the "build" directory.
+The compiled binaries will be generated inside the `build` directory.
 
+---
 
-====================
-ENGINE FEATURES
-====================
+## ✨ Features
 
-[ Rendering ]
+### 🖼 Rendering
 - Depth Buffer
 - Frame Buffer
-- Shadow Mapping
-    * Cascaded Shadow Maps (CSM)
-    * Directional Light Shadows
+- Shadow Mapping  
+  - Cascaded Shadow Maps (CSM)  
+  - Directional Light Shadows  
 
-[ Lighting System ]
-- Point Lights
-- Spot Lights
-- Directional Lights
+### 💡 Lighting System
+- Point Lights  
+- Spot Lights  
+- Directional Lights  
 
-[ Camera System ]
-- Scene navigation system
+### 🎥 Camera System
+- Fully functional scene navigation system  
 
-[ Post Processing ]
-- Coming Soon
+### 🎨 Post Processing
+- Coming Soon 🚧  
 
+---
 
-==================================================
+## 📌 Notes
 
-<img width="1916" height="1028" alt="image" src="https://github.com/user-attachments/assets/37464b5a-7638-4312-981f-6b330eca593f" />
+This engine is under active development.  
+More features and optimizations will be added soon.
