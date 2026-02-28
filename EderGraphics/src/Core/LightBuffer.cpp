@@ -93,16 +93,22 @@ void LightBuffer::ClearLights()
     ubo.numSpotLights  = 0;
 }
 
-void LightBuffer::SetLightSpaceMatrix(const glm::mat4& m)
+void LightBuffer::SetCascadeData(const glm::mat4 matrices[4], const glm::vec4& splits)
 {
-    ubo.dirLightSpaceMatrix = m;
+    for (int i = 0; i < 4; i++) ubo.cascadeMatrices[i] = matrices[i];
+    ubo.cascadeSplits = splits;
 }
 
-void LightBuffer::BindShadowMap(vk::ImageView depthView, vk::Sampler sampler)
+void LightBuffer::SetCameraForward(const glm::vec3& forward)
+{
+    ubo.cameraForward = forward;
+}
+
+void LightBuffer::BindShadowMap(vk::ImageView arrayView, vk::Sampler sampler)
 {
     vk::DescriptorImageInfo imgInfo{};
     imgInfo.sampler     = sampler;
-    imgInfo.imageView   = depthView;
+    imgInfo.imageView   = arrayView;
     imgInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
     vk::WriteDescriptorSet write{};

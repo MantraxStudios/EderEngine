@@ -45,5 +45,8 @@ struct LightUBO
     float            _pad           = 0.0f;
     glm::vec3        cameraPos      = {};
     float            _pad2          = 0.0f;
-    glm::mat4        dirLightSpaceMatrix = glm::mat4(1.0f);
+    glm::vec3        cameraForward  = { 0.0f, 0.0f, -1.0f };
+    float            _pad3          = 0.0f;
+    glm::vec4        cascadeSplits  = glm::vec4(0.0f);
+    glm::mat4        cascadeMatrices[4] = {};
 };

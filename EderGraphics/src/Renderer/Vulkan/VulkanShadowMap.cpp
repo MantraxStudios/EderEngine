@@ -1,6 +1,8 @@
 #include "VulkanShadowMap.h"
 #include "VulkanInstance.h"
 #include <glm/gtc/matrix_transform.hpp>
+#include <algorithm>
+#include <cmath>
 
 vk::Format VulkanShadowMap::FindDepthFormat()
 {
@@ -37,7 +39,7 @@ void VulkanShadowMap::Create(uint32_t size)
     ci.format      = format;
     ci.extent      = vk::Extent3D{ size, size, 1 };
     ci.mipLevels   = 1;
-    ci.arrayLayers = 1;
+    ci.arrayLayers = NUM_CASCADES;
     ci.samples     = vk::SampleCountFlagBits::e1;
     ci.tiling      = vk::ImageTiling::eOptimal;
     ci.usage       = vk::ImageUsageFlagBits::eDepthStencilAttachment
@@ -52,14 +54,32 @@ void VulkanShadowMap::Create(uint32_t size)
         depthImage.bindMemory(*depthMemory, 0);
     }
 
-    vk::ImageViewCreateInfo vi{};
-    vi.image                       = *depthImage;
-    vi.viewType                    = vk::ImageViewType::e2D;
-    vi.format                      = format;
-    vi.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
-    vi.subresourceRange.levelCount = 1;
-    vi.subresourceRange.layerCount = 1;
-    depthView = vk::raii::ImageView(device, vi);
+    // Per-cascade layer views (for rendering one layer at a time)
+    for (uint32_t i = 0; i < NUM_CASCADES; i++)
+    {
+        vk::ImageViewCreateInfo vi{};
+        vi.image                           = *depthImage;
+        vi.viewType                        = vk::ImageViewType::e2D;
+        vi.format                          = format;
+        vi.subresourceRange.aspectMask     = vk::ImageAspectFlagBits::eDepth;
+        vi.subresourceRange.levelCount     = 1;
+        vi.subresourceRange.baseArrayLayer = i;
+        vi.subresourceRange.layerCount     = 1;
+        layerViews[i]  = vk::raii::ImageView(device, vi);
+        layerLayouts[i] = vk::ImageLayout::eUndefined;
+    }
+
+    // Full 2D-array view for shader sampling
+    {
+        vk::ImageViewCreateInfo vi{};
+        vi.image                       = *depthImage;
+        vi.viewType                    = vk::ImageViewType::e2DArray;
+        vi.format                      = format;
+        vi.subresourceRange.aspectMask = vk::ImageAspectFlagBits::eDepth;
+        vi.subresourceRange.levelCount = 1;
+        vi.subresourceRange.layerCount = NUM_CASCADES;
+        arrayView = vk::raii::ImageView(device, vi);
+    }
 
     vk::SamplerCreateInfo si{};
     si.magFilter    = vk::Filter::eLinear;
@@ -70,33 +90,33 @@ void VulkanShadowMap::Create(uint32_t size)
     si.borderColor  = vk::BorderColor::eFloatOpaqueWhite;
     si.mipmapMode   = vk::SamplerMipmapMode::eNearest;
     sampler = vk::raii::Sampler(device, si);
-
-    layout = vk::ImageLayout::eUndefined;
 }
 
-void VulkanShadowMap::BeginRendering(vk::CommandBuffer cmd)
+void VulkanShadowMap::BeginRendering(vk::CommandBuffer cmd, uint32_t cascadeIndex)
 {
-    vk::AccessFlags        srcAccess = (layout == vk::ImageLayout::eShaderReadOnlyOptimal)
-                                       ? vk::AccessFlagBits::eShaderRead
-                                       : vk::AccessFlagBits::eNone;
-    vk::PipelineStageFlagBits srcStage = (layout == vk::ImageLayout::eShaderReadOnlyOptimal)
-                                       ? vk::PipelineStageFlagBits::eFragmentShader
-                                       : vk::PipelineStageFlagBits::eTopOfPipe;
+    auto& lay = layerLayouts[cascadeIndex];
+
+    vk::AccessFlags           srcAccess = (lay == vk::ImageLayout::eShaderReadOnlyOptimal)
+                                          ? vk::AccessFlagBits::eShaderRead
+                                          : vk::AccessFlagBits::eNone;
+    vk::PipelineStageFlagBits srcStage  = (lay == vk::ImageLayout::eShaderReadOnlyOptimal)
+                                          ? vk::PipelineStageFlagBits::eFragmentShader
+                                          : vk::PipelineStageFlagBits::eTopOfPipe;
 
     vk::ImageMemoryBarrier barrier{};
-    barrier.oldLayout           = layout;
+    barrier.oldLayout           = lay;
     barrier.newLayout           = vk::ImageLayout::eDepthStencilAttachmentOptimal;
     barrier.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
     barrier.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
     barrier.image               = *depthImage;
-    barrier.subresourceRange    = { vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1 };
+    barrier.subresourceRange    = { vk::ImageAspectFlagBits::eDepth, 0, 1, cascadeIndex, 1 };
     barrier.srcAccessMask       = srcAccess;
     barrier.dstAccessMask       = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
     cmd.pipelineBarrier(srcStage, vk::PipelineStageFlagBits::eEarlyFragmentTests,
                         {}, {}, {}, barrier);
 
     vk::RenderingAttachmentInfo depthAtt{};
-    depthAtt.imageView   = *depthView;
+    depthAtt.imageView   = *layerViews[cascadeIndex];
     depthAtt.imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
     depthAtt.loadOp      = vk::AttachmentLoadOp::eClear;
     depthAtt.storeOp     = vk::AttachmentStoreOp::eStore;
@@ -107,7 +127,7 @@ void VulkanShadowMap::BeginRendering(vk::CommandBuffer cmd)
     ri.layerCount       = 1;
     ri.pDepthAttachment = &depthAtt;
     cmd.beginRendering(ri);
-    layout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+    lay = vk::ImageLayout::eDepthStencilAttachmentOptimal;
 
     vk::Viewport vp{};
     vp.width    = static_cast<float>(mapSize);
@@ -125,37 +145,118 @@ void VulkanShadowMap::EndRendering(vk::CommandBuffer cmd)
 
 void VulkanShadowMap::TransitionToShaderRead(vk::CommandBuffer cmd)
 {
+    // Transition all cascade layers at once after all shadow passes are done
     vk::ImageMemoryBarrier barrier{};
     barrier.oldLayout           = vk::ImageLayout::eDepthStencilAttachmentOptimal;
     barrier.newLayout           = vk::ImageLayout::eShaderReadOnlyOptimal;
     barrier.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
     barrier.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
     barrier.image               = *depthImage;
-    barrier.subresourceRange    = { vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1 };
+    barrier.subresourceRange    = { vk::ImageAspectFlagBits::eDepth, 0, 1, 0, NUM_CASCADES };
     barrier.srcAccessMask       = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
     barrier.dstAccessMask       = vk::AccessFlagBits::eShaderRead;
     cmd.pipelineBarrier(vk::PipelineStageFlagBits::eLateFragmentTests,
                         vk::PipelineStageFlagBits::eFragmentShader,
                         {}, {}, {}, barrier);
-    layout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    for (auto& l : layerLayouts) l = vk::ImageLayout::eShaderReadOnlyOptimal;
 }
 
-glm::mat4 VulkanShadowMap::ComputeLightSpaceMatrix(const glm::vec3& lightDir, float sceneDist) const
+void VulkanShadowMap::ComputeCascades(
+    const glm::mat4& camView,
+    const glm::mat4& camProj,
+    const glm::vec3& lightDir,
+    float nearPlane, float farPlane,
+    glm::mat4 outMatrices[NUM_CASCADES],
+    glm::vec4& outSplits) const
 {
-    glm::vec3 up  = (glm::abs(lightDir.y) < 0.99f) ? glm::vec3(0.0f, 1.0f, 0.0f)
-                                                     : glm::vec3(1.0f, 0.0f, 0.0f);
-    glm::vec3 pos  = -lightDir * sceneDist;
-    glm::mat4 view = glm::lookAt(pos, glm::vec3(0.0f), up);
-    glm::mat4 proj = glm::ortho(-sceneDist, sceneDist, -sceneDist, sceneDist,
-                                0.1f, sceneDist * 2.0f);
-    proj[1][1] *= -1.0f;  // Vulkan Y-flip
-    return proj * view;
+    // Practical split scheme (log + linear blend)
+    float lambda = 0.85f;
+    float splits[NUM_CASCADES + 1];
+    splits[0] = nearPlane;
+    for (int i = 1; i <= (int)NUM_CASCADES; i++)
+    {
+        float t   = float(i) / float(NUM_CASCADES);
+        float log = nearPlane * std::pow(farPlane / nearPlane, t);
+        float uni = nearPlane + (farPlane - nearPlane) * t;
+        splits[i] = lambda * log + (1.0f - lambda) * uni;
+    }
+    outSplits = glm::vec4(splits[1], splits[2], splits[3], splits[4]);
+
+    // Full frustum corners in world space via inverse(proj * view)
+    glm::mat4 invVP = glm::inverse(camProj * camView);
+    glm::vec3 frustumCorners[8];
+    {
+        int idx = 0;
+        // z=0: near plane corners [0..3], z=1: far plane corners [4..7]
+        for (int z = 0; z < 2; z++)
+        for (int x = 0; x < 2; x++)
+        for (int y = 0; y < 2; y++)
+        {
+            glm::vec4 pt = invVP * glm::vec4(
+                x * 2.0f - 1.0f,
+                y * 2.0f - 1.0f,
+                static_cast<float>(z),
+                1.0f);
+            frustumCorners[idx++] = glm::vec3(pt) / pt.w;
+        }
+    }
+
+    glm::vec3 up = (std::abs(lightDir.y) < 0.99f)
+        ? glm::vec3(0.0f, 1.0f, 0.0f)
+        : glm::vec3(1.0f, 0.0f, 0.0f);
+
+    for (int c = 0; c < (int)NUM_CASCADES; c++)
+    {
+        float tNear = (splits[c]     - nearPlane) / (farPlane - nearPlane);
+        float tFar  = (splits[c + 1] - nearPlane) / (farPlane - nearPlane);
+
+        // Lerp between near/far frustum corners to get sub-frustum for this cascade
+        glm::vec3 corners[8];
+        for (int i = 0; i < 4; i++)
+        {
+            glm::vec3 ray   = frustumCorners[i + 4] - frustumCorners[i];
+            corners[i]     = frustumCorners[i] + ray * tNear;
+            corners[i + 4] = frustumCorners[i] + ray * tFar;
+        }
+
+        // Sphere center for rotation-stable shadows
+        glm::vec3 center(0.0f);
+        for (int i = 0; i < 8; i++) center += corners[i];
+        center /= 8.0f;
+
+        float radius = 0.0f;
+        for (int i = 0; i < 8; i++)
+            radius = std::max(radius, glm::length(corners[i] - center));
+        // Quantize radius to reduce shimmering when camera moves
+        radius = std::ceil(radius * 16.0f) / 16.0f;
+
+        // Texel snapping: snap center to shadow texel grid to eliminate edge crawling
+        float texelSize = (radius * 2.0f) / float(mapSize);
+
+        // Build a temporary view along light direction to snap in light space
+        glm::mat4 tmpView = glm::lookAt(glm::vec3(0.0f), lightDir, up);
+        glm::vec4 cLS     = tmpView * glm::vec4(center, 1.0f);
+        cLS.x = std::floor(cLS.x / texelSize) * texelSize;
+        cLS.y = std::floor(cLS.y / texelSize) * texelSize;
+        glm::vec3 centerSnapped = glm::vec3(glm::inverse(tmpView) * cLS);
+
+        glm::mat4 lightView = glm::lookAt(
+            centerSnapped - lightDir * (radius + 1.0f),
+            centerSnapped, up);
+        glm::mat4 lightProj = glm::ortho(
+            -radius, radius, -radius, radius,
+            0.0f, radius * 2.0f + 1.0f);
+        lightProj[1][1] *= -1.0f;  // Vulkan Y-flip
+
+        outMatrices[c] = lightProj * lightView;
+    }
 }
 
 void VulkanShadowMap::Destroy()
 {
-    sampler     = nullptr;
-    depthView   = nullptr;
+    sampler   = nullptr;
+    arrayView = nullptr;
+    for (auto& v : layerViews) v = nullptr;
     depthMemory = nullptr;
     depthImage  = nullptr;
 }

@@ -29,10 +29,13 @@ layout(set = 1, binding = 0) uniform LightUBO {
     float            _pad;
     vec3             cameraPos;
     float            _pad2;
-    mat4             dirLightSpaceMatrix;
+    vec3             cameraForward;
+    float            _pad3;
+    vec4             cascadeSplits;
+    mat4             cascadeMatrices[4];
 } lights;
 
-layout(set = 1, binding = 1) uniform sampler2D shadowMap;
+layout(set = 1, binding = 1) uniform sampler2DArray shadowMap;
 
 layout(location = 0) out vec4 outColor;
 
@@ -51,25 +54,42 @@ vec3 CalcLight(vec3 N, vec3 L, vec3 V, vec3 lightColor, float intensity,
     return diffuse + specular;
 }
 
-float ShadowFactor(vec4 lightSpacePos)
+float ShadowFactor(vec3 worldPos, vec3 N, vec3 L)
 {
-    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
-    vec2 uv = projCoords.xy * 0.5 + 0.5;
+    // Select cascade by view-space depth
+    float depth = dot(worldPos - lights.cameraPos, lights.cameraForward);
+    int cascade = 3;
+    for (int i = 0; i < 4; i++)
+    {
+        if (depth < lights.cascadeSplits[i])
+        {
+            cascade = i;
+            break;
+        }
+    }
+
+    vec4 lightSpacePos = lights.cascadeMatrices[cascade] * vec4(worldPos, 1.0);
+    vec3 projCoords    = lightSpacePos.xyz / lightSpacePos.w;
+    vec2 uv            = projCoords.xy * 0.5 + 0.5;
 
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || projCoords.z > 1.0)
         return 1.0;
 
-    float shadow    = 0.0;
-    float bias      = 0.005;
-    vec2  texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
+    // Bias proportional to surface angle — eliminates acne without peter-panning
+    float NdotL     = max(dot(N, L), 0.0);
+    float bias      = max(0.0008 * (1.0 - NdotL), 0.0001);
+    vec2  texelSize = 1.0 / vec2(textureSize(shadowMap, 0).xy);
 
-    for (int x = -1; x <= 1; ++x)
-    for (int y = -1; y <= 1; ++y)
+    // 5×5 PCF with 1.5-texel spread for soft penumbra
+    float shadow = 0.0;
+    for (int x = -2; x <= 2; ++x)
+    for (int y = -2; y <= 2; ++y)
     {
-        float closest = texture(shadowMap, uv + vec2(x, y) * texelSize).r;
+        vec2  offset  = vec2(x, y) * texelSize * 1.5;
+        float closest = texture(shadowMap, vec3(uv + offset, float(cascade))).r;
         shadow += (projCoords.z - bias < closest) ? 1.0 : 0.0;
     }
-    return shadow / 9.0;
+    return shadow / 25.0;
 }
 
 void main()
@@ -83,9 +103,7 @@ void main()
     for (int i = 0; i < lights.numDirLights; i++)
     {
         vec3  L      = normalize(-lights.dirLights[i].direction);
-        float shadow = (i == 0)
-            ? ShadowFactor(lights.dirLightSpaceMatrix * vec4(fragWorldPos, 1.0))
-            : 1.0;
+        float shadow = (i == 0) ? ShadowFactor(fragWorldPos, N, L) : 1.0;
         result += shadow * CalcLight(N, L, V,
             lights.dirLights[i].color, lights.dirLights[i].intensity,
             baseColor, fragRoughness, fragMetallic);

@@ -10,7 +10,11 @@
       "Bash(cmake .. -G Ninja)",
       "Bash(ninja)",
       "Bash(./compile_shaders.bat)",
-      "Bash(ls /c/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build/shaders/*.spv)"
+      "Bash(ls /c/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build/shaders/*.spv)",
+      "Bash(python3 -c \":*)",
+      "Bash(cmd /c compile_shaders.bat)",
+      "Bash(glslc shaders/triangle.frag -o shaders/triangle.frag.spv)",
+      "Bash(glslc shaders/shadow_debug.frag -o shaders/shadow_debug.frag.spv)"
     ]
   }
 }

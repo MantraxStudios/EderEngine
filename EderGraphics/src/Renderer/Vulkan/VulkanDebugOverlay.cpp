@@ -164,7 +164,7 @@ void VulkanDebugOverlay::Draw(vk::CommandBuffer cmd, VulkanFramebuffer& framebuf
     {
         vk::DescriptorImageInfo imgInfo{};
         imgInfo.sampler     = shadowMap.GetSampler();
-        imgInfo.imageView   = shadowMap.GetDepthView();
+        imgInfo.imageView   = shadowMap.GetArrayView();
         imgInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 
         vk::WriteDescriptorSet write{};

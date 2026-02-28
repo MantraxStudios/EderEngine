@@ -8,12 +8,13 @@ class VulkanPipeline;
 class LightBuffer
 {
 public:
-    void Build              (VulkanPipeline& pipeline);
-    void Update             (const glm::vec3& cameraPos);
-    void Bind               (vk::CommandBuffer cmd, vk::PipelineLayout layout);
+    void Build            (VulkanPipeline& pipeline);
+    void Update           (const glm::vec3& cameraPos);
+    void Bind             (vk::CommandBuffer cmd, vk::PipelineLayout layout);
     void Destroy();
-    void SetLightSpaceMatrix(const glm::mat4& m);
-    void BindShadowMap      (vk::ImageView depthView, vk::Sampler sampler);
+    void SetCascadeData   (const glm::mat4 matrices[4], const glm::vec4& splits);
+    void SetCameraForward (const glm::vec3& forward);
+    void BindShadowMap    (vk::ImageView arrayView, vk::Sampler sampler);
 
     void AddDirectional(const DirectionalLight& light);
     void AddPoint      (const PointLight&       light);

@@ -70,8 +70,8 @@ void VulkanShadowPipeline::Create(vk::Format depthFormat)
     rasterizer.frontFace               = vk::FrontFace::eCounterClockwise;
     rasterizer.lineWidth               = 1.0f;
     rasterizer.depthBiasEnable         = vk::True;
-    rasterizer.depthBiasConstantFactor = 1.5f;
-    rasterizer.depthBiasSlopeFactor    = 2.0f;
+    rasterizer.depthBiasConstantFactor = 0.5f;
+    rasterizer.depthBiasSlopeFactor    = 1.0f;
 
     vk::PipelineMultisampleStateCreateInfo multisampling{};
     multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
