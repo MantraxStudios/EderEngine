@@ -157,6 +157,14 @@ void VulkanFramebuffer::TransitionToShaderRead(vk::CommandBuffer cmd)
     colorLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
 }
 
+void VulkanFramebuffer::Recreate(uint32_t width, uint32_t height)
+{
+    vk::Format cf = colorFormat;
+    vk::Format df = depthFormat;
+    Destroy();
+    Create(width, height, cf, df);
+}
+
 void VulkanFramebuffer::Destroy()
 {
     sampler     = nullptr;

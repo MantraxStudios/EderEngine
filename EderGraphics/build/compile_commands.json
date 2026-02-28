@@ -1,6 +1,12 @@
 [
 {
   "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -TP -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\vendor\\include -O0 -g -Xclang -gcodeview -std:c++20 -MDd /EHsc /W0 /Od /Zi /FoCMakeFiles\\EderGraphics.dir\\src\\Core\\Camera.cpp.obj /FdCMakeFiles\\EderGraphics.dir\\ -c -- C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src\\Core\\Camera.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src/Core/Camera.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build/CMakeFiles/EderGraphics.dir/src/Core/Camera.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build",
   "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -TP -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\vendor\\include -O0 -g -Xclang -gcodeview -std:c++20 -MDd /EHsc /W0 /Od /Zi /FoCMakeFiles\\EderGraphics.dir\\src\\Core\\Material.cpp.obj /FdCMakeFiles\\EderGraphics.dir\\ -c -- C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src\\Core\\Material.cpp",
   "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src/Core/Material.cpp",
   "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build/CMakeFiles/EderGraphics.dir/src/Core/Material.cpp.obj"
@@ -10,6 +16,12 @@
   "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -TP -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\vendor\\include -O0 -g -Xclang -gcodeview -std:c++20 -MDd /EHsc /W0 /Od /Zi /FoCMakeFiles\\EderGraphics.dir\\src\\Core\\MaterialLayout.cpp.obj /FdCMakeFiles\\EderGraphics.dir\\ -c -- C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src\\Core\\MaterialLayout.cpp",
   "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src/Core/MaterialLayout.cpp",
   "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build/CMakeFiles/EderGraphics.dir/src/Core/MaterialLayout.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\clang-cl.exe  /nologo -TP -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src -IC:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\vendor\\include -O0 -g -Xclang -gcodeview -std:c++20 -MDd /EHsc /W0 /Od /Zi /FoCMakeFiles\\EderGraphics.dir\\src\\Core\\Scene.cpp.obj /FdCMakeFiles\\EderGraphics.dir\\ -c -- C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGraphics\\src\\Core\\Scene.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src/Core/Scene.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build/CMakeFiles/EderGraphics.dir/src/Core/Scene.cpp.obj"
 },
 {
   "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build",

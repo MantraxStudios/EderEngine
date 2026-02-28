@@ -4,8 +4,9 @@
 class VulkanFramebuffer
 {
 public:
-    void Create (uint32_t width, uint32_t height, vk::Format colorFormat, vk::Format depthFormat);
-    void Destroy();
+    void Create   (uint32_t width, uint32_t height, vk::Format colorFormat, vk::Format depthFormat);
+    void Recreate (uint32_t width, uint32_t height);
+    void Destroy  ();
 
     void BeginRendering        (vk::CommandBuffer cmd);
     void EndRendering          (vk::CommandBuffer cmd);
