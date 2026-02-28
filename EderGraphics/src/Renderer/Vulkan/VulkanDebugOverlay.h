@@ -1,10 +1,10 @@
 #pragma once
 #include "ImportCore.h"
 
-class VulkanFramebuffer;
-class VulkanShadowMap;
+class EDERGRAPHICS_API VulkanFramebuffer;
+class EDERGRAPHICS_API VulkanShadowMap;
 
-class VulkanDebugOverlay
+class EDERGRAPHICS_API VulkanDebugOverlay
 {
 public:
     void Create (vk::Format swapchainFormat, vk::Format depthFormat);

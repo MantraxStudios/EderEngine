@@ -3,7 +3,7 @@
 #include "../../Core/Vertex.h"
 #include <glm/glm.hpp>
 
-class VulkanShadowPipeline
+class EDERGRAPHICS_API VulkanShadowPipeline
 {
 public:
     void Create (vk::Format depthFormat);

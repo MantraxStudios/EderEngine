@@ -2,8 +2,9 @@
 #include "Renderer/Vulkan/ImportCore.h"
 #include "Renderer/Vulkan/VulkanDepthBuffer.h"
 #include "../Core/Renderer.h"
+#include "../Core/DLLHeader.h"
 
-class VulkanRenderer : public Renderer
+class EDERGRAPHICS_API VulkanRenderer : public Renderer
 {
 public:
     static VulkanRenderer& Get()

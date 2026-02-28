@@ -1,7 +1,7 @@
 #pragma once
 #include "ImportCore.h"
 
-class VulkanTexture
+class EDERGRAPHICS_API VulkanTexture
 {
 public:
     void Load   (const std::string& path);

@@ -158,7 +158,10 @@ void main()
     vec3 N         = normalize(fragNormal);
     vec3 V         = normalize(lights.cameraPos - fragWorldPos);
 
-    vec3 result = baseColor * 0.01;
+    float hemi         = N.y * 0.5 + 0.5;
+    vec3  ambientSky   = vec3(0.05, 0.06, 0.09);
+    vec3  ambientGround= vec3(0.03, 0.025, 0.015);
+    vec3 result = baseColor * mix(ambientGround, ambientSky, hemi);
 
     for (int i = 0; i < lights.numDirLights; i++)
     {

@@ -1,7 +1,7 @@
 #pragma once
 #include "ImportCore.h"
 
-class VulkanFramebuffer
+class EDERGRAPHICS_API VulkanFramebuffer
 {
 public:
     void Create   (uint32_t width, uint32_t height, vk::Format colorFormat, vk::Format depthFormat);

@@ -1,8 +1,9 @@
 #pragma once
 #include "Transform.h"
+#include "DLLHeader.h"
 
-class VulkanMesh;
-class Material;
+class EDERGRAPHICS_API VulkanMesh;
+class EDERGRAPHICS_API Material;
 
 struct SceneObject
 {

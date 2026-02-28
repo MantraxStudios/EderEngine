@@ -5,10 +5,11 @@
 #include "MaterialLayout.h"
 #include <unordered_map>
 #include <string>
+#include "DLLHeader.h"
 
-class VulkanPipeline;
+class EDERGRAPHICS_API VulkanPipeline;
 
-class Material
+class EDERGRAPHICS_API Material
 {
 public:
     Material() = default;

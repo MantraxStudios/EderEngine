@@ -1,6 +1,7 @@
 #pragma once
 #include "MaterialProperty.h"
 #include <vector>
+#include "DLLHeader.h"
 
 struct MaterialFieldInfo
 {
@@ -10,7 +11,7 @@ struct MaterialFieldInfo
     size_t               size;
 };
 
-class MaterialLayout
+class EDERGRAPHICS_API MaterialLayout
 {
 public:
     MaterialLayout() = default;

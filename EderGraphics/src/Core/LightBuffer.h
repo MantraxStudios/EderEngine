@@ -2,10 +2,11 @@
 #include "Lights.h"
 #include "Renderer/Vulkan/ImportCore.h"
 #include "Renderer/Vulkan/VulkanBuffer.h"
+#include "DLLHeader.h"
 
-class VulkanPipeline;
+class EDERGRAPHICS_API VulkanPipeline;
 
-class LightBuffer
+class EDERGRAPHICS_API LightBuffer
 {
 public:
     void Build            (VulkanPipeline& pipeline);

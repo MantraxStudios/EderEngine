@@ -1,6 +1,7 @@
 #pragma once
+#include "DLLHeader.h"
 
-class Renderer
+class EDERGRAPHICS_API Renderer
 {
 public:
     virtual ~Renderer() = default;

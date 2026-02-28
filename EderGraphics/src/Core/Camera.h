@@ -2,7 +2,9 @@
 #include <glm/glm.hpp>
 #include <GLFW/glfw3.h>
 
-class Camera
+#include "DLLHeader.h"
+
+class EDERGRAPHICS_API Camera
 {
 public:
     Camera(glm::vec3 target = {0.0f, 0.0f, 0.0f}, float distance = 5.0f, float fov = 45.0f);

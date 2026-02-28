@@ -1,7 +1,7 @@
 #pragma once
 #include "ImportCore.h"
 
-class VulkanDepthBuffer
+class EDERGRAPHICS_API VulkanDepthBuffer
 {
 public:
     void Create  (uint32_t width, uint32_t height);

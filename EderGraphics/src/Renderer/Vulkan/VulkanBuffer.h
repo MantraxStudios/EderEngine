@@ -1,7 +1,7 @@
 #pragma once
 #include "ImportCore.h"
 
-class VulkanBuffer
+class EDERGRAPHICS_API VulkanBuffer
 {
 public:
     VulkanBuffer() = default;

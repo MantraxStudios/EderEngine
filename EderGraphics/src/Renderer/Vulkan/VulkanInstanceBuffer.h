@@ -4,7 +4,7 @@
 #include <glm/glm.hpp>
 #include <vector>
 
-class VulkanInstanceBuffer
+class EDERGRAPHICS_API VulkanInstanceBuffer
 {
 public:
     void Upload(const std::vector<glm::mat4>& matrices);

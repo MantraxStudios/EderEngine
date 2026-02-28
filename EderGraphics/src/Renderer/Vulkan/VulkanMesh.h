@@ -6,7 +6,7 @@
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
 
-class VulkanMesh
+class EDERGRAPHICS_API VulkanMesh
 {
 public:
     void Load          (const std::string& path);

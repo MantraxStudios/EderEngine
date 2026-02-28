@@ -2,7 +2,7 @@
 #include "ImportCore.h"
 #include <glm/glm.hpp>
 
-class VulkanShadowMap
+class EDERGRAPHICS_API VulkanShadowMap
 {
 public:
     static constexpr uint32_t NUM_CASCADES = 4;

@@ -3,7 +3,7 @@
 #include "../../Core/Vertex.h"
 #include <glm/glm.hpp>
 
-class VulkanPipeline
+class EDERGRAPHICS_API VulkanPipeline
 {
 public:
     void Create(const std::string& vertPath, const std::string& fragPath, vk::Format swapchainFormat, vk::Format depthFormat);

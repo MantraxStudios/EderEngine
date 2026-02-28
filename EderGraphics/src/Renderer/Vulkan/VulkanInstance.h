@@ -1,7 +1,7 @@
 #pragma once
 #include "ImportCore.h"
 
-class VulkanInstance
+class EDERGRAPHICS_API VulkanInstance
 {
 public:
     static VulkanInstance& Get()

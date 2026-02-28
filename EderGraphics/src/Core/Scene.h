@@ -4,13 +4,14 @@
 #include "Renderer/Vulkan/VulkanInstanceBuffer.h"
 #include <vector>
 #include <map>
+#include "DLLHeader.h"
 
-class Camera;
-class VulkanPipeline;
-class LightBuffer;
-class VulkanShadowPipeline;
+class EDERGRAPHICS_API Camera;
+class EDERGRAPHICS_API VulkanPipeline;
+class EDERGRAPHICS_API LightBuffer;
+class EDERGRAPHICS_API VulkanShadowPipeline;
 
-class Scene
+class EDERGRAPHICS_API Scene
 {
 public:
     SceneObject& Add(VulkanMesh& mesh, Material& material);

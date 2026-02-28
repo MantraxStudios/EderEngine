@@ -8,7 +8,7 @@ struct SwapchainSupportDetails
     std::vector<vk::PresentModeKHR>   presentModes;
 };
 
-class VulkanSwapchain
+class EDERGRAPHICS_API VulkanSwapchain
 {
 public:
     static VulkanSwapchain& Get()
