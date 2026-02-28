@@ -39,6 +39,9 @@ layout(set = 1, binding = 1) uniform sampler2DArray shadowMap;
 
 layout(location = 0) out vec4 outColor;
 
+// ---------------------------------------------------------------------------
+// Lighting
+// ---------------------------------------------------------------------------
 vec3 CalcLight(vec3 N, vec3 L, vec3 V, vec3 lightColor, float intensity,
                vec3 baseColor, float roughness, float metallic)
 {
@@ -54,51 +57,94 @@ vec3 CalcLight(vec3 N, vec3 L, vec3 V, vec3 lightColor, float intensity,
     return diffuse + specular;
 }
 
+// ---------------------------------------------------------------------------
+// PCSS helpers
+// ---------------------------------------------------------------------------
+
+// Vogel disk — uniform golden-angle spiral, great distribution for N samples
+vec2 VogelDisk(int i, int n, float phi)
+{
+    float r     = sqrt((float(i) + 0.5) / float(n));
+    float theta = float(i) * 2.399963 + phi;   // golden angle = 2.399963 rad
+    return vec2(r * cos(theta), r * sin(theta));
+}
+
+// Interleaved Gradient Noise — same as Unreal Engine / DOOM Eternal.
+// Gives each screen pixel a unique rotation → no visible grid pattern.
+float IGN(vec2 fragCoord)
+{
+    return fract(52.9829189 * fract(dot(fragCoord, vec2(0.06711056, 0.00583715))));
+}
+
+// ---------------------------------------------------------------------------
+// PCSS shadow (contact-hardening: sharp at contact, soft at distance)
+// ---------------------------------------------------------------------------
 float ShadowFactor(vec3 worldPos, vec3 N, vec3 L)
 {
-    // Select cascade by view-space depth
+    // Cascade selection by view-space depth
     float depth = dot(worldPos - lights.cameraPos, lights.cameraForward);
     int cascade = 3;
     for (int i = 0; i < 4; i++)
-    {
-        if (depth < lights.cascadeSplits[i])
-        {
-            cascade = i;
-            break;
-        }
-    }
+        if (depth < lights.cascadeSplits[i]) { cascade = i; break; }
 
-    vec4 lightSpacePos = lights.cascadeMatrices[cascade] * vec4(worldPos, 1.0);
-    vec3 projCoords    = lightSpacePos.xyz / lightSpacePos.w;
-    vec2 uv            = projCoords.xy * 0.5 + 0.5;
+    vec4 lsPos = lights.cascadeMatrices[cascade] * vec4(worldPos, 1.0);
+    vec3 proj   = lsPos.xyz / lsPos.w;
+    vec2 uv     = proj.xy * 0.5 + 0.5;
 
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || projCoords.z > 1.0)
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || proj.z > 1.0)
         return 1.0;
 
-    // Bias proportional to surface angle — eliminates acne without peter-panning
-    float NdotL     = max(dot(N, L), 0.0);
-    float bias      = max(0.0008 * (1.0 - NdotL), 0.0001);
+    // Normal-slope bias eliminates acne without peter-panning
+    float NdotL = max(dot(N, L), 0.0);
+    float bias  = max(0.0005 * (1.0 - NdotL), 0.00005);
+    float recvZ = proj.z - bias;
+
     vec2  texelSize = 1.0 / vec2(textureSize(shadowMap, 0).xy);
 
-    // 5×5 PCF with 1.5-texel spread for soft penumbra
-    float shadow = 0.0;
-    for (int x = -2; x <= 2; ++x)
-    for (int y = -2; y <= 2; ++y)
+    // Per-pixel rotation via IGN — breaks the Vogel pattern into smooth noise
+    float phi = IGN(gl_FragCoord.xy) * 6.28318530;
+
+    // Step 1 — Blocker search (8 Vogel samples, small radius)
+    const int   BLOCKER_N = 8;
+    const float SEARCH_R  = 3.5;     // texels
+    float blockerSum = 0.0;
+    int   blockerCnt = 0;
+    for (int i = 0; i < BLOCKER_N; i++)
     {
-        vec2  offset  = vec2(x, y) * texelSize * 1.5;
-        float closest = texture(shadowMap, vec3(uv + offset, float(cascade))).r;
-        shadow += (projCoords.z - bias < closest) ? 1.0 : 0.0;
+        vec2  o = VogelDisk(i, BLOCKER_N, phi) * (SEARCH_R * texelSize.x);
+        float d = texture(shadowMap, vec3(uv + o, float(cascade))).r;
+        if (d < recvZ) { blockerSum += d; blockerCnt++; }
     }
-    return shadow / 25.0;
+    if (blockerCnt == 0) return 1.0;   // fully lit
+
+    // Step 2 — Penumbra radius (contact-hardening)
+    float avgBlocker = blockerSum / float(blockerCnt);
+    float penumbra   = (recvZ - avgBlocker) / avgBlocker;
+    // Scale penumbra to UV space; clamp so very-close shadows stay crisp
+    float filterR = clamp(penumbra * 0.06, 1.0 * texelSize.x, 7.0 * texelSize.x);
+
+    // Step 3 — PCF with 24 Vogel samples (offset phi to decorrelate from blocker search)
+    const int PCF_N = 24;
+    float shadow = 0.0;
+    for (int i = 0; i < PCF_N; i++)
+    {
+        vec2  o       = VogelDisk(i, PCF_N, phi + 1.5707963) * filterR;
+        float closest = texture(shadowMap, vec3(uv + o, float(cascade))).r;
+        shadow += (recvZ < closest) ? 1.0 : 0.0;
+    }
+    return shadow / float(PCF_N);
 }
 
+// ---------------------------------------------------------------------------
+// Main
+// ---------------------------------------------------------------------------
 void main()
 {
     vec3 baseColor = fragColor.rgb * texture(albedoTex, fragUV).rgb;
     vec3 N         = normalize(fragNormal);
     vec3 V         = normalize(lights.cameraPos - fragWorldPos);
 
-    vec3 result = baseColor * 0.04;
+    vec3 result = baseColor * 0.01;
 
     for (int i = 0; i < lights.numDirLights; i++)
     {
