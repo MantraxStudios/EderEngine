@@ -128,6 +128,14 @@ void VulkanRenderer::BeginMainPass()
     renderingInfo.pDepthAttachment     = &depthAttachment;
 
     cmd.beginRendering(renderingInfo);
+
+    vk::Viewport vp{};
+    vp.width    = static_cast<float>(swapchain.GetExtent().width);
+    vp.height   = static_cast<float>(swapchain.GetExtent().height);
+    vp.minDepth = 0.0f;
+    vp.maxDepth = 1.0f;
+    cmd.setViewport(0, vp);
+    cmd.setScissor(0, vk::Rect2D{ vk::Offset2D{ 0, 0 }, swapchain.GetExtent() });
 }
 
 void VulkanRenderer::EndFrame()

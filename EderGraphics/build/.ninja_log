@@ -140,3 +140,11 @@
 25	10737	7939394002149852	CMakeFiles/EderGraphics.dir/src/Core/Material.cpp.obj	f0da687eed1ad399
 67	11020	7939394002560961	CMakeFiles/EderGraphics.dir/src/main.cpp.obj	eee9787329286058
 11021	11260	7939394112106534	EderGraphics.exe	ee02914bb065bbe1
+11	1639	7939395868151973	CMakeFiles/EderGraphics.dir/src/Core/MaterialLayout.cpp.obj	d01f456ce5ebce38
+24	8120	7939395868272592	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanMesh.cpp.obj	90bea1abe89fc9ff
+18	8467	7939395868212528	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanDepthBuffer.cpp.obj	e047f0ef23f7e707
+35	8808	7939395868387970	CMakeFiles/EderGraphics.dir/src/Renderer/VulkanRenderer.cpp.obj	b293a4200cce85ef
+29	8920	7939395868317731	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPipeline.cpp.obj	da6d2f0ac3cfd87e
+4	9158	7939395868080957	CMakeFiles/EderGraphics.dir/src/Core/Material.cpp.obj	f0da687eed1ad399
+41	9392	7939395868453183	CMakeFiles/EderGraphics.dir/src/main.cpp.obj	eee9787329286058
+9392	9550	7939395961957744	EderGraphics.exe	ee02914bb065bbe1

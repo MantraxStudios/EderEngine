@@ -156,23 +156,7 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
 
 void VulkanPipeline::Bind(vk::CommandBuffer cmd)
 {
-    auto& swapchain = VulkanSwapchain::Get();
-
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
-
-    vk::Viewport viewport{};
-    viewport.x        = 0.0f;
-    viewport.y        = 0.0f;
-    viewport.width    = static_cast<float>(swapchain.GetExtent().width);
-    viewport.height   = static_cast<float>(swapchain.GetExtent().height);
-    viewport.minDepth = 0.0f;
-    viewport.maxDepth = 1.0f;
-    cmd.setViewport(0, viewport);
-
-    vk::Rect2D scissor{};
-    scissor.offset = vk::Offset2D{ 0, 0 };
-    scissor.extent = swapchain.GetExtent();
-    cmd.setScissor(0, scissor);
 }
 
 void VulkanPipeline::Destroy()
