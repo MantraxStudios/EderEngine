@@ -66,12 +66,12 @@ void VulkanShadowPipeline::Create(vk::Format depthFormat)
 
     vk::PipelineRasterizationStateCreateInfo rasterizer{};
     rasterizer.polygonMode             = vk::PolygonMode::eFill;
-    rasterizer.cullMode                = vk::CullModeFlagBits::eFront;
+    rasterizer.cullMode                = vk::CullModeFlagBits::eBack;
     rasterizer.frontFace               = vk::FrontFace::eCounterClockwise;
     rasterizer.lineWidth               = 1.0f;
     rasterizer.depthBiasEnable         = vk::True;
-    rasterizer.depthBiasConstantFactor = 0.5f;
-    rasterizer.depthBiasSlopeFactor    = 1.0f;
+    rasterizer.depthBiasConstantFactor = 1.5f;
+    rasterizer.depthBiasSlopeFactor    = 2.5f;
 
     vk::PipelineMultisampleStateCreateInfo multisampling{};
     multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
