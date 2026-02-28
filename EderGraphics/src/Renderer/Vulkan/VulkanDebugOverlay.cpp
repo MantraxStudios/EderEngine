@@ -1,5 +1,6 @@
 #include "VulkanDebugOverlay.h"
 #include "VulkanFramebuffer.h"
+#include "VulkanShadowMap.h"
 #include "VulkanInstance.h"
 #include "VulkanSwapchain.h"
 #include <fstream>
@@ -16,44 +17,11 @@ std::vector<uint32_t> VulkanDebugOverlay::LoadSpv(const std::string& path)
     return buf;
 }
 
-void VulkanDebugOverlay::Create(vk::Format swapchainFormat, vk::Format depthFormat)
+vk::raii::Pipeline VulkanDebugOverlay::BuildPipeline(
+    vk::Format swapchainFormat, vk::Format depthFormat,
+    const std::string& vertSpv, const std::string& fragSpv)
 {
     auto& device = VulkanInstance::Get().GetDevice();
-
-    vk::DescriptorSetLayoutBinding samplerBinding{};
-    samplerBinding.binding         = 0;
-    samplerBinding.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
-    samplerBinding.descriptorCount = 1;
-    samplerBinding.stageFlags      = vk::ShaderStageFlagBits::eFragment;
-
-    vk::DescriptorSetLayoutCreateInfo dslInfo{};
-    dslInfo.bindingCount = 1;
-    dslInfo.pBindings    = &samplerBinding;
-    descriptorSetLayout = vk::raii::DescriptorSetLayout(device, dslInfo);
-
-    vk::DescriptorSetLayout dsl = *descriptorSetLayout;
-    vk::PipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.setLayoutCount = 1;
-    layoutInfo.pSetLayouts    = &dsl;
-    pipelineLayout = vk::raii::PipelineLayout(device, layoutInfo);
-
-    vk::DescriptorPoolSize poolSize{ vk::DescriptorType::eCombinedImageSampler, 1 };
-    vk::DescriptorPoolCreateInfo poolInfo{};
-    poolInfo.flags         = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
-    poolInfo.maxSets       = 1;
-    poolInfo.poolSizeCount = 1;
-    poolInfo.pPoolSizes    = &poolSize;
-    descriptorPool = vk::raii::DescriptorPool(device, poolInfo);
-
-    vk::DescriptorSetAllocateInfo allocInfo{};
-    allocInfo.descriptorPool     = *descriptorPool;
-    allocInfo.descriptorSetCount = 1;
-    allocInfo.pSetLayouts        = &dsl;
-    auto sets     = device.allocateDescriptorSets(allocInfo);
-    descriptorSet = std::move(sets[0]);
-
-    auto vertCode = LoadSpv("shaders/debug.vert.spv");
-    auto fragCode = LoadSpv("shaders/debug.frag.spv");
 
     auto mkModule = [&](const std::vector<uint32_t>& code) {
         vk::ShaderModuleCreateInfo ci{};
@@ -61,8 +29,9 @@ void VulkanDebugOverlay::Create(vk::Format swapchainFormat, vk::Format depthForm
         ci.pCode    = code.data();
         return vk::raii::ShaderModule(device, ci);
     };
-    auto vertMod = mkModule(vertCode);
-    auto fragMod = mkModule(fragCode);
+
+    auto vertMod = mkModule(LoadSpv(vertSpv));
+    auto fragMod = mkModule(LoadSpv(fragSpv));
 
     vk::PipelineShaderStageCreateInfo stages[2]{};
     stages[0].stage  = vk::ShaderStageFlagBits::eVertex;
@@ -125,25 +94,88 @@ void VulkanDebugOverlay::Create(vk::Format swapchainFormat, vk::Format depthForm
     pipelineInfo.pDynamicState       = &dynamicState;
     pipelineInfo.layout              = *pipelineLayout;
 
-    pipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
+    return vk::raii::Pipeline(device, nullptr, pipelineInfo);
 }
 
-void VulkanDebugOverlay::Draw(vk::CommandBuffer cmd, VulkanFramebuffer& framebuffer)
+void VulkanDebugOverlay::Create(vk::Format swapchainFormat, vk::Format depthFormat)
 {
-    vk::DescriptorImageInfo imgInfo{};
-    imgInfo.sampler     = framebuffer.GetSampler();
-    imgInfo.imageView   = framebuffer.GetColorView();
-    imgInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    auto& device = VulkanInstance::Get().GetDevice();
 
-    vk::WriteDescriptorSet write{};
-    write.dstSet          = *descriptorSet;
-    write.dstBinding      = 0;
-    write.descriptorCount = 1;
-    write.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
-    write.pImageInfo      = &imgInfo;
-    VulkanInstance::Get().GetDevice().updateDescriptorSets(write, nullptr);
+    vk::DescriptorSetLayoutBinding samplerBinding{};
+    samplerBinding.binding         = 0;
+    samplerBinding.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+    samplerBinding.descriptorCount = 1;
+    samplerBinding.stageFlags      = vk::ShaderStageFlagBits::eFragment;
 
+    vk::DescriptorSetLayoutCreateInfo dslInfo{};
+    dslInfo.bindingCount = 1;
+    dslInfo.pBindings    = &samplerBinding;
+    descriptorSetLayout  = vk::raii::DescriptorSetLayout(device, dslInfo);
+
+    vk::DescriptorSetLayout dsl = *descriptorSetLayout;
+    vk::PipelineLayoutCreateInfo layoutInfo{};
+    layoutInfo.setLayoutCount = 1;
+    layoutInfo.pSetLayouts    = &dsl;
+    pipelineLayout = vk::raii::PipelineLayout(device, layoutInfo);
+
+    vk::DescriptorPoolSize poolSize{ vk::DescriptorType::eCombinedImageSampler, 2 };
+    vk::DescriptorPoolCreateInfo poolInfo{};
+    poolInfo.flags         = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+    poolInfo.maxSets       = 2;
+    poolInfo.poolSizeCount = 1;
+    poolInfo.pPoolSizes    = &poolSize;
+    descriptorPool = vk::raii::DescriptorPool(device, poolInfo);
+
+    std::array<vk::DescriptorSetLayout, 2> dsls = { dsl, dsl };
+    vk::DescriptorSetAllocateInfo allocInfo{};
+    allocInfo.descriptorPool     = *descriptorPool;
+    allocInfo.descriptorSetCount = 2;
+    allocInfo.pSetLayouts        = dsls.data();
+    auto sets           = device.allocateDescriptorSets(allocInfo);
+    fbDescriptorSet     = std::move(sets[0]);
+    shadowDescriptorSet = std::move(sets[1]);
+
+    fbPipeline     = BuildPipeline(swapchainFormat, depthFormat,
+                                   "shaders/debug.vert.spv",        "shaders/debug.frag.spv");
+    shadowPipeline = BuildPipeline(swapchainFormat, depthFormat,
+                                   "shaders/shadow_debug.vert.spv", "shaders/shadow_debug.frag.spv");
+}
+
+void VulkanDebugOverlay::Draw(vk::CommandBuffer cmd, VulkanFramebuffer& framebuffer, VulkanShadowMap& shadowMap)
+{
+    auto& device    = VulkanInstance::Get().GetDevice();
     auto& swapchain = VulkanSwapchain::Get();
+
+    {
+        vk::DescriptorImageInfo imgInfo{};
+        imgInfo.sampler     = framebuffer.GetSampler();
+        imgInfo.imageView   = framebuffer.GetColorView();
+        imgInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        vk::WriteDescriptorSet write{};
+        write.dstSet          = *fbDescriptorSet;
+        write.dstBinding      = 0;
+        write.descriptorCount = 1;
+        write.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+        write.pImageInfo      = &imgInfo;
+        device.updateDescriptorSets(write, nullptr);
+    }
+
+    {
+        vk::DescriptorImageInfo imgInfo{};
+        imgInfo.sampler     = shadowMap.GetSampler();
+        imgInfo.imageView   = shadowMap.GetDepthView();
+        imgInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+        vk::WriteDescriptorSet write{};
+        write.dstSet          = *shadowDescriptorSet;
+        write.dstBinding      = 0;
+        write.descriptorCount = 1;
+        write.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+        write.pImageInfo      = &imgInfo;
+        device.updateDescriptorSets(write, nullptr);
+    }
+
     vk::Viewport vp{};
     vp.width    = static_cast<float>(swapchain.GetExtent().width);
     vp.height   = static_cast<float>(swapchain.GetExtent().height);
@@ -152,16 +184,24 @@ void VulkanDebugOverlay::Draw(vk::CommandBuffer cmd, VulkanFramebuffer& framebuf
     cmd.setViewport(0, vp);
     cmd.setScissor(0, vk::Rect2D{ {0,0}, swapchain.GetExtent() });
 
-    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
-    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout, 0, *descriptorSet, nullptr);
+    // Framebuffer debug quad (bottom-right)
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *fbPipeline);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout, 0, *fbDescriptorSet, nullptr);
+    cmd.draw(6, 1, 0, 0);
+
+    // Shadow map debug quad (bottom-left)
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *shadowPipeline);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout, 0, *shadowDescriptorSet, nullptr);
     cmd.draw(6, 1, 0, 0);
 }
 
 void VulkanDebugOverlay::Destroy()
 {
-    descriptorSet       = nullptr;
+    shadowDescriptorSet = nullptr;
+    fbDescriptorSet     = nullptr;
     descriptorPool      = nullptr;
-    pipeline            = nullptr;
+    shadowPipeline      = nullptr;
+    fbPipeline          = nullptr;
     pipelineLayout      = nullptr;
     descriptorSetLayout = nullptr;
 }

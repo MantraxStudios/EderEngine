@@ -8,6 +8,8 @@
 #include "Renderer/Vulkan/VulkanDepthBuffer.h"
 #include "Renderer/Vulkan/VulkanFramebuffer.h"
 #include "Renderer/Vulkan/VulkanDebugOverlay.h"
+#include "Renderer/Vulkan/VulkanShadowMap.h"
+#include "Renderer/Vulkan/VulkanShadowPipeline.h"
 #include "Renderer/VulkanRenderer.h"
 #include "Core/Material.h"
 #include "Core/MaterialLayout.h"
@@ -36,14 +38,16 @@ int main()
         static_cast<Camera*>(glfwGetWindowUserPointer(w))->OnScroll(dy);
     });
 
-    VulkanPipeline     pipeline;
-    VulkanMesh         mesh;
-    VulkanTexture      albedoTex;
-    Material           material;
-    VulkanFramebuffer  debugFb;
-    VulkanDebugOverlay debugOverlay;
-    Scene              scene;
-    LightBuffer        lights;
+    VulkanPipeline       pipeline;
+    VulkanMesh           mesh;
+    VulkanTexture        albedoTex;
+    Material             material;
+    VulkanFramebuffer    debugFb;
+    VulkanDebugOverlay   debugOverlay;
+    VulkanShadowMap      shadowMap;
+    VulkanShadowPipeline shadowPipeline;
+    Scene                scene;
+    LightBuffer          lights;
 
     try
     {
@@ -84,9 +88,9 @@ int main()
         if (mesh.GetIndexCount() == 0)
             throw std::runtime_error("Mesh empty");
 
-        constexpr int   cols    = 100;
-        constexpr int   rows    = 50;
-        constexpr float spacing = 2.0f;
+        constexpr int   cols    = 15;
+        constexpr int   rows    = 5;
+        constexpr float spacing = 3.0f;
         for (int row = 0; row < rows; row++)
         {
             for (int col = 0; col < cols; col++)
@@ -97,15 +101,18 @@ int main()
             }
         }
 
+        // Shadow map must be created before lights.Build so the sampler is available
+        shadowMap.Create(2048);
+        shadowPipeline.Create(shadowMap.GetFormat());
+
         lights.Build(pipeline);
 
-        {
-            DirectionalLight sun;
-            sun.direction = glm::normalize(glm::vec3(-1.0f, -2.0f, -1.0f));
-            sun.color     = glm::vec3(1.0f, 0.95f, 0.85f);
-            sun.intensity = 1.2f;
-            lights.AddDirectional(sun);
-        }
+        DirectionalLight sun;
+        sun.direction = glm::normalize(glm::vec3(-1.0f, -2.0f, -1.0f));
+        sun.color     = glm::vec3(1.0f, 0.95f, 0.85f);
+        sun.intensity = 1.2f;
+        lights.AddDirectional(sun);
+
         {
             PointLight p;
             p.position  = glm::vec3(0.0f, 5.0f, 0.0f);
@@ -126,6 +133,11 @@ int main()
             lights.AddSpot(sl);
         }
 
+        // Set light-space matrix and bind shadow map into the light descriptor set
+        glm::mat4 lightSpaceMat = shadowMap.ComputeLightSpaceMatrix(sun.direction, 150.0f);
+        lights.SetLightSpaceMatrix(lightSpaceMat);
+        lights.BindShadowMap(shadowMap.GetDepthView(), shadowMap.GetSampler());
+
         auto& sc = VulkanSwapchain::Get();
         debugFb.Create(sc.GetExtent().width / 2, sc.GetExtent().height / 2,
                        sc.GetFormat(), VulkanRenderer::Get().GetDepthFormat());
@@ -136,6 +148,9 @@ int main()
         std::cerr << "[ERROR] " << e.what() << std::endl;
         return -1;
     }
+
+    glm::mat4 lightSpaceMatrix = shadowMap.ComputeLightSpaceMatrix(
+        glm::normalize(glm::vec3(-1.0f, -2.0f, -1.0f)), 150.0f);
 
     double prevTime = glfwGetTime();
 
@@ -173,6 +188,14 @@ int main()
 
         auto cmd = VulkanRenderer::Get().GetCommandBuffer();
 
+        // --- Shadow pass ---
+        shadowMap.BeginRendering(cmd);
+        shadowPipeline.Bind(cmd);
+        scene.DrawShadow(cmd, shadowPipeline, lightSpaceMatrix);
+        shadowMap.EndRendering(cmd);
+        shadowMap.TransitionToShaderRead(cmd);
+
+        // --- Offscreen debug framebuffer pass ---
         float dbAspect = static_cast<float>(debugFb.GetExtent().width) /
                          static_cast<float>(debugFb.GetExtent().height);
 
@@ -182,10 +205,11 @@ int main()
         debugFb.EndRendering(cmd);
         debugFb.TransitionToShaderRead(cmd);
 
+        // --- Main pass ---
         VulkanRenderer::Get().BeginMainPass();
         pipeline.Bind(cmd);
         scene.Draw(cmd, pipeline, camera, aspect, lights);
-        debugOverlay.Draw(cmd, debugFb);
+        debugOverlay.Draw(cmd, debugFb, shadowMap);
 
         VulkanRenderer::Get().EndFrame();
     }
@@ -193,6 +217,8 @@ int main()
     VulkanInstance::Get().GetDevice().waitIdle();
     debugOverlay.Destroy();
     debugFb.Destroy();
+    shadowPipeline.Destroy();
+    shadowMap.Destroy();
     lights.Destroy();
     scene.Destroy();
     material.Destroy();

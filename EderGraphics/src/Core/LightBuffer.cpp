@@ -11,15 +11,17 @@ void LightBuffer::Build(VulkanPipeline& pipeline)
         vk::BufferUsageFlagBits::eUniformBuffer,
         vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
 
-    vk::DescriptorPoolSize poolSize{};
-    poolSize.type            = vk::DescriptorType::eUniformBuffer;
-    poolSize.descriptorCount = 1;
+    std::array<vk::DescriptorPoolSize, 2> poolSizes{};
+    poolSizes[0].type            = vk::DescriptorType::eUniformBuffer;
+    poolSizes[0].descriptorCount = 1;
+    poolSizes[1].type            = vk::DescriptorType::eCombinedImageSampler;
+    poolSizes[1].descriptorCount = 1;
 
     vk::DescriptorPoolCreateInfo poolInfo{};
     poolInfo.flags         = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
     poolInfo.maxSets       = 1;
-    poolInfo.poolSizeCount = 1;
-    poolInfo.pPoolSizes    = &poolSize;
+    poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+    poolInfo.pPoolSizes    = poolSizes.data();
 
     descriptorPool = vk::raii::DescriptorPool(device, poolInfo);
 
@@ -89,4 +91,26 @@ void LightBuffer::ClearLights()
     ubo.numDirLights   = 0;
     ubo.numPointLights = 0;
     ubo.numSpotLights  = 0;
+}
+
+void LightBuffer::SetLightSpaceMatrix(const glm::mat4& m)
+{
+    ubo.dirLightSpaceMatrix = m;
+}
+
+void LightBuffer::BindShadowMap(vk::ImageView depthView, vk::Sampler sampler)
+{
+    vk::DescriptorImageInfo imgInfo{};
+    imgInfo.sampler     = sampler;
+    imgInfo.imageView   = depthView;
+    imgInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+    vk::WriteDescriptorSet write{};
+    write.dstSet          = *descriptorSet;
+    write.dstBinding      = 1;
+    write.descriptorCount = 1;
+    write.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+    write.pImageInfo      = &imgInfo;
+
+    VulkanInstance::Get().GetDevice().updateDescriptorSets(write, nullptr);
 }

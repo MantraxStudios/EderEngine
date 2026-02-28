@@ -45,4 +45,5 @@ struct LightUBO
     float            _pad           = 0.0f;
     glm::vec3        cameraPos      = {};
     float            _pad2          = 0.0f;
+    glm::mat4        dirLightSpaceMatrix = glm::mat4(1.0f);
 };

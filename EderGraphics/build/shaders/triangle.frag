@@ -29,7 +29,10 @@ layout(set = 1, binding = 0) uniform LightUBO {
     float            _pad;
     vec3             cameraPos;
     float            _pad2;
+    mat4             dirLightSpaceMatrix;
 } lights;
+
+layout(set = 1, binding = 1) uniform sampler2D shadowMap;
 
 layout(location = 0) out vec4 outColor;
 
@@ -48,6 +51,27 @@ vec3 CalcLight(vec3 N, vec3 L, vec3 V, vec3 lightColor, float intensity,
     return diffuse + specular;
 }
 
+float ShadowFactor(vec4 lightSpacePos)
+{
+    vec3 projCoords = lightSpacePos.xyz / lightSpacePos.w;
+    vec2 uv = projCoords.xy * 0.5 + 0.5;
+
+    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || projCoords.z > 1.0)
+        return 1.0;
+
+    float shadow    = 0.0;
+    float bias      = 0.005;
+    vec2  texelSize = 1.0 / vec2(textureSize(shadowMap, 0));
+
+    for (int x = -1; x <= 1; ++x)
+    for (int y = -1; y <= 1; ++y)
+    {
+        float closest = texture(shadowMap, uv + vec2(x, y) * texelSize).r;
+        shadow += (projCoords.z - bias < closest) ? 1.0 : 0.0;
+    }
+    return shadow / 9.0;
+}
+
 void main()
 {
     vec3 baseColor = fragColor.rgb * texture(albedoTex, fragUV).rgb;
@@ -58,8 +82,11 @@ void main()
 
     for (int i = 0; i < lights.numDirLights; i++)
     {
-        vec3 L = normalize(-lights.dirLights[i].direction);
-        result += CalcLight(N, L, V,
+        vec3  L      = normalize(-lights.dirLights[i].direction);
+        float shadow = (i == 0)
+            ? ShadowFactor(lights.dirLightSpaceMatrix * vec4(fragWorldPos, 1.0))
+            : 1.0;
+        result += shadow * CalcLight(N, L, V,
             lights.dirLights[i].color, lights.dirLights[i].intensity,
             baseColor, fragRoughness, fragMetallic);
     }

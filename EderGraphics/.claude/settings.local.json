@@ -8,7 +8,9 @@
       "Bash(glslc debug.frag -o debug.frag.spv)",
       "Bash(cmake ..)",
       "Bash(cmake .. -G Ninja)",
-      "Bash(ninja)"
+      "Bash(ninja)",
+      "Bash(./compile_shaders.bat)",
+      "Bash(ls /c/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build/shaders/*.spv)"
     ]
   }
 }

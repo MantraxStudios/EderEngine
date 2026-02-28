@@ -134,9 +134,17 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
     lightUboBinding.descriptorCount = 1;
     lightUboBinding.stageFlags      = vk::ShaderStageFlagBits::eFragment;
 
+    vk::DescriptorSetLayoutBinding shadowSamplerBinding{};
+    shadowSamplerBinding.binding         = 1;
+    shadowSamplerBinding.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+    shadowSamplerBinding.descriptorCount = 1;
+    shadowSamplerBinding.stageFlags      = vk::ShaderStageFlagBits::eFragment;
+
+    std::array<vk::DescriptorSetLayoutBinding, 2> lightBindings = { lightUboBinding, shadowSamplerBinding };
+
     vk::DescriptorSetLayoutCreateInfo lightDslInfo{};
-    lightDslInfo.bindingCount = 1;
-    lightDslInfo.pBindings    = &lightUboBinding;
+    lightDslInfo.bindingCount = static_cast<uint32_t>(lightBindings.size());
+    lightDslInfo.pBindings    = lightBindings.data();
 
     lightDescriptorSetLayout = vk::raii::DescriptorSetLayout(device, lightDslInfo);
 
