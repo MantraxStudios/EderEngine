@@ -7,9 +7,13 @@ layout(location = 3) in vec3 inTangent;
 layout(location = 4) in vec3 inBitangent;
 layout(location = 5) in vec4 inColor;
 
+layout(location = 6) in vec4 instanceModelCol0;
+layout(location = 7) in vec4 instanceModelCol1;
+layout(location = 8) in vec4 instanceModelCol2;
+layout(location = 9) in vec4 instanceModelCol3;
+
 layout(push_constant) uniform PushConstants {
-    mat4 mvp;
-    mat4 model;
+    mat4 viewProj;
 } push;
 
 layout(set = 0, binding = 0) uniform MaterialUBO {
@@ -29,12 +33,11 @@ layout(location = 5) out float fragEmissive;
 
 void main()
 {
-    gl_Position   = push.mvp * vec4(inPosition, 1.0);
-    fragNormal    = normalize(mat3(transpose(inverse(push.model))) * inNormal);
-    // Invierte normales si es necesario para ver el modelo
-    fragNormal    = -fragNormal;
+    mat4 model    = mat4(instanceModelCol0, instanceModelCol1, instanceModelCol2, instanceModelCol3);
+    gl_Position   = push.viewProj * model * vec4(inPosition, 1.0);
+    fragNormal    = -normalize(mat3(transpose(inverse(model))) * inNormal);
     fragUV        = inUV;
-    fragColor    = inColor * material.albedo;
+    fragColor     = inColor * material.albedo;
     fragRoughness = material.roughness;
     fragMetallic  = material.metallic;
     fragEmissive  = material.emissiveIntensity;

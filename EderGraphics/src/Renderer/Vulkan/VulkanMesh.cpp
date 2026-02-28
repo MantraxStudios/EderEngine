@@ -62,13 +62,13 @@ void VulkanMesh::ProcessMesh(aiMesh* mesh, const aiScene* scene)
             indices.push_back(baseIndex + mesh->mFaces[i].mIndices[j]);
 }
 
-void VulkanMesh::Draw(vk::CommandBuffer cmd)
+void VulkanMesh::DrawInstanced(vk::CommandBuffer cmd, uint32_t firstInstance, uint32_t instanceCount)
 {
     vk::Buffer     vb     = vertexBuffer.GetBuffer();
     vk::DeviceSize offset = 0;
     cmd.bindVertexBuffers(0, vb, offset);
     cmd.bindIndexBuffer(indexBuffer.GetBuffer(), 0, vk::IndexType::eUint32);
-    cmd.drawIndexed(indexCount, 1, 0, 0, 0);
+    cmd.drawIndexed(indexCount, instanceCount, 0, 0, firstInstance);
 }
 
 void VulkanMesh::Destroy()

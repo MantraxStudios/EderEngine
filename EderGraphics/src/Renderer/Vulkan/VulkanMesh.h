@@ -9,9 +9,9 @@
 class VulkanMesh
 {
 public:
-    void Load(const std::string& path);
-    void Draw(vk::CommandBuffer cmd);
-    void Destroy();
+    void Load          (const std::string& path);
+    void DrawInstanced (vk::CommandBuffer cmd, uint32_t firstInstance, uint32_t instanceCount);
+    void Destroy       ();
 
     uint32_t GetIndexCount()  { return indexCount; }
     uint32_t GetVertexCount() { return vertexCount; }

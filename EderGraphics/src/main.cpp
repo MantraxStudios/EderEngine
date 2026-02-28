@@ -27,7 +27,7 @@ int main()
         VulkanRenderer::Get().SetFramebufferResized();
     });
 
-    Camera camera({ 0.0f, 0.0f, 0.0f }, 5.0f, 45.0f);
+    Camera camera({ 0.0f, 0.0f, 0.0f }, 80.0f, 45.0f);
     glfwSetWindowUserPointer(window, &camera);
     glfwSetScrollCallback(window, [](GLFWwindow* w, double, double dy)
     {
@@ -81,7 +81,18 @@ int main()
         if (mesh.GetIndexCount() == 0)
             throw std::runtime_error("Mesh empty");
 
-        scene.Add(mesh, material);
+        constexpr int   cols    = 100;
+        constexpr int   rows    = 50;
+        constexpr float spacing = 2.0f;
+        for (int row = 0; row < rows; row++)
+        {
+            for (int col = 0; col < cols; col++)
+            {
+                SceneObject& obj = scene.Add(mesh, material);
+                obj.transform.position.x = (col - (cols - 1) * 0.5f) * spacing;
+                obj.transform.position.z = (row - (rows - 1) * 0.5f) * spacing;
+            }
+        }
 
         auto& sc = VulkanSwapchain::Get();
         debugFb.Create(sc.GetExtent().width / 2, sc.GetExtent().height / 2,
@@ -110,7 +121,10 @@ int main()
         float  aspect = static_cast<float>(sc.GetExtent().width) /
                         static_cast<float>(sc.GetExtent().height);
 
-        scene.GetObjects()[0].transform.rotation.y = static_cast<float>(currTime) * 45.0f;
+        float  t    = static_cast<float>(currTime);
+        auto&  objs = scene.GetObjects();
+        for (size_t i = 0; i < objs.size(); i++)
+            objs[i].transform.rotation.y = t * 45.0f + static_cast<float>(i) * 0.5f;
 
         VulkanRenderer::Get().BeginFrame();
 
@@ -145,6 +159,7 @@ int main()
     VulkanInstance::Get().GetDevice().waitIdle();
     debugOverlay.Destroy();
     debugFb.Destroy();
+    scene.Destroy();
     material.Destroy();
     albedoTex.Destroy();
     mesh.Destroy();

@@ -46,14 +46,33 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
 
     std::array<vk::PipelineShaderStageCreateInfo, 2> stages = { vertStage, fragStage };
 
-    auto binding    = Vertex::GetBindingDescription();
-    auto attributes = Vertex::GetAttributeDescriptions();
+    auto vertBinding    = Vertex::GetBindingDescription();
+    auto vertAttributes = Vertex::GetAttributeDescriptions();
+
+    vk::VertexInputBindingDescription instanceBinding{};
+    instanceBinding.binding   = 1;
+    instanceBinding.stride    = sizeof(glm::mat4);
+    instanceBinding.inputRate = vk::VertexInputRate::eInstance;
+
+    std::array<vk::VertexInputAttributeDescription, 4> instanceAttrs{};
+    for (uint32_t i = 0; i < 4; i++)
+    {
+        instanceAttrs[i].binding  = 1;
+        instanceAttrs[i].location = 6 + i;
+        instanceAttrs[i].format   = vk::Format::eR32G32B32A32Sfloat;
+        instanceAttrs[i].offset   = sizeof(glm::vec4) * i;
+    }
+
+    std::array<vk::VertexInputBindingDescription, 2> allBindings = { vertBinding, instanceBinding };
+
+    std::vector<vk::VertexInputAttributeDescription> allAttributes(vertAttributes.begin(), vertAttributes.end());
+    for (auto& a : instanceAttrs) allAttributes.push_back(a);
 
     vk::PipelineVertexInputStateCreateInfo vertexInput{};
-    vertexInput.vertexBindingDescriptionCount   = 1;
-    vertexInput.pVertexBindingDescriptions      = &binding;
-    vertexInput.vertexAttributeDescriptionCount = static_cast<uint32_t>(attributes.size());
-    vertexInput.pVertexAttributeDescriptions    = attributes.data();
+    vertexInput.vertexBindingDescriptionCount   = static_cast<uint32_t>(allBindings.size());
+    vertexInput.pVertexBindingDescriptions      = allBindings.data();
+    vertexInput.vertexAttributeDescriptionCount = static_cast<uint32_t>(allAttributes.size());
+    vertexInput.pVertexAttributeDescriptions    = allAttributes.data();
 
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
@@ -112,7 +131,7 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
     vk::PushConstantRange pushConstant{};
     pushConstant.stageFlags = vk::ShaderStageFlagBits::eVertex;
     pushConstant.offset     = 0;
-    pushConstant.size       = sizeof(glm::mat4) * 2;
+    pushConstant.size       = sizeof(glm::mat4);
 
     vk::DescriptorSetLayout dsl = *descriptorSetLayout;
 

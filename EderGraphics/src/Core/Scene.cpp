@@ -3,6 +3,7 @@
 #include "Material.h"
 #include "Renderer/Vulkan/VulkanMesh.h"
 #include "Renderer/Vulkan/VulkanPipeline.h"
+#include <glm/glm.hpp>
 
 SceneObject& Scene::Add(VulkanMesh& mesh, Material& material)
 {
@@ -12,26 +13,42 @@ SceneObject& Scene::Add(VulkanMesh& mesh, Material& material)
 
 void Scene::Draw(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect)
 {
-    glm::mat4 view = camera.GetView();
-    glm::mat4 proj = camera.GetProjection(aspect);
+    glm::mat4 viewProj     = camera.GetProjection(aspect) * camera.GetView();
     vk::PipelineLayout layout = *pipeline.GetLayout();
 
-    struct PushData { glm::mat4 mvp; glm::mat4 model; };
-
+    std::map<std::pair<VulkanMesh*, Material*>, std::vector<glm::mat4>> groups;
     for (auto& obj : objects)
     {
         if (!obj.mesh || !obj.material) continue;
+        groups[{ obj.mesh, obj.material }].push_back(obj.transform.GetMatrix());
+    }
 
-        glm::mat4 model = obj.transform.GetMatrix();
-        PushData  push  = { proj * view * model, model };
+    std::vector<glm::mat4> allMatrices;
+    for (auto& [key, matrices] : groups)
+        for (auto& m : matrices)
+            allMatrices.push_back(m);
 
-        obj.material->Bind(cmd, layout);
-        cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(PushData), &push);
-        obj.mesh->Draw(cmd);
+    instanceBuffer.Upload(allMatrices);
+    instanceBuffer.Bind(cmd);
+
+    uint32_t first = 0;
+    for (auto& [key, matrices] : groups)
+    {
+        auto [mesh, mat] = key;
+        mat->Bind(cmd, layout);
+        cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &viewProj);
+        mesh->DrawInstanced(cmd, first, static_cast<uint32_t>(matrices.size()));
+        first += static_cast<uint32_t>(matrices.size());
     }
 }
 
 void Scene::Clear()
 {
+    objects.clear();
+}
+
+void Scene::Destroy()
+{
+    instanceBuffer.Destroy();
     objects.clear();
 }

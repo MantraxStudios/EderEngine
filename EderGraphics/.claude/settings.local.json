@@ -6,7 +6,8 @@
       "Bash(spirv-dis \"c:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build/shaders/triangle.frag.spv\")",
       "Bash(glslc debug.vert -o debug.vert.spv)",
       "Bash(glslc debug.frag -o debug.frag.spv)",
-      "Bash(cmake ..)"
+      "Bash(cmake ..)",
+      "Bash(cmake .. -G Ninja)"
     ]
   }
 }
