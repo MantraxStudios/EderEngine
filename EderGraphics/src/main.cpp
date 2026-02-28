@@ -141,7 +141,7 @@ int main()
             PointLight fill;
             fill.position  = glm::vec3(0.0f, 12.0f, 0.0f);
             fill.color     = glm::vec3(0.45f, 0.55f, 0.75f);
-            fill.intensity = 4.0f;
+            fill.intensity = 1.5f;
             fill.radius    = 60.0f;
             lights.AddPoint(fill);
         }
