@@ -1,6 +1,7 @@
 #include "Scene.h"
 #include "Camera.h"
 #include "Material.h"
+#include "LightBuffer.h"
 #include "Renderer/Vulkan/VulkanMesh.h"
 #include "Renderer/Vulkan/VulkanPipeline.h"
 #include <glm/glm.hpp>
@@ -11,9 +12,9 @@ SceneObject& Scene::Add(VulkanMesh& mesh, Material& material)
     return objects.back();
 }
 
-void Scene::Draw(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect)
+void Scene::Draw(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights)
 {
-    glm::mat4 viewProj     = camera.GetProjection(aspect) * camera.GetView();
+    glm::mat4 viewProj        = camera.GetProjection(aspect) * camera.GetView();
     vk::PipelineLayout layout = *pipeline.GetLayout();
 
     std::map<std::pair<VulkanMesh*, Material*>, std::vector<glm::mat4>> groups;
@@ -30,6 +31,7 @@ void Scene::Draw(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& 
 
     instanceBuffer.Upload(allMatrices);
     instanceBuffer.Bind(cmd);
+    lights.Bind(cmd, layout);
 
     uint32_t first = 0;
     for (auto& [key, matrices] : groups)

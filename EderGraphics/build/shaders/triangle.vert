@@ -30,15 +30,18 @@ layout(location = 2) out vec4 fragColor;
 layout(location = 3) out float fragRoughness;
 layout(location = 4) out float fragMetallic;
 layout(location = 5) out float fragEmissive;
+layout(location = 6) out vec3 fragWorldPos;
 
 void main()
 {
     mat4 model    = mat4(instanceModelCol0, instanceModelCol1, instanceModelCol2, instanceModelCol3);
-    gl_Position   = push.viewProj * model * vec4(inPosition, 1.0);
-    fragNormal    = -normalize(mat3(transpose(inverse(model))) * inNormal);
+    vec4 worldPos = model * vec4(inPosition, 1.0);
+    gl_Position   = push.viewProj * worldPos;
+    fragNormal    = normalize(mat3(transpose(inverse(model))) * inNormal);
     fragUV        = inUV;
     fragColor     = inColor * material.albedo;
     fragRoughness = material.roughness;
     fragMetallic  = material.metallic;
     fragEmissive  = material.emissiveIntensity;
+    fragWorldPos  = worldPos.xyz;
 }

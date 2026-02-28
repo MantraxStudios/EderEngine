@@ -13,6 +13,8 @@
 #include "Core/MaterialLayout.h"
 #include "Core/Camera.h"
 #include "Core/Scene.h"
+#include "Core/LightBuffer.h"
+#include <glm/gtc/constants.hpp>
 
 int main()
 {
@@ -41,6 +43,7 @@ int main()
     VulkanFramebuffer  debugFb;
     VulkanDebugOverlay debugOverlay;
     Scene              scene;
+    LightBuffer        lights;
 
     try
     {
@@ -94,6 +97,35 @@ int main()
             }
         }
 
+        lights.Build(pipeline);
+
+        {
+            DirectionalLight sun;
+            sun.direction = glm::normalize(glm::vec3(-1.0f, -2.0f, -1.0f));
+            sun.color     = glm::vec3(1.0f, 0.95f, 0.85f);
+            sun.intensity = 1.2f;
+            lights.AddDirectional(sun);
+        }
+        {
+            PointLight p;
+            p.position  = glm::vec3(0.0f, 5.0f, 0.0f);
+            p.color     = glm::vec3(0.4f, 0.7f, 1.0f);
+            p.intensity = 8.0f;
+            p.radius    = 40.0f;
+            lights.AddPoint(p);
+        }
+        {
+            SpotLight sl;
+            sl.position  = glm::vec3(50.0f, 15.0f, 0.0f);
+            sl.direction = glm::normalize(glm::vec3(0.0f, -1.0f, 0.0f));
+            sl.color     = glm::vec3(1.0f, 0.8f, 0.3f);
+            sl.intensity = 20.0f;
+            sl.radius    = 60.0f;
+            sl.innerCos  = glm::cos(glm::radians(15.0f));
+            sl.outerCos  = glm::cos(glm::radians(30.0f));
+            lights.AddSpot(sl);
+        }
+
         auto& sc = VulkanSwapchain::Get();
         debugFb.Create(sc.GetExtent().width / 2, sc.GetExtent().height / 2,
                        sc.GetFormat(), VulkanRenderer::Get().GetDepthFormat());
@@ -126,6 +158,8 @@ int main()
         for (size_t i = 0; i < objs.size(); i++)
             objs[i].transform.rotation.y = t * 45.0f + static_cast<float>(i) * 0.5f;
 
+        lights.Update(camera.GetPosition());
+
         VulkanRenderer::Get().BeginFrame();
 
         if (!VulkanRenderer::Get().IsFrameStarted())
@@ -144,13 +178,13 @@ int main()
 
         debugFb.BeginRendering(cmd);
         pipeline.Bind(cmd);
-        scene.Draw(cmd, pipeline, camera, dbAspect);
+        scene.Draw(cmd, pipeline, camera, dbAspect, lights);
         debugFb.EndRendering(cmd);
         debugFb.TransitionToShaderRead(cmd);
 
         VulkanRenderer::Get().BeginMainPass();
         pipeline.Bind(cmd);
-        scene.Draw(cmd, pipeline, camera, aspect);
+        scene.Draw(cmd, pipeline, camera, aspect, lights);
         debugOverlay.Draw(cmd, debugFb);
 
         VulkanRenderer::Get().EndFrame();
@@ -159,6 +193,7 @@ int main()
     VulkanInstance::Get().GetDevice().waitIdle();
     debugOverlay.Destroy();
     debugFb.Destroy();
+    lights.Destroy();
     scene.Destroy();
     material.Destroy();
     albedoTex.Destroy();

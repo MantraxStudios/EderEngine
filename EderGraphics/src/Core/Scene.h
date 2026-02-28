@@ -7,12 +7,13 @@
 
 class Camera;
 class VulkanPipeline;
+class LightBuffer;
 
 class Scene
 {
 public:
     SceneObject& Add(VulkanMesh& mesh, Material& material);
-    void         Draw   (vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect);
+    void         Draw   (vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights);
     void         Clear  ();
     void         Destroy();
 

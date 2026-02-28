@@ -7,7 +7,8 @@
       "Bash(glslc debug.vert -o debug.vert.spv)",
       "Bash(glslc debug.frag -o debug.frag.spv)",
       "Bash(cmake ..)",
-      "Bash(cmake .. -G Ninja)"
+      "Bash(cmake .. -G Ninja)",
+      "Bash(ninja)"
     ]
   }
 }

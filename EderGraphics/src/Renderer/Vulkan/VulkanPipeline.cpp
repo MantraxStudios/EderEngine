@@ -128,16 +128,28 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
 
     descriptorSetLayout = vk::raii::DescriptorSetLayout(device, dslInfo);
 
+    vk::DescriptorSetLayoutBinding lightUboBinding{};
+    lightUboBinding.binding         = 0;
+    lightUboBinding.descriptorType  = vk::DescriptorType::eUniformBuffer;
+    lightUboBinding.descriptorCount = 1;
+    lightUboBinding.stageFlags      = vk::ShaderStageFlagBits::eFragment;
+
+    vk::DescriptorSetLayoutCreateInfo lightDslInfo{};
+    lightDslInfo.bindingCount = 1;
+    lightDslInfo.pBindings    = &lightUboBinding;
+
+    lightDescriptorSetLayout = vk::raii::DescriptorSetLayout(device, lightDslInfo);
+
     vk::PushConstantRange pushConstant{};
     pushConstant.stageFlags = vk::ShaderStageFlagBits::eVertex;
     pushConstant.offset     = 0;
     pushConstant.size       = sizeof(glm::mat4);
 
-    vk::DescriptorSetLayout dsl = *descriptorSetLayout;
+    std::array<vk::DescriptorSetLayout, 2> dsls = { *descriptorSetLayout, *lightDescriptorSetLayout };
 
     vk::PipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.setLayoutCount         = 1;
-    layoutInfo.pSetLayouts            = &dsl;
+    layoutInfo.setLayoutCount         = static_cast<uint32_t>(dsls.size());
+    layoutInfo.pSetLayouts            = dsls.data();
     layoutInfo.pushConstantRangeCount = 1;
     layoutInfo.pPushConstantRanges    = &pushConstant;
 
@@ -180,7 +192,8 @@ void VulkanPipeline::Bind(vk::CommandBuffer cmd)
 
 void VulkanPipeline::Destroy()
 {
-    pipeline            = nullptr;
-    pipelineLayout      = nullptr;
-    descriptorSetLayout = nullptr;
+    pipeline                 = nullptr;
+    pipelineLayout           = nullptr;
+    lightDescriptorSetLayout = nullptr;
+    descriptorSetLayout      = nullptr;
 }
