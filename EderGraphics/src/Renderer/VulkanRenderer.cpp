@@ -2,6 +2,12 @@
 #include "Renderer/Vulkan/VulkanInstance.h"
 #include "Renderer/Vulkan/VulkanSwapchain.h"
 
+VulkanRenderer& VulkanRenderer::Get()
+{
+    static VulkanRenderer instance;
+    return instance;
+}
+
 void VulkanRenderer::Init()
 {
     CreateCommandPool();

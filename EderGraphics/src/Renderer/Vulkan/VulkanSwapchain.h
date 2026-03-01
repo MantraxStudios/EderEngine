@@ -11,14 +11,10 @@ struct SwapchainSupportDetails
 class EDERGRAPHICS_API VulkanSwapchain
 {
 public:
-    static VulkanSwapchain& Get()
-    {
-        static VulkanSwapchain instance;
-        return instance;
-    }
+    static VulkanSwapchain& Get();
 
-    void Init(GLFWwindow* window);
-    void Recreate(GLFWwindow* window);
+    void Init(NativeWindow* window);
+    void Recreate(NativeWindow* window);
     void Cleanup();
 
     vk::raii::SwapchainKHR&        GetSwapchain()   { return swapchain; }
@@ -36,7 +32,7 @@ private:
     SwapchainSupportDetails QuerySupport();
     vk::SurfaceFormatKHR    ChooseFormat(const std::vector<vk::SurfaceFormatKHR>& formats);
     vk::PresentModeKHR      ChoosePresentMode(const std::vector<vk::PresentModeKHR>& modes);
-    vk::Extent2D            ChooseExtent(const vk::SurfaceCapabilitiesKHR& caps, GLFWwindow* window);
+    vk::Extent2D            ChooseExtent(const vk::SurfaceCapabilitiesKHR& caps, NativeWindow* window);
 
     vk::raii::SwapchainKHR           swapchain  = nullptr;
     std::vector<vk::Image>           images;

@@ -17,9 +17,21 @@ set(VENDOR_LIB_DIR ${VENDOR_DIR}/lib)
 
 file(GLOB_RECURSE SOURCES src/*.cpp)
 
-# Solo usar .lib en Windows
+# Solo usar .lib en Windows (libs explícitas para evitar conflictos con múltiples variantes de GLFW)
 if (WIN32)
-    file(GLOB VENDOR_LIBS ${VENDOR_LIB_DIR}/*.lib)
+    set(VENDOR_LIBS
+        ${VENDOR_LIB_DIR}/glfw3dll.lib
+        ${VENDOR_LIB_DIR}/assimp-vc143-mt.lib
+        ${VENDOR_LIB_DIR}/vulkan-1.lib
+    )
+endif()
+
+# Android: usar libassimp.so precompilada de vendor/androidlib
+if (ANDROID)
+    add_library(assimp SHARED IMPORTED)
+    set_target_properties(assimp PROPERTIES
+        IMPORTED_LOCATION ${VENDOR_DIR}/androidlib/libassimp.so
+    )
 endif()
 
 # --------------------------------------------------
@@ -81,7 +93,6 @@ if (WIN32)
 
     target_link_libraries(EderGraphics PRIVATE
         ${VENDOR_LIBS}
-        vulkan-1
         user32
         gdi32
         shell32
@@ -105,6 +116,7 @@ if (ANDROID)
         vulkan
         android
         log
+        assimp
     )
 
 endif()

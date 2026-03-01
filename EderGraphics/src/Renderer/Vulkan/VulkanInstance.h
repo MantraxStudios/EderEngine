@@ -4,11 +4,7 @@
 class EDERGRAPHICS_API VulkanInstance
 {
 public:
-    static VulkanInstance& Get()
-    {
-        static VulkanInstance instance;
-        return instance;
-    }
+    static VulkanInstance& Get();
 
     vk::raii::Instance&      GetInstance()       { return instance; }
     vk::raii::Device&        GetDevice()         { return device; }
@@ -19,7 +15,7 @@ public:
     uint32_t                 GetGraphicsIndex()  { return graphicsIndex; }
     uint32_t                 GetPresentIndex()   { return presentIndex; }
 
-    void Init(GLFWwindow* window);
+    void Init(NativeWindow* window);
 
 private:
     VulkanInstance() = default;
@@ -27,7 +23,7 @@ private:
     VulkanInstance(const VulkanInstance&) = delete;
     VulkanInstance& operator=(const VulkanInstance&) = delete;
 
-    void CreateInstance(GLFWwindow* window);
+    void CreateInstance(NativeWindow* window);
     void PickPhysicalDevice();
     void CreateDeviceLogic();
 

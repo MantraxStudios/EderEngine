@@ -7,11 +7,7 @@
 class EDERGRAPHICS_API VulkanRenderer : public Renderer
 {
 public:
-    static VulkanRenderer& Get()
-    {
-        static VulkanRenderer instance;
-        return instance;
-    }
+    static VulkanRenderer& Get();
 
     void Init()          override;
     void BeginFrame()    override;
@@ -19,7 +15,7 @@ public:
     void EndFrame()      override;
     void Shutdown()      override;
 
-    void SetWindow(GLFWwindow* w)    { window = w; }
+    void SetWindow(NativeWindow* w)    { window = w; }
     void SetFramebufferResized()     { framebufferResized = true; }
     bool IsFrameStarted() const      { return frameStarted; }
     vk::CommandBuffer GetCommandBuffer() { return *commandBuffers[currentFrame]; }
@@ -42,7 +38,7 @@ private:
     std::vector<vk::raii::Fence>         inFlightFences;
 
     VulkanDepthBuffer   depthBuffer;
-    GLFWwindow*         window             = nullptr;
+    NativeWindow*         window             = nullptr;
     bool                framebufferResized = false;
     bool                frameStarted       = false;
     uint32_t            currentFrame       = 0;

@@ -3,7 +3,13 @@
 #include <algorithm>
 #include <limits>
 
-void VulkanSwapchain::Init(GLFWwindow* window)
+VulkanSwapchain& VulkanSwapchain::Get()
+{
+    static VulkanSwapchain instance;
+    return instance;
+}
+
+void VulkanSwapchain::Init(NativeWindow* window)
 {
     auto& vi = VulkanInstance::Get();
     SwapchainSupportDetails support = QuerySupport();
@@ -97,13 +103,18 @@ vk::PresentModeKHR VulkanSwapchain::ChoosePresentMode(const std::vector<vk::Pres
     return vk::PresentModeKHR::eFifo;
 }
 
-vk::Extent2D VulkanSwapchain::ChooseExtent(const vk::SurfaceCapabilitiesKHR& caps, GLFWwindow* window)
+vk::Extent2D VulkanSwapchain::ChooseExtent(const vk::SurfaceCapabilitiesKHR& caps, NativeWindow* window)
 {
     if (caps.currentExtent.width != std::numeric_limits<uint32_t>::max())
         return caps.currentExtent;
 
+#if defined(_WIN32)
     int w, h;
     glfwGetFramebufferSize(window, &w, &h);
+#elif defined(__ANDROID__)
+    int w = ANativeWindow_getWidth(window);
+    int h = ANativeWindow_getHeight(window);
+#endif
 
     vk::Extent2D actual{ static_cast<uint32_t>(w), static_cast<uint32_t>(h) };
     actual.width  = std::clamp(actual.width,  caps.minImageExtent.width,  caps.maxImageExtent.width);
@@ -117,8 +128,9 @@ void VulkanSwapchain::Cleanup()
     swapchain = nullptr;
 }
 
-void VulkanSwapchain::Recreate(GLFWwindow* window)
+void VulkanSwapchain::Recreate(NativeWindow* window)
 {
+#if defined(_WIN32)
     int w = 0, h = 0;
     glfwGetFramebufferSize(window, &w, &h);
     while (w == 0 || h == 0)
@@ -126,6 +138,10 @@ void VulkanSwapchain::Recreate(GLFWwindow* window)
         glfwGetFramebufferSize(window, &w, &h);
         glfwWaitEvents();
     }
+#elif defined(__ANDROID__)
+    int w = ANativeWindow_getWidth(window);
+    int h = ANativeWindow_getHeight(window);
+#endif
 
     VulkanInstance::Get().GetDevice().waitIdle();
     Cleanup();

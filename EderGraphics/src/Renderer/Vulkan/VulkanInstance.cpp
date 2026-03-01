@@ -1,13 +1,19 @@
 #include "VulkanInstance.h"
 
-void VulkanInstance::Init(GLFWwindow* window)
+VulkanInstance& VulkanInstance::Get()
+{
+    static VulkanInstance instance;
+    return instance;
+}
+
+void VulkanInstance::Init(NativeWindow* window)
 {
     CreateInstance(window);
     PickPhysicalDevice();
     CreateDeviceLogic();
 }
 
-void VulkanInstance::CreateInstance(GLFWwindow* window)
+void VulkanInstance::CreateInstance(NativeWindow* window)
 {
     vk::ApplicationInfo appInfo{};
     appInfo.pApplicationName   = "EderGraphics";
@@ -16,21 +22,36 @@ void VulkanInstance::CreateInstance(GLFWwindow* window)
     appInfo.engineVersion      = VK_MAKE_VERSION(1, 0, 0);
     appInfo.apiVersion         = VK_API_VERSION_1_0;
 
-    uint32_t glfwExtCount = 0;
-    const char** glfwExts = glfwGetRequiredInstanceExtensions(&glfwExtCount);
-
     vk::InstanceCreateInfo createInfo{};
-    createInfo.pApplicationInfo        = &appInfo;
+    createInfo.pApplicationInfo = &appInfo;
+
+#if defined(_WIN32)
+    uint32_t     glfwExtCount = 0;
+    const char** glfwExts     = glfwGetRequiredInstanceExtensions(&glfwExtCount);
     createInfo.enabledExtensionCount   = glfwExtCount;
     createInfo.ppEnabledExtensionNames = glfwExts;
+#elif defined(__ANDROID__)
+    static const char* androidExts[] = {
+        VK_KHR_SURFACE_EXTENSION_NAME,
+        VK_KHR_ANDROID_SURFACE_EXTENSION_NAME
+    };
+    createInfo.enabledExtensionCount   = 2;
+    createInfo.ppEnabledExtensionNames = androidExts;
+#endif
 
     instance = vk::raii::Instance(context, createInfo);
 
+#if defined(_WIN32)
     VkSurfaceKHR _surface;
     if (glfwCreateWindowSurface(*instance, window, nullptr, &_surface) != VK_SUCCESS)
         throw std::runtime_error("Failed to create window surface!");
-
     surface = vk::raii::SurfaceKHR(instance, _surface);
+#elif defined(__ANDROID__)
+    vk::AndroidSurfaceCreateInfoKHR surfaceInfo{};
+    surfaceInfo.window = window;
+    surface = instance.createAndroidSurfaceKHR(surfaceInfo);
+#endif
+
     std::cout << "[Vulkan] Instance + Surface OK" << std::endl;
 }
 

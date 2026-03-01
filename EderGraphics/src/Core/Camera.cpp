@@ -12,34 +12,15 @@ Camera::Camera(glm::vec3 target, float distance, float fov)
 {
 }
 
-void Camera::OnScroll(double delta)
+void Camera::Orbit(float dx, float dy)
 {
-    distance = std::max(0.5f, distance - static_cast<float>(delta) * 0.4f);
+    azimuth   -= dx * 0.005f;
+    elevation  = std::clamp(elevation + dy * 0.005f, glm::radians(-89.0f), glm::radians(89.0f));
 }
 
-void Camera::Update(GLFWwindow* window, float /*dt*/)
+void Camera::Zoom(float delta)
 {
-    double mx, my;
-    glfwGetCursorPos(window, &mx, &my);
-
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
-    {
-        if (!firstMouse)
-        {
-            float dx =  static_cast<float>(mx - lastMouseX) * 0.005f;
-            float dy = -static_cast<float>(my - lastMouseY) * 0.005f;
-            azimuth   -= dx;
-            elevation  = std::clamp(elevation + dy, glm::radians(-89.0f), glm::radians(89.0f));
-        }
-        firstMouse = false;
-    }
-    else
-    {
-        firstMouse = true;
-    }
-
-    lastMouseX = mx;
-    lastMouseY = my;
+    distance = std::max(0.5f, distance - delta * 0.4f);
 }
 
 glm::vec3 Camera::GetPosition() const
