@@ -12,7 +12,8 @@ public:
     void Zoom (float delta);
 
     // FPS
-    void      FPSLook   (float dx, float dy);  // deltas en píxeles
+    void      FPSLook      (float dx, float dy);  // deltas en píxeles
+    void      SetOrientation(float azimuthRad, float elevationRad);
     glm::vec3 GetForward() const;
     glm::vec3 GetRight  () const;
 

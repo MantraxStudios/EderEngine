@@ -14,7 +14,7 @@ public:
 
     void BeginRendering        (vk::CommandBuffer cmd, uint32_t slot, uint32_t face);
     void EndRendering          (vk::CommandBuffer cmd);
-    void TransitionToShaderRead(vk::CommandBuffer cmd);
+    void TransitionToShaderRead(vk::CommandBuffer cmd, uint32_t slot);
 
     vk::ImageView GetCubeArrayView() const { return *cubeArrayView; }
     vk::Sampler   GetSampler()       const { return *sampler;       }

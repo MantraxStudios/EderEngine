@@ -30,6 +30,12 @@ void Camera::FPSLook(float dx, float dy)
                            glm::radians(-89.0f), glm::radians(89.0f));
 }
 
+void Camera::SetOrientation(float azimuthRad, float elevationRad)
+{
+    azimuth   = azimuthRad;
+    elevation = elevationRad;
+}
+
 glm::vec3 Camera::GetForward() const
 {
     return glm::normalize(glm::vec3(

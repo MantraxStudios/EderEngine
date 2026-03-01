@@ -133,37 +133,46 @@ void VulkanPointShadowMap::BeginRendering(vk::CommandBuffer cmd, uint32_t slot, 
 
 void VulkanPointShadowMap::EndRendering(vk::CommandBuffer cmd) { cmd.endRendering(); }
 
-void VulkanPointShadowMap::TransitionToShaderRead(vk::CommandBuffer cmd)
+void VulkanPointShadowMap::TransitionToShaderRead(vk::CommandBuffer cmd, uint32_t slot)
 {
-    uint32_t totalLayers = MAX_SLOTS * FACE_COUNT;
-    vk::ImageMemoryBarrier barrier{};
-    barrier.oldLayout           = vk::ImageLayout::eDepthStencilAttachmentOptimal;
-    barrier.newLayout           = vk::ImageLayout::eShaderReadOnlyOptimal;
-    barrier.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
-    barrier.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
-    barrier.image               = *depthImage;
-    barrier.subresourceRange    = { vk::ImageAspectFlagBits::eDepth, 0, 1, 0, totalLayers };
-    barrier.srcAccessMask       = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
-    barrier.dstAccessMask       = vk::AccessFlagBits::eShaderRead;
-    cmd.pipelineBarrier(vk::PipelineStageFlagBits::eLateFragmentTests,
-                        vk::PipelineStageFlagBits::eFragmentShader,
-                        {}, {}, {}, barrier);
-    for (auto& l : faceLayouts) l = vk::ImageLayout::eShaderReadOnlyOptimal;
+    // Solo transicionar las 6 caras del slot que fue renderizado
+    uint32_t baseLayer = slot * FACE_COUNT;
+    for (uint32_t f = 0; f < FACE_COUNT; f++)
+    {
+        uint32_t layer = baseLayer + f;
+        auto& lay = faceLayouts[layer];
+        if (lay == vk::ImageLayout::eShaderReadOnlyOptimal) continue;
+
+        vk::ImageMemoryBarrier barrier{};
+        barrier.oldLayout           = lay;
+        barrier.newLayout           = vk::ImageLayout::eShaderReadOnlyOptimal;
+        barrier.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
+        barrier.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
+        barrier.image               = *depthImage;
+        barrier.subresourceRange    = { vk::ImageAspectFlagBits::eDepth, 0, 1, layer, 1 };
+        barrier.srcAccessMask       = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+        barrier.dstAccessMask       = vk::AccessFlagBits::eShaderRead;
+        cmd.pipelineBarrier(vk::PipelineStageFlagBits::eLateFragmentTests,
+                            vk::PipelineStageFlagBits::eFragmentShader,
+                            {}, {}, {}, barrier);
+        lay = vk::ImageLayout::eShaderReadOnlyOptimal;
+    }
 }
 
 std::array<glm::mat4, 6> VulkanPointShadowMap::ComputeFaceMatrices(
     const glm::vec3& pos, float nearZ, float farZ)
 {
-    // 90° FOV cube-face projections with Vulkan Y-flip
+    // NO Y-flip: el spec de cubemap (OpenGL/Vulkan) define sus propias UVs por cara.
+    // Aplicar proj[1][1]*=-1 invierte verticalmente cada cara y rompe el sampling.
     glm::mat4 proj = glm::perspective(glm::radians(90.0f), 1.0f, nearZ, farZ);
-    proj[1][1] *= -1.0f;
 
-    // Vulkan cubemap face order: +X, -X, +Y, -Y, +Z, -Z
+    // +X,-X,+Y,-Y,+Z,-Z  (orden estándar del spec de cubemap)
     static const glm::vec3 dirs[6] = {
         { 1, 0, 0}, {-1, 0, 0},
         { 0, 1, 0}, { 0,-1, 0},
         { 0, 0, 1}, { 0, 0,-1}
     };
+    // ups estándar del spec: las caras ±Y tienen up en ±Z
     static const glm::vec3 ups[6] = {
         { 0,-1, 0}, { 0,-1, 0},
         { 0, 0, 1}, { 0, 0,-1},

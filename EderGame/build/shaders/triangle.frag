@@ -155,51 +155,112 @@ float ShadowFactor(vec3 worldPos, vec3 N, vec3 L)
 }
 
 // ---------------------------------------------------------------------------
-// Spot light shadow — PCF 8-tap Vogel disk
+// Spot light shadow — PCSS (igual que directional)
 // ---------------------------------------------------------------------------
 float ShadowSpot(int slot, vec3 worldPos, vec3 N, vec3 L)
 {
     vec4 lsPos = lights.spotMatrices[slot] * vec4(worldPos, 1.0);
-
-    // Puntos detrás del apex del cono (w <= 0) producen UVs inválidas
     if (lsPos.w <= 0.0) return 1.0;
 
-    vec3 proj  = lsPos.xyz / lsPos.w;
-    vec2 uv    = proj.xy * 0.5 + 0.5;
-
+    vec3 proj = lsPos.xyz / lsPos.w;
+    vec2 uv   = proj.xy * 0.5 + 0.5;
     if (proj.z < 0.0 || proj.z > 1.0 ||
         uv.x < 0.0 || uv.x > 1.0 ||
         uv.y < 0.0 || uv.y > 1.0)
         return 1.0;
 
-    float NdotL = max(dot(N, L), 0.0);
-    float bias  = max(0.002 * (1.0 - NdotL), 0.0005);
-    float recvZ = proj.z - bias;
-
+    float NdotL     = max(dot(N, L), 0.0);
+    float bias      = max(0.002 * (1.0 - NdotL), 0.0005);
+    float recvZ     = proj.z - bias;
     vec2  texelSize = 1.0 / vec2(textureSize(spotShadowMap, 0).xy);
     float phi       = IGN(gl_FragCoord.xy) * 6.28318530;
-    float shadow    = 0.0;
-    const int N_PCF = 8;
-    for (int i = 0; i < N_PCF; i++)
+
+    // Blocker search
+    const int   BLOCKER_N = 8;
+    const float SEARCH_R  = 3.5;
+    float blockerSum = 0.0; int blockerCnt = 0;
+    for (int i = 0; i < BLOCKER_N; i++)
     {
-        vec2  o = VogelDisk(i, N_PCF, phi) * 2.5 * texelSize;
+        vec2  o   = VogelDisk(i, BLOCKER_N, phi) * (SEARCH_R * texelSize.x);
+        vec2  suv = uv + o;
+        if (suv.x < 0.0 || suv.x > 1.0 || suv.y < 0.0 || suv.y > 1.0) continue;
+        float d = texture(spotShadowMap, vec3(suv, float(slot))).r;
+        if (d < recvZ) { blockerSum += d; blockerCnt++; }
+    }
+    if (blockerCnt == 0) return 1.0;
+
+    float avgBlocker = blockerSum / float(blockerCnt);
+    float penumbra   = (recvZ - avgBlocker) / avgBlocker;
+    float filterR    = clamp(penumbra * 0.06, 1.0 * texelSize.x, 7.0 * texelSize.x);
+
+    // PCF
+    const int PCF_N = 24;
+    float shadow = 0.0;
+    for (int i = 0; i < PCF_N; i++)
+    {
+        vec2  o = VogelDisk(i, PCF_N, phi + 1.5707963) * filterR;
         float d = texture(spotShadowMap, vec3(uv + o, float(slot))).r;
         shadow += (recvZ < d) ? 1.0 : 0.0;
     }
-    return shadow / float(N_PCF);
+    return shadow / float(PCF_N);
 }
 
 // ---------------------------------------------------------------------------
-// Point light shadow — linear depth cubemap comparison
+// Point light shadow — PCSS en world-space (igual suavizado que directional)
 // ---------------------------------------------------------------------------
-float ShadowPoint(int slot, vec3 worldPos, vec3 lightPos)
+float ShadowPoint(int slot, vec3 worldPos, vec3 lightPos, vec3 N)
 {
-    vec3  dir     = worldPos - lightPos;
+    vec3  dir      = worldPos - lightPos;
+    float dist     = length(dir);
     float farPlane = lights.pointFarPlanes[slot];
-    float curDist  = length(dir) / farPlane;
-    float closest  = texture(pointShadowMap, vec4(dir, float(slot))).r;
-    float bias     = 0.005;
-    return (curDist - bias > closest) ? 0.0 : 1.0;
+    float curDist  = dist / farPlane;
+    if (curDist >= 1.0) return 1.0;
+
+    vec3  dirN  = dir / dist;
+    float NdotL = max(dot(N, -dirN), 0.0);
+    float bias  = max(0.0008 * (1.0 - NdotL), 0.0001);
+
+    // Tamaño de texel en world-space: cara cubemap 90° a distancia dist
+    float worldTexel = dist * 2.0 / 512.0;   // 512 = tamaño del cubemap
+
+    // Tangente/bitangente perpendiculares a dirN (sin cruce de cara)
+    vec3 up      = abs(dirN.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    vec3 tangent = normalize(cross(up, dirN));
+    vec3 bitan   = cross(dirN, tangent);
+
+    float phi = IGN(gl_FragCoord.xy) * 6.28318530;
+
+    // Blocker search (en world-space)
+    const int   BLOCKER_N  = 8;
+    const float SEARCH_R   = 3.5;
+    float searchR = SEARCH_R * worldTexel;
+    float blockerSum = 0.0; int blockerCnt = 0;
+    for (int i = 0; i < BLOCKER_N; i++)
+    {
+        vec2  o    = VogelDisk(i, BLOCKER_N, phi) * searchR;
+        vec3  sdir = dir + o.x * tangent + o.y * bitan;
+        float d    = texture(pointShadowMap, vec4(sdir, float(slot))).r;
+        // d está en [0,1] normalizado por farPlane
+        float sampleDist = d * farPlane;
+        if (sampleDist < dist - bias * farPlane) { blockerSum += sampleDist; blockerCnt++; }
+    }
+    if (blockerCnt == 0) return 1.0;
+
+    float avgBlocker = blockerSum / float(blockerCnt);
+    float penumbra   = (dist - avgBlocker) / avgBlocker;
+    float filterR    = clamp(penumbra * 0.06 * dist, 1.0 * worldTexel, 7.0 * worldTexel);
+
+    // PCF
+    const int PCF_N = 24;
+    float shadow = 0.0;
+    for (int i = 0; i < PCF_N; i++)
+    {
+        vec2  o    = VogelDisk(i, PCF_N, phi + 1.5707963) * filterR;
+        vec3  sdir = dir + o.x * tangent + o.y * bitan;
+        float d    = texture(pointShadowMap, vec4(sdir, float(slot))).r;
+        shadow    += (curDist - bias > d) ? 0.0 : 1.0;
+    }
+    return shadow / float(PCF_N);
 }
 
 // ---------------------------------------------------------------------------
@@ -234,7 +295,7 @@ void main()
         atten        *= atten;
         float shadow  = (lights.pointLights[i].shadowIdx >= 0)
                         ? ShadowPoint(lights.pointLights[i].shadowIdx, fragWorldPos,
-                                      lights.pointLights[i].position)
+                                      lights.pointLights[i].position, N)
                         : 1.0;
         result += shadow * CalcLight(N, toLight / dist, V,
             lights.pointLights[i].color, lights.pointLights[i].intensity * atten,

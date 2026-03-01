@@ -37,3 +37,11 @@
 7	6374	7940337710663555	CMakeFiles/EderGraphics.dir/src/Core/LightBuffer.cpp.obj	1902eb346db95679
 6374	6609	7940337775500495	EderGraphics.dll	d13416576b9d56f7
 6374	6609	7940337775500495	EderGraphics.lib	d13416576b9d56f7
+8	5591	7940342110839196	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPointShadowMap.cpp.obj	59bec68b1ce16aa3
+5592	5827	7940342167819398	EderGraphics.dll	d13416576b9d56f7
+5592	5827	7940342167819398	EderGraphics.lib	d13416576b9d56f7
+8	961	7940350308143516	CMakeFiles/EderGraphics.dir/src/Core/Camera.cpp.obj	c8499b41a814264f
+15	6223	7940350308208702	CMakeFiles/EderGraphics.dir/src/Core/Scene.cpp.obj	a18055bdb0123621
+19	6405	7940350308248757	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPointShadowMap.cpp.obj	59bec68b1ce16aa3
+6406	6653	7940350373325690	EderGraphics.dll	d13416576b9d56f7
+6406	6653	7940350373325690	EderGraphics.lib	d13416576b9d56f7

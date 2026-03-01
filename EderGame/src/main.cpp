@@ -38,6 +38,7 @@ int main()
     Camera camera({ 0.0f, 0.0f, 0.0f }, 35.0f, 50.0f);
     camera.fpsMode = true;
     camera.fpsPos  = { 0.0f, 2.0f, 12.0f };
+    camera.SetOrientation(0.0f, 0.0f);  // mirar horizontal al frente
     glfwSetWindowUserPointer(window, &camera);
     glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
@@ -265,8 +266,6 @@ int main()
             camera.GetView(), camera.GetProjection(aspect),
             sunDir, camera.nearPlane, camera.farPlane,
             cascadeMatrices, cascadeSplits);
-        pointShadowPos = camera.GetPosition();
-        lights.UpdatePointPosition(0, pointShadowPos);
         // Spotlight tipo linterna: ligeramente por encima y delante de la camara
         spotDir = camera.GetForward();
         spotPos = camera.GetPosition()
@@ -319,7 +318,7 @@ int main()
                 scene.DrawShadowPoint(cmd, pointShadowPipeline, faceMats[face], pointShadowPos, pointShadowFar);
                 pointShadowMap.EndRendering(cmd);
             }
-            pointShadowMap.TransitionToShaderRead(cmd);
+            pointShadowMap.TransitionToShaderRead(cmd, 0);
         }
 
         // --- Offscreen debug framebuffer pass ---
