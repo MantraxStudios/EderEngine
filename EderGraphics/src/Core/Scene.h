@@ -16,10 +16,11 @@ class EDERGRAPHICS_API Scene
 {
 public:
     SceneObject& Add(VulkanMesh& mesh, Material& material);
-    void         Draw           (vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights);
-    void         DrawShadow     (vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeline, const glm::mat4& lightViewProj);
-    void         DrawShadowPoint(vk::CommandBuffer cmd, VulkanPointShadowPipeline& pipeline,
-                                 const glm::mat4& lightViewProj, const glm::vec3& lightPos, float farPlane);
+    void         Draw            (vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights);
+    void         DrawTransparent (vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights);
+    void         DrawShadow      (vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeline, const glm::mat4& lightViewProj);
+    void         DrawShadowPoint (vk::CommandBuffer cmd, VulkanPointShadowPipeline& pipeline,
+                                  const glm::mat4& lightViewProj, const glm::vec3& lightPos, float farPlane);
     void         Clear  ();
     void         Destroy();
 
@@ -28,4 +29,5 @@ public:
 private:
     std::vector<SceneObject> objects;
     VulkanInstanceBuffer     instanceBuffer;
+    VulkanInstanceBuffer     transparentInstanceBuffer;  // buffer separado — evita sobreescribir opacos
 };

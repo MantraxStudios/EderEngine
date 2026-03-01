@@ -20,6 +20,7 @@ public:
     bool IsFrameStarted() const      { return frameStarted; }
     vk::CommandBuffer GetCommandBuffer() { return *commandBuffers[currentFrame]; }
     vk::Format        GetDepthFormat()   { return depthBuffer.GetFormat(); }
+    uint32_t          GetCurrentFrame()  { return currentFrame; }
 
 private:
     VulkanRenderer() = default;

@@ -7,6 +7,7 @@
 #include "Renderer/Vulkan/VulkanShadowPipeline.h"
 #include "Renderer/Vulkan/VulkanPointShadowPipeline.h"
 #include <glm/glm.hpp>
+#include <algorithm>
 
 SceneObject& Scene::Add(VulkanMesh& mesh, Material& material)
 {
@@ -23,6 +24,7 @@ void Scene::Draw(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& 
     for (auto& obj : objects)
     {
         if (!obj.mesh || !obj.material) continue;
+        if (obj.material->IsTransparent()) continue;  // skip transparents
         groups[{ obj.mesh, obj.material }].push_back(obj.transform.GetMatrix());
     }
 
@@ -43,6 +45,44 @@ void Scene::Draw(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& 
         cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &viewProj);
         mesh->DrawInstanced(cmd, first, static_cast<uint32_t>(matrices.size()));
         first += static_cast<uint32_t>(matrices.size());
+    }
+}
+
+void Scene::DrawTransparent(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights)
+{
+    glm::mat4  viewProj = camera.GetProjection(aspect) * camera.GetView();
+    glm::vec3  camPos   = camera.GetPosition();
+    vk::PipelineLayout layout = *pipeline.GetLayout();
+
+    // Collect + sort back-to-front
+    struct Entry { VulkanMesh* mesh; Material* mat; glm::mat4 model; float depth; };
+    std::vector<Entry> entries;
+    for (auto& obj : objects)
+    {
+        if (!obj.mesh || !obj.material || !obj.material->IsTransparent()) continue;
+        glm::mat4 m   = obj.transform.GetMatrix();
+        float     d   = glm::length(glm::vec3(m[3]) - camPos);
+        entries.push_back({ obj.mesh, obj.material, m, d });
+    }
+    std::sort(entries.begin(), entries.end(),
+              [](const Entry& a, const Entry& b){ return a.depth > b.depth; });
+    if (entries.empty()) return;
+
+    // Upload ALL sorted matrices at once into the SEPARATE transparent buffer
+    std::vector<glm::mat4> sortedMats;
+    sortedMats.reserve(entries.size());
+    for (auto& e : entries) sortedMats.push_back(e.model);
+    transparentInstanceBuffer.Upload(sortedMats);
+    transparentInstanceBuffer.Bind(cmd);
+
+    pipeline.BindTransparent(cmd);
+    lights.Bind(cmd, layout);
+
+    for (uint32_t i = 0; i < static_cast<uint32_t>(entries.size()); i++)
+    {
+        entries[i].mat->Bind(cmd, layout);
+        cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &viewProj);
+        entries[i].mesh->DrawInstanced(cmd, i, 1);
     }
 }
 
@@ -119,5 +159,6 @@ void Scene::Clear()
 void Scene::Destroy()
 {
     instanceBuffer.Destroy();
+    transparentInstanceBuffer.Destroy();
     objects.clear();
 }

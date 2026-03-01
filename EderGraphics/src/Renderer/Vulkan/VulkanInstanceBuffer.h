@@ -3,6 +3,7 @@
 #include "VulkanBuffer.h"
 #include <glm/glm.hpp>
 #include <vector>
+#include <array>
 
 class EDERGRAPHICS_API VulkanInstanceBuffer
 {
@@ -12,6 +13,7 @@ public:
     void Destroy();
 
 private:
-    VulkanBuffer buffer;
-    uint32_t     capacity = 0;
+    static constexpr uint32_t FRAMES = 2;  // must match MAX_FRAMES_IN_FLIGHT
+    std::array<VulkanBuffer, FRAMES> buffers;
+    std::array<uint32_t,     FRAMES> capacities = {};
 };

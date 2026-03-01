@@ -27,6 +27,10 @@ public:
 
     void Bind(vk::CommandBuffer cmd, vk::PipelineLayout pipelineLayout);
 
+    // Opacidad global: 1.0 = opaco, <1.0 = transparente
+    float opacity         = 1.0f;
+    bool  IsTransparent() const { return opacity < 0.999f; }
+
 private:
     void SetProperty(const std::string& name, MaterialPropertyValue value);
     void FlushToGPU();

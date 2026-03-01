@@ -323,5 +323,6 @@ void main()
 
     result += baseColor * fragEmissive;
 
-    outColor = vec4(result, 1.0);
+    float alpha = fragColor.a * texture(albedoTex, fragUV).a;
+    outColor = vec4(result, alpha);
 }

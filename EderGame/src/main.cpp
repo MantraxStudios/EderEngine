@@ -47,6 +47,7 @@ int main()
     VulkanTexture        albedoTex;
     Material             material;
     Material             floorMat;
+    Material             glassMat;
     VulkanFramebuffer    debugFb;
     VulkanDebugOverlay   debugOverlay;
     VulkanSkybox         skybox;
@@ -87,6 +88,7 @@ int main()
                   .AddFloat("emissiveIntensity");
             material.Build(layout, pipeline);
             floorMat.Build(layout, pipeline);
+            glassMat.Build(layout, pipeline);
         }
 
         // Box material — warm off-white
@@ -101,6 +103,13 @@ int main()
         floorMat.SetFloat("metallic",          0.0f);
         floorMat.SetFloat("emissiveIntensity", 0.0f);
 
+        // Glass material — translucent blue
+        glassMat.SetVec4 ("albedo",            glm::vec4(0.55f, 0.78f, 1.0f, 0.35f));
+        glassMat.SetFloat("roughness",         0.05f);
+        glassMat.SetFloat("metallic",          0.0f);
+        glassMat.SetFloat("emissiveIntensity", 0.0f);
+        glassMat.opacity = 0.35f;
+
         try { albedoTex.Load("assets/box_albedo.jpg"); }
         catch (const std::exception& e)
         {
@@ -109,6 +118,7 @@ int main()
         }
         material.BindTexture(0, albedoTex);
         floorMat.BindTexture(0, albedoTex);
+        glassMat.BindTexture(0, albedoTex);
 
         mesh.Load("assets/box.fbx");
         if (mesh.GetIndexCount() == 0)
@@ -119,6 +129,13 @@ int main()
             SceneObject& floor = scene.Add(mesh, floorMat);
             floor.transform.position = { 0.0f, -1.0f, 0.0f };
             floor.transform.scale    = { 30.0f, 1.0f, 20.0f };
+        }
+
+        // Glass box — transparent panel in front of the boxes
+        {
+            SceneObject& glass = scene.Add(mesh, glassMat);
+            glass.transform.position = { 0.0f, 1.5f, -4.0f };
+            glass.transform.scale    = { 3.0f, 4.0f, 0.2f };
         }
 
         // Boxes on top of the floor (bottom at y = -0.5 = top of floor)
@@ -328,6 +345,7 @@ int main()
         debugFb.BeginRendering(cmd);
         pipeline.Bind(cmd);
         scene.Draw(cmd, pipeline, camera, dbAspect, lights);
+        scene.DrawTransparent(cmd, pipeline, camera, dbAspect, lights);
         debugFb.EndRendering(cmd);
         debugFb.TransitionToShaderRead(cmd);
 
@@ -335,6 +353,7 @@ int main()
         VulkanRenderer::Get().BeginMainPass();
         pipeline.Bind(cmd);
         scene.Draw(cmd, pipeline, camera, aspect, lights);
+        scene.DrawTransparent(cmd, pipeline, camera, aspect, lights);
 
         // Skybox — drawn after scene so depth test skips covered pixels
         {

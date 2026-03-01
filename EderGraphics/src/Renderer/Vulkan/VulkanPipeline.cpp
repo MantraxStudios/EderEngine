@@ -204,6 +204,37 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
 
     pipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
     std::cout << "[Vulkan] Pipeline OK" << std::endl;
+
+    // -----------------------------------------------------------------------
+    // Transparent pipeline — mismo shader, blend habilitado, depth write off
+    // -----------------------------------------------------------------------
+    vk::PipelineColorBlendAttachmentState blendAtt{};
+    blendAtt.blendEnable         = vk::True;
+    blendAtt.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
+    blendAtt.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
+    blendAtt.colorBlendOp        = vk::BlendOp::eAdd;
+    blendAtt.srcAlphaBlendFactor = vk::BlendFactor::eOne;
+    blendAtt.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+    blendAtt.alphaBlendOp        = vk::BlendOp::eAdd;
+    blendAtt.colorWriteMask      =
+        vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
+        vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
+
+    vk::PipelineColorBlendStateCreateInfo blendInfo{};
+    blendInfo.attachmentCount = 1;
+    blendInfo.pAttachments    = &blendAtt;
+
+    vk::PipelineDepthStencilStateCreateInfo depthNoWrite{};
+    depthNoWrite.depthTestEnable  = vk::True;   // sigue testeando (opacos delante)
+    depthNoWrite.depthWriteEnable = vk::False;  // NO escribe depth (orden manual)
+    depthNoWrite.depthCompareOp   = vk::CompareOp::eLess;
+
+    vk::GraphicsPipelineCreateInfo transpInfo = pipelineInfo;
+    transpInfo.pColorBlendState  = &blendInfo;
+    transpInfo.pDepthStencilState = &depthNoWrite;
+
+    pipelineTransparent = vk::raii::Pipeline(device, nullptr, transpInfo);
+    std::cout << "[Vulkan] Transparent Pipeline OK" << std::endl;
 }
 
 void VulkanPipeline::Bind(vk::CommandBuffer cmd)
@@ -211,8 +242,14 @@ void VulkanPipeline::Bind(vk::CommandBuffer cmd)
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
 }
 
+void VulkanPipeline::BindTransparent(vk::CommandBuffer cmd)
+{
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipelineTransparent);
+}
+
 void VulkanPipeline::Destroy()
 {
+    pipelineTransparent      = nullptr;
     pipeline                 = nullptr;
     pipelineLayout           = nullptr;
     lightDescriptorSetLayout = nullptr;
