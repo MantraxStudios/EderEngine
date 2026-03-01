@@ -16,6 +16,7 @@ public:
     void Shutdown()      override;
 
     void SetWindow(NativeWindow* w)    { window = w; }
+    void RecreateSwapchainResources(NativeWindow* w);
     void SetFramebufferResized()     { framebufferResized = true; }
     bool IsFrameStarted() const      { return frameStarted; }
     vk::CommandBuffer GetCommandBuffer() { return *commandBuffers[currentFrame]; }

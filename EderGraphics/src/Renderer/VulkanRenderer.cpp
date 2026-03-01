@@ -213,6 +213,15 @@ void VulkanRenderer::EndFrame()
     currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
 
+void VulkanRenderer::RecreateSwapchainResources(NativeWindow* w)
+{
+    window = w;
+    auto& swapchain = VulkanSwapchain::Get();
+    swapchain.Recreate(w);
+    auto ext = swapchain.GetExtent();
+    depthBuffer.Recreate(ext.width, ext.height);
+}
+
 void VulkanRenderer::Shutdown()
 {
     VulkanInstance::Get().GetDevice().waitIdle();

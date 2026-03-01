@@ -6,9 +6,9 @@
 
 #if defined(_WIN32)
 
-    #define GLFW_INCLUDE_VULKAN
-    #include <GLFW/glfw3.h>
-    using NativeWindow = GLFWwindow;
+    #include <SDL3/SDL.h>
+    #include <SDL3/SDL_vulkan.h>
+    using NativeWindow = SDL_Window;
 
 #elif defined(__ANDROID__)
 

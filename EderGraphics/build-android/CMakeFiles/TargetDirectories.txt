@@ -1,0 +1,3 @@
+C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build-android/CMakeFiles/EderGraphics.dir
+C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build-android/CMakeFiles/edit_cache.dir
+C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build-android/CMakeFiles/rebuild_cache.dir

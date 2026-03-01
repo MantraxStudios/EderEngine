@@ -1,0 +1,26 @@
+# ninja log v7
+55	2856	7940841856143627	CMakeFiles/EderGraphics.dir/src/Core/MaterialLayout.cpp.o	c93a422bfd6e53ee
+39	2636	7940841855988310	CMakeFiles/EderGraphics.dir/src/Core/Camera.cpp.o	dd301a8691c34325
+103	11005	7940841856631812	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanInstanceBuffer.cpp.o	cac1285dadaf4dae
+80	13419	7940841856401254	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanDepthBuffer.cpp.o	5d0cbd2bd44f7215
+66	11962	7940841856260901	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanBuffer.cpp.o	5ffab81e7c1473f
+45	14068	7940841856043378	CMakeFiles/EderGraphics.dir/src/Core/LightBuffer.cpp.o	f1309fc39605dc40
+88	12707	7940841856476425	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanFramebuffer.cpp.o	fcaa1b70ec3252b1
+73	14649	7940841856325966	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanDebugOverlay.cpp.o	efd25c940a5875ea
+138	14420	7940841856962888	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPointShadowPipeline.cpp.o	a984fbaaecc41e84
+129	13907	7940841856887690	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPointShadowMap.cpp.o	ab7291147c4e0af1
+169	15469	7940841857289151	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSkybox.cpp.o	d67c515c07400208
+112	14380	7940841856707006	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanMesh.cpp.o	fc71158fc59285ed
+159	15233	7940841857188792	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanShadowPipeline.cpp.o	9d3aa73d17693a6c
+147	13850	7940841857063251	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanShadowMap.cpp.o	933951b58f45af1e
+96	15294	7940841856551572	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanInstance.cpp.o	ab051841fa34db53
+61	14138	7940841856198725	CMakeFiles/EderGraphics.dir/src/Core/Scene.cpp.o	e22da094f5b68744
+120	14199	7940841856797279	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPipeline.cpp.o	9def7f3cba17fa3b
+2861	16695	7940841884198693	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSwapchain.cpp.o	e3d6125e6bbab077
+50	13488	7940841856098497	CMakeFiles/EderGraphics.dir/src/Core/Material.cpp.o	c3d5b0e448be91be
+2682	16942	7940841882777758	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSpotShadowMap.cpp.o	c2587dda6ec6b1fc
+11982	20263	7940841975764401	CMakeFiles/EderGraphics.dir/src/Renderer/VulkanRenderer.cpp.o	88e8ac373b7d43ef
+11074	21284	7940841967106892	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanTexture.cpp.o	60a8a3b42ade069b
+21285	21479	7940842068440728	libEderGraphics.so	95df0a63a0e0c19
+29	7159	7940843857269223	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanInstance.cpp.o	ab051841fa34db53
+7160	7290	7940843928576239	libEderGraphics.so	95df0a63a0e0c19

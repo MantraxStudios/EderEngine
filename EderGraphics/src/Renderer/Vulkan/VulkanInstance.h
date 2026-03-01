@@ -16,6 +16,7 @@ public:
     uint32_t                 GetPresentIndex()   { return presentIndex; }
 
     void Init(NativeWindow* window);
+    void RecreateSurface(NativeWindow* window);
 
 private:
     VulkanInstance() = default;
@@ -39,6 +40,6 @@ private:
     uint32_t presentIndex  = 0;
 
     const std::vector<const char*> deviceExtensions = {
-        VK_KHR_SWAPCHAIN_EXTENSION_NAME
+        VK_KHR_SWAPCHAIN_EXTENSION_NAME,
     };
 };

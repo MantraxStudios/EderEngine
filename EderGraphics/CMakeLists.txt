@@ -17,21 +17,29 @@ set(VENDOR_LIB_DIR ${VENDOR_DIR}/lib)
 
 file(GLOB_RECURSE SOURCES src/*.cpp)
 
-# Solo usar .lib en Windows (libs explícitas para evitar conflictos con múltiples variantes de GLFW)
 if (WIN32)
     set(VENDOR_LIBS
-        ${VENDOR_LIB_DIR}/glfw3dll.lib
+        ${VENDOR_LIB_DIR}/SDL3.lib
         ${VENDOR_LIB_DIR}/assimp-vc143-mt.lib
         ${VENDOR_LIB_DIR}/vulkan-1.lib
     )
 endif()
 
-# Android: usar libassimp.so precompilada de vendor/androidlib
+# Android: compilar assimp desde fuente para el ABI actual
 if (ANDROID)
-    add_library(assimp SHARED IMPORTED)
-    set_target_properties(assimp PROPERTIES
-        IMPORTED_LOCATION ${VENDOR_DIR}/androidlib/libassimp.so
+    include(FetchContent)
+    FetchContent_Declare(
+        assimp
+        GIT_REPOSITORY https://github.com/assimp/assimp.git
+        GIT_TAG        v5.3.1
     )
+    set(ASSIMP_BUILD_TESTS        OFF CACHE BOOL "" FORCE)
+    set(ASSIMP_BUILD_ASSIMP_TOOLS OFF CACHE BOOL "" FORCE)
+    set(ASSIMP_BUILD_SAMPLES      OFF CACHE BOOL "" FORCE)
+    set(ASSIMP_INSTALL            OFF CACHE BOOL "" FORCE)
+    set(ASSIMP_NO_EXPORT          ON  CACHE BOOL "" FORCE)
+    set(BUILD_SHARED_LIBS         ON  CACHE BOOL "" FORCE)
+    FetchContent_MakeAvailable(assimp)
 endif()
 
 # --------------------------------------------------
@@ -110,13 +118,15 @@ if (ANDROID)
 
     target_compile_definitions(EderGraphics PRIVATE
         VK_USE_PLATFORM_ANDROID_KHR
+        VULKAN_HPP_NO_SPACESHIP_OPERATOR
     )
 
     target_link_libraries(EderGraphics PRIVATE
         vulkan
         android
         log
-        assimp
     )
+
+    target_link_libraries(EderGraphics PRIVATE assimp)
 
 endif()

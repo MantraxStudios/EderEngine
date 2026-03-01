@@ -17,19 +17,19 @@ void VulkanInstance::CreateInstance(NativeWindow* window)
 {
     vk::ApplicationInfo appInfo{};
     appInfo.pApplicationName   = "EderGraphics";
-    appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
+    appInfo.applicationVersion = VK_MAKE_VERSION(1, 3, 0);
     appInfo.pEngineName        = "EderEngine";
-    appInfo.engineVersion      = VK_MAKE_VERSION(1, 0, 0);
-    appInfo.apiVersion         = VK_API_VERSION_1_0;
+    appInfo.engineVersion      = VK_MAKE_VERSION(1, 3, 0);
+    appInfo.apiVersion         = VK_API_VERSION_1_3;
 
     vk::InstanceCreateInfo createInfo{};
     createInfo.pApplicationInfo = &appInfo;
 
 #if defined(_WIN32)
-    uint32_t     glfwExtCount = 0;
-    const char** glfwExts     = glfwGetRequiredInstanceExtensions(&glfwExtCount);
-    createInfo.enabledExtensionCount   = glfwExtCount;
-    createInfo.ppEnabledExtensionNames = glfwExts;
+    uint32_t          sdlExtCount = 0;
+    const char* const* sdlExts   = SDL_Vulkan_GetInstanceExtensions(&sdlExtCount);
+    createInfo.enabledExtensionCount   = sdlExtCount;
+    createInfo.ppEnabledExtensionNames = sdlExts;
 #elif defined(__ANDROID__)
     static const char* androidExts[] = {
         VK_KHR_SURFACE_EXTENSION_NAME,
@@ -43,7 +43,7 @@ void VulkanInstance::CreateInstance(NativeWindow* window)
 
 #if defined(_WIN32)
     VkSurfaceKHR _surface;
-    if (glfwCreateWindowSurface(*instance, window, nullptr, &_surface) != VK_SUCCESS)
+    if (!SDL_Vulkan_CreateSurface(window, *instance, nullptr, &_surface))
         throw std::runtime_error("Failed to create window surface!");
     surface = vk::raii::SurfaceKHR(instance, _surface);
 #elif defined(__ANDROID__)
@@ -53,6 +53,16 @@ void VulkanInstance::CreateInstance(NativeWindow* window)
 #endif
 
     std::cout << "[Vulkan] Instance + Surface OK" << std::endl;
+}
+
+void VulkanInstance::RecreateSurface(NativeWindow* window)
+{
+#if defined(__ANDROID__)
+    surface = nullptr; // destroy old surface
+    vk::AndroidSurfaceCreateInfoKHR surfaceInfo{};
+    surfaceInfo.window = window;
+    surface = instance.createAndroidSurfaceKHR(surfaceInfo);
+#endif
 }
 
 void VulkanInstance::PickPhysicalDevice()
@@ -118,9 +128,12 @@ void VulkanInstance::CreateDeviceLogic()
     vk::PhysicalDeviceVulkan13Features vulkan13Features{};
     vulkan13Features.dynamicRendering = vk::True;
 
+    // Query supported features before enabling them
+    vk::PhysicalDeviceFeatures2 supported = physicalDevice.getFeatures2();
+
     vk::PhysicalDeviceFeatures2 features{};
-    features.features.samplerAnisotropy = vk::True;
-    features.features.imageCubeArray    = vk::True;
+    features.features.samplerAnisotropy = supported.features.samplerAnisotropy;
+    features.features.imageCubeArray    = supported.features.imageCubeArray;
     features.pNext = &vulkan13Features;
 
     float queuePriority = 1.0f;
@@ -130,12 +143,29 @@ void VulkanInstance::CreateDeviceLogic()
     queueCreateInfo.queueCount       = 1;
     queueCreateInfo.pQueuePriorities = &queuePriority;
 
+    // Build final extensions list — on Android, only add dynamic_rendering if the driver lists it
+    // (on Vulkan 1.3 devices it is core and may not appear as an extension)
+    std::vector<const char*> extensions = deviceExtensions;
+#if defined(__ANDROID__)
+    {
+        auto availableExts = physicalDevice.enumerateDeviceExtensionProperties();
+        bool hasDynRendering = std::any_of(availableExts.begin(), availableExts.end(),
+            [](const vk::ExtensionProperties& e) {
+                return strcmp(e.extensionName, VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME) == 0;
+            });
+        if (hasDynRendering)
+            extensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
+        std::cout << "[Vulkan] dynamic_rendering extension: "
+                  << (hasDynRendering ? "enabled via ext" : "core (skipped ext)") << std::endl;
+    }
+#endif
+
     vk::DeviceCreateInfo deviceCreateInfo{};
     deviceCreateInfo.pNext                   = &features;
     deviceCreateInfo.queueCreateInfoCount    = 1;
     deviceCreateInfo.pQueueCreateInfos       = &queueCreateInfo;
-    deviceCreateInfo.enabledExtensionCount   = static_cast<uint32_t>(deviceExtensions.size());
-    deviceCreateInfo.ppEnabledExtensionNames = deviceExtensions.data();
+    deviceCreateInfo.enabledExtensionCount   = static_cast<uint32_t>(extensions.size());
+    deviceCreateInfo.ppEnabledExtensionNames = extensions.data();
 
     device        = vk::raii::Device(physicalDevice, deviceCreateInfo);
     graphicsQueue = vk::raii::Queue(device, graphicsIndex, 0);

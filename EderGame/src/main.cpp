@@ -1,4 +1,5 @@
-#include <GLFW/glfw3.h>
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_vulkan.h>
 #include <iostream>
 #include "Renderer/Vulkan/VulkanInstance.h"
 #include "Renderer/Vulkan/VulkanSwapchain.h"
@@ -24,23 +25,17 @@
 
 int main()
 {
-    glfwInit();
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    SDL_Init(SDL_INIT_VIDEO);
 
-    GLFWwindow* window = glfwCreateWindow(800, 600, "EderGraphics", nullptr, nullptr);
+    SDL_Window* window = SDL_CreateWindow("EderGraphics", 800, 600,
+        SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
     if (!window) return -1;
-
-    glfwSetFramebufferSizeCallback(window, [](GLFWwindow*, int, int)
-    {
-        VulkanRenderer::Get().SetFramebufferResized();
-    });
 
     Camera camera({ 0.0f, 0.0f, 0.0f }, 35.0f, 50.0f);
     camera.fpsMode = true;
     camera.fpsPos  = { 0.0f, 2.0f, 12.0f };
     camera.SetOrientation(0.0f, 0.0f);  // mirar horizontal al frente
-    glfwSetWindowUserPointer(window, &camera);
-    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    SDL_SetWindowRelativeMouseMode(window, true);
 
     VulkanPipeline       pipeline;
     VulkanMesh           mesh;
@@ -48,6 +43,8 @@ int main()
     Material             material;
     Material             floorMat;
     Material             glassMat;
+    Material             glassMat2;  // green
+    Material             glassMat3;  // amber
     VulkanFramebuffer    debugFb;
     VulkanDebugOverlay   debugOverlay;
     VulkanSkybox         skybox;
@@ -89,6 +86,8 @@ int main()
             material.Build(layout, pipeline);
             floorMat.Build(layout, pipeline);
             glassMat.Build(layout, pipeline);
+            glassMat2.Build(layout, pipeline);
+            glassMat3.Build(layout, pipeline);
         }
 
         // Box material — warm off-white
@@ -104,11 +103,25 @@ int main()
         floorMat.SetFloat("emissiveIntensity", 0.0f);
 
         // Glass material — translucent blue
-        glassMat.SetVec4 ("albedo",            glm::vec4(0.55f, 0.78f, 1.0f, 0.35f));
+        glassMat.SetVec4 ("albedo",            glm::vec4(0.40f, 0.70f, 1.0f,  0.35f));
         glassMat.SetFloat("roughness",         0.05f);
         glassMat.SetFloat("metallic",          0.0f);
         glassMat.SetFloat("emissiveIntensity", 0.0f);
         glassMat.opacity = 0.35f;
+
+        // Glass material 2 — translucent green
+        glassMat2.SetVec4 ("albedo",            glm::vec4(0.30f, 1.0f,  0.45f, 0.40f));
+        glassMat2.SetFloat("roughness",         0.05f);
+        glassMat2.SetFloat("metallic",          0.0f);
+        glassMat2.SetFloat("emissiveIntensity", 0.0f);
+        glassMat2.opacity = 0.40f;
+
+        // Glass material 3 — translucent amber
+        glassMat3.SetVec4 ("albedo",            glm::vec4(1.0f,  0.65f, 0.10f, 0.45f));
+        glassMat3.SetFloat("roughness",         0.05f);
+        glassMat3.SetFloat("metallic",          0.0f);
+        glassMat3.SetFloat("emissiveIntensity", 0.0f);
+        glassMat3.opacity = 0.45f;
 
         try { albedoTex.Load("assets/box_albedo.jpg"); }
         catch (const std::exception& e)
@@ -119,6 +132,8 @@ int main()
         material.BindTexture(0, albedoTex);
         floorMat.BindTexture(0, albedoTex);
         glassMat.BindTexture(0, albedoTex);
+        glassMat2.BindTexture(0, albedoTex);
+        glassMat3.BindTexture(0, albedoTex);
 
         mesh.Load("assets/box.fbx");
         if (mesh.GetIndexCount() == 0)
@@ -133,9 +148,44 @@ int main()
 
         // Glass box — transparent panel in front of the boxes
         {
-            SceneObject& glass = scene.Add(mesh, glassMat);
-            glass.transform.position = { 0.0f, 1.5f, -4.0f };
-            glass.transform.scale    = { 3.0f, 4.0f, 0.2f };
+            SceneObject& g = scene.Add(mesh, glassMat);
+            g.transform.position = {  0.0f, 1.5f, -4.0f };
+            g.transform.scale    = {  3.0f, 4.0f,  0.2f };
+        }
+        // Green panel — behind/left, overlapping with blue from some angles
+        {
+            SceneObject& g = scene.Add(mesh, glassMat2);
+            g.transform.position = { -3.5f, 1.5f, -6.5f };
+            g.transform.scale    = {  0.2f, 4.0f,  3.5f };
+        }
+        // Amber panel — right side
+        {
+            SceneObject& g = scene.Add(mesh, glassMat3);
+            g.transform.position = {  3.5f, 1.5f, -6.5f };
+            g.transform.scale    = {  0.2f, 4.0f,  3.5f };
+        }
+        // Small floating blue cube
+        {
+            SceneObject& g = scene.Add(mesh, glassMat);
+            g.transform.position = { -6.0f, 3.0f, -2.0f };
+            g.transform.scale    = {  1.2f, 1.2f,  1.2f };
+        }
+        // Small floating green cube
+        {
+            SceneObject& g = scene.Add(mesh, glassMat2);
+            g.transform.position = {  6.0f, 2.0f, -2.0f };
+            g.transform.scale    = {  1.5f, 1.5f,  1.5f };
+        }
+        // Overlapping amber + blue slabs (stress-tests back-to-front sort)
+        {
+            SceneObject& g = scene.Add(mesh, glassMat3);
+            g.transform.position = {  0.0f, 1.0f,  2.0f };
+            g.transform.scale    = {  4.0f, 2.5f,  0.15f };
+        }
+        {
+            SceneObject& g = scene.Add(mesh, glassMat);
+            g.transform.position = {  0.0f, 1.0f,  2.5f };
+            g.transform.scale    = {  4.0f, 2.5f,  0.15f };
         }
 
         // Boxes on top of the floor (bottom at y = -0.5 = top of floor)
@@ -231,48 +281,60 @@ int main()
     glm::mat4 cascadeMatrices[VulkanShadowMap::NUM_CASCADES];
     glm::vec4 cascadeSplits;
 
-    double prevTime   = glfwGetTime();
-    double lastMouseX = 0.0, lastMouseY = 0.0;
-    bool   firstMouse = true;
+    uint64_t prevTime = SDL_GetTicks();
+    float    mouseDX  = 0.0f, mouseDY = 0.0f;
+    bool     running  = true;
 
-    while (!glfwWindowShouldClose(window))
+    while (running)
     {
-        glfwPollEvents();
+        mouseDX = 0.0f;
+        mouseDY = 0.0f;
 
-        double currTime = glfwGetTime();
-        float  dt       = static_cast<float>(currTime - prevTime);
-        prevTime        = currTime;
+        SDL_Event event;
+        while (SDL_PollEvent(&event))
+        {
+            if (event.type == SDL_EVENT_QUIT)
+                running = false;
+            else if (event.type == SDL_EVENT_WINDOW_RESIZED ||
+                     event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)
+                VulkanRenderer::Get().SetFramebufferResized();
+            else if (event.type == SDL_EVENT_MOUSE_MOTION)
+            {
+                mouseDX += event.motion.xrel;
+                mouseDY += event.motion.yrel;
+            }
+        }
+
+        uint64_t currTime = SDL_GetTicks();
+        float    dt       = static_cast<float>(currTime - prevTime) / 1000.0f;
+        prevTime          = currTime;
 
         // FPS look (cursor capturado)
-        double mx, my;
-        glfwGetCursorPos(window, &mx, &my);
-        if (!firstMouse)
-            camera.FPSLook(static_cast<float>(mx - lastMouseX),
-                           static_cast<float>(my - lastMouseY));
-        firstMouse = false;
-        lastMouseX = mx;
-        lastMouseY = my;
+        camera.FPSLook(mouseDX, mouseDY);
 
         // Movimiento WASD (sin componente vertical en fwd para no "volar" con W)
         {
+            const bool* keys = SDL_GetKeyboardState(nullptr);
             const float spd  = 8.0f;
             glm::vec3 fwd    = camera.GetForward();
             glm::vec3 right  = camera.GetRight();
             glm::vec3 fwdXZ  = glm::normalize(glm::vec3(fwd.x, 0.0f, fwd.z));
-            if (glfwGetKey(window, GLFW_KEY_W)            == GLFW_PRESS) camera.fpsPos += fwdXZ * spd * dt;
-            if (glfwGetKey(window, GLFW_KEY_S)            == GLFW_PRESS) camera.fpsPos -= fwdXZ * spd * dt;
-            if (glfwGetKey(window, GLFW_KEY_A)            == GLFW_PRESS) camera.fpsPos -= right  * spd * dt;
-            if (glfwGetKey(window, GLFW_KEY_D)            == GLFW_PRESS) camera.fpsPos += right  * spd * dt;
-            if (glfwGetKey(window, GLFW_KEY_SPACE)        == GLFW_PRESS) camera.fpsPos.y += spd * dt;
-            if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) camera.fpsPos.y -= spd * dt;
-            if (glfwGetKey(window, GLFW_KEY_ESCAPE)       == GLFW_PRESS) glfwSetWindowShouldClose(window, GLFW_TRUE);
+            if (keys[SDL_SCANCODE_W])      camera.fpsPos += fwdXZ * spd * dt;
+            if (keys[SDL_SCANCODE_S])      camera.fpsPos -= fwdXZ * spd * dt;
+            if (keys[SDL_SCANCODE_A])      camera.fpsPos -= right  * spd * dt;
+            if (keys[SDL_SCANCODE_D])      camera.fpsPos += right  * spd * dt;
+            if (keys[SDL_SCANCODE_SPACE])  camera.fpsPos.y += spd * dt;
+            if (keys[SDL_SCANCODE_LCTRL]) camera.fpsPos.y -= spd * dt;
+            if (keys[SDL_SCANCODE_ESCAPE]) running = false;
         }
+
+        double currTimeSec = static_cast<double>(currTime) / 1000.0;
 
         auto&  sc     = VulkanSwapchain::Get();
         float  aspect = static_cast<float>(sc.GetExtent().width) /
                         static_cast<float>(sc.GetExtent().height);
 
-        float  t    = static_cast<float>(currTime);
+        float  t    = static_cast<float>(currTimeSec);
         auto&  objs = scene.GetObjects();
         // Index 0 is the floor — skip it
         for (size_t i = 1; i < objs.size(); i++)
@@ -345,7 +407,6 @@ int main()
         debugFb.BeginRendering(cmd);
         pipeline.Bind(cmd);
         scene.Draw(cmd, pipeline, camera, dbAspect, lights);
-        scene.DrawTransparent(cmd, pipeline, camera, dbAspect, lights);
         debugFb.EndRendering(cmd);
         debugFb.TransitionToShaderRead(cmd);
 
@@ -353,13 +414,16 @@ int main()
         VulkanRenderer::Get().BeginMainPass();
         pipeline.Bind(cmd);
         scene.Draw(cmd, pipeline, camera, aspect, lights);
-        scene.DrawTransparent(cmd, pipeline, camera, aspect, lights);
 
-        // Skybox — drawn after scene so depth test skips covered pixels
+        // Skybox — drawn after opaques so depth test skips covered pixels
         {
             auto invVP = glm::inverse(camera.GetProjection(aspect) * camera.GetView());
             skybox.Draw(cmd, invVP, -sunDir);
         }
+
+        // Transparents drawn after skybox so skybox doesn't overwrite them
+        pipeline.Bind(cmd);
+        scene.DrawTransparent(cmd, pipeline, camera, aspect, lights);
 
         debugOverlay.Draw(cmd, debugFb, shadowMap);
 
@@ -382,7 +446,7 @@ int main()
     albedoTex.Destroy();
     mesh.Destroy();
     pipeline.Destroy();
-    glfwDestroyWindow(window);
-    glfwTerminate();
+    SDL_DestroyWindow(window);
+    SDL_Quit();
     return 0;
 }

@@ -74,7 +74,7 @@ endif()
 if (WIN32)
     target_link_libraries(EderGame PRIVATE
         ${EDERGRAPHICS_LIB}
-        ${EDERGRAPHICS_VENDOR_LIB}/glfw3dll.lib
+        ${EDERGRAPHICS_VENDOR_LIB}/SDL3.lib
     )
 
     target_compile_definitions(EderGame PRIVATE
@@ -90,11 +90,11 @@ if (WIN32)
         COMMENT "Copiando EderGraphics.dll"
     )
 
-    # Copiar glfw3.dll (GLFW compartido entre EXE y DLL)
+    # Copiar SDL3.dll
     add_custom_command(TARGET EderGame POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
-        "${EDERGRAPHICS_VENDOR_LIB}/glfw3.dll"
+        "${EDERGRAPHICS_VENDOR_LIB}/SDL3.dll"
         $<TARGET_FILE_DIR:EderGame>
-        COMMENT "Copiando glfw3.dll"
+        COMMENT "Copiando SDL3.dll"
     )
 endif()

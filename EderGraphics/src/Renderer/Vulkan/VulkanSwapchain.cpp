@@ -43,8 +43,23 @@ void VulkanSwapchain::Init(NativeWindow* window)
         createInfo.imageSharingMode = vk::SharingMode::eExclusive;
     }
 
+    // Android often doesn't support eOpaque - pick the first supported mode
+    vk::CompositeAlphaFlagBitsKHR compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+    const vk::CompositeAlphaFlagBitsKHR preferredAlpha[] = {
+        vk::CompositeAlphaFlagBitsKHR::eOpaque,
+        vk::CompositeAlphaFlagBitsKHR::eInherit,
+        vk::CompositeAlphaFlagBitsKHR::ePreMultiplied,
+        vk::CompositeAlphaFlagBitsKHR::ePostMultiplied,
+    };
+    for (auto a : preferredAlpha) {
+        if (support.capabilities.supportedCompositeAlpha & a) {
+            compositeAlpha = a;
+            break;
+        }
+    }
+
     createInfo.preTransform   = support.capabilities.currentTransform;
-    createInfo.compositeAlpha = vk::CompositeAlphaFlagBitsKHR::eOpaque;
+    createInfo.compositeAlpha = compositeAlpha;
     createInfo.presentMode    = presentMode;
     createInfo.clipped        = vk::True;
 
@@ -110,7 +125,7 @@ vk::Extent2D VulkanSwapchain::ChooseExtent(const vk::SurfaceCapabilitiesKHR& cap
 
 #if defined(_WIN32)
     int w, h;
-    glfwGetFramebufferSize(window, &w, &h);
+    SDL_GetWindowSizeInPixels(window, &w, &h);
 #elif defined(__ANDROID__)
     int w = ANativeWindow_getWidth(window);
     int h = ANativeWindow_getHeight(window);
@@ -132,11 +147,11 @@ void VulkanSwapchain::Recreate(NativeWindow* window)
 {
 #if defined(_WIN32)
     int w = 0, h = 0;
-    glfwGetFramebufferSize(window, &w, &h);
+    SDL_GetWindowSizeInPixels(window, &w, &h);
     while (w == 0 || h == 0)
     {
-        glfwGetFramebufferSize(window, &w, &h);
-        glfwWaitEvents();
+        SDL_GetWindowSizeInPixels(window, &w, &h);
+        SDL_WaitEvent(nullptr);
     }
 #elif defined(__ANDROID__)
     int w = ANativeWindow_getWidth(window);

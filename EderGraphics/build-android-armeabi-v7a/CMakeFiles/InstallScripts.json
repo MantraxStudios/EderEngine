@@ -1,0 +1,10 @@
+{
+	"InstallScripts" : 
+	[
+		"C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build-android-armeabi-v7a/cmake_install.cmake",
+		"C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build-android-armeabi-v7a/_deps/assimp-build/cmake_install.cmake",
+		"C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build-android-armeabi-v7a/_deps/assimp-build/contrib/zlib/cmake_install.cmake",
+		"C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build-android-armeabi-v7a/_deps/assimp-build/code/cmake_install.cmake"
+	],
+	"Parallel" : false
+}

@@ -1,0 +1,3 @@
+C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build-android-arm64-v8a/_deps/assimp-subbuild/CMakeFiles/assimp-populate.dir
+C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build-android-arm64-v8a/_deps/assimp-subbuild/CMakeFiles/edit_cache.dir
+C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/build-android-arm64-v8a/_deps/assimp-subbuild/CMakeFiles/rebuild_cache.dir

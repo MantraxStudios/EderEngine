@@ -69,13 +69,13 @@ build CMakeFiles/EderGame.dir/src/main.cpp.obj: CXX_COMPILER__EderGame_unscanned
 #############################################
 # Link the executable EderGame.exe
 
-build EderGame.exe: CXX_EXECUTABLE_LINKER__EderGame_Debug CMakeFiles/EderGame.dir/src/main.cpp.obj | C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/build/EderGraphics.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/glfw3dll.lib
+build EderGame.exe: CXX_EXECUTABLE_LINKER__EderGame_Debug CMakeFiles/EderGame.dir/src/main.cpp.obj | C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/build/EderGraphics.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/SDL3.lib
   CONFIG = Debug
   FLAGS = -O0 -g -Xclang -gcodeview -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd
   LINK_FLAGS = -Xlinker /subsystem:console -fuse-ld=lld-link
-  LINK_LIBRARIES = C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/build/EderGraphics.lib  C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/glfw3dll.lib  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 -loldnames
+  LINK_LIBRARIES = C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/build/EderGraphics.lib  C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/SDL3.lib  -lkernel32 -luser32 -lgdi32 -lwinspool -lshell32 -lole32 -loleaut32 -luuid -lcomdlg32 -ladvapi32 -loldnames
   OBJECT_DIR = CMakeFiles\EderGame.dir
-  POST_BUILD = C:\WINDOWS\system32\cmd.exe /C "cd /D C:\Users\tupap\OneDrive\Escritorio\EderEngine\EderGame\build && "C:\Program Files\CMake\bin\cmake.exe" -E copy_if_different C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/build/EderGraphics.dll C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build && cd /D C:\Users\tupap\OneDrive\Escritorio\EderEngine\EderGame\build && "C:\Program Files\CMake\bin\cmake.exe" -E copy_if_different C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/glfw3.dll C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build"
+  POST_BUILD = C:\WINDOWS\system32\cmd.exe /C "cd /D C:\Users\tupap\OneDrive\Escritorio\EderEngine\EderGame\build && "C:\Program Files\CMake\bin\cmake.exe" -E copy_if_different C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/build/EderGraphics.dll C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build && cd /D C:\Users\tupap\OneDrive\Escritorio\EderEngine\EderGame\build && "C:\Program Files\CMake\bin\cmake.exe" -E copy_if_different C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/SDL3.dll C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build"
   PRE_LINK = cd .
   TARGET_COMPILE_PDB = CMakeFiles\EderGame.dir\
   TARGET_FILE = EderGame.exe
