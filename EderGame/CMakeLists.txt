@@ -20,8 +20,8 @@ set(EDERGRAPHICS_DIR ${CMAKE_SOURCE_DIR}/../EderGraphics)
 set(EDERGRAPHICS_INCLUDE ${EDERGRAPHICS_DIR}/src)
 set(EDERGRAPHICS_VENDOR_INCLUDE ${EDERGRAPHICS_DIR}/vendor/include)
 set(EDERGRAPHICS_VENDOR_LIB ${EDERGRAPHICS_DIR}/vendor/lib)
-set(EDERGRAPHICS_LIB ${EDERGRAPHICS_DIR}/build/EderGraphicsd.lib) # Windows Debug
-set(EDERGRAPHICS_DLL ${EDERGRAPHICS_DIR}/build/EderGraphicsd.dll)
+set(EDERGRAPHICS_LIB ${EDERGRAPHICS_DIR}/build/EderGraphics.lib) # Windows Debug
+set(EDERGRAPHICS_DLL ${EDERGRAPHICS_DIR}/build/EderGraphics.dll)
 
 # Fuentes
 file(GLOB_RECURSE GAME_SOURCES src/*.cpp)
@@ -82,12 +82,12 @@ if (WIN32)
         NOMINMAX
     )
 
-    # Copiar EderGraphicsd.dll
+    # Copiar EderGraphics.dll
     add_custom_command(TARGET EderGame POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different
         "${EDERGRAPHICS_DLL}"
         $<TARGET_FILE_DIR:EderGame>
-        COMMENT "Copiando EderGraphicsd.dll"
+        COMMENT "Copiando EderGraphics.dll"
     )
 
     # Copiar glfw3.dll (GLFW compartido entre EXE y DLL)

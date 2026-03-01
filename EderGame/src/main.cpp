@@ -8,6 +8,7 @@
 #include "Renderer/Vulkan/VulkanDepthBuffer.h"
 #include "Renderer/Vulkan/VulkanFramebuffer.h"
 #include "Renderer/Vulkan/VulkanDebugOverlay.h"
+#include "Renderer/Vulkan/VulkanSkybox.h"
 #include "Renderer/Vulkan/VulkanShadowMap.h"
 #include "Renderer/Vulkan/VulkanShadowPipeline.h"
 #include "Renderer/VulkanRenderer.h"
@@ -45,6 +46,7 @@ int main()
     Material             floorMat;
     VulkanFramebuffer    debugFb;
     VulkanDebugOverlay   debugOverlay;
+    VulkanSkybox         skybox;
     VulkanShadowMap      shadowMap;
     VulkanShadowPipeline shadowPipeline;
     Scene                scene;
@@ -153,6 +155,7 @@ int main()
         debugFb.Create(sc.GetExtent().width / 2, sc.GetExtent().height / 2,
                        sc.GetFormat(), VulkanRenderer::Get().GetDepthFormat());
         debugOverlay.Create(sc.GetFormat(), VulkanRenderer::Get().GetDepthFormat());
+        skybox.Create(sc.GetFormat(), VulkanRenderer::Get().GetDepthFormat());
     }
     catch (const std::exception& e)
     {
@@ -247,6 +250,13 @@ int main()
         VulkanRenderer::Get().BeginMainPass();
         pipeline.Bind(cmd);
         scene.Draw(cmd, pipeline, camera, aspect, lights);
+
+        // Skybox — drawn after scene so depth test skips covered pixels
+        {
+            auto invVP = glm::inverse(camera.GetProjection(aspect) * camera.GetView());
+            skybox.Draw(cmd, invVP, -sunDir);
+        }
+
         debugOverlay.Draw(cmd, debugFb, shadowMap);
 
         VulkanRenderer::Get().EndFrame();
@@ -254,6 +264,7 @@ int main()
 
     VulkanInstance::Get().GetDevice().waitIdle();
     debugOverlay.Destroy();
+    skybox.Destroy();
     debugFb.Destroy();
     shadowPipeline.Destroy();
     shadowMap.Destroy();

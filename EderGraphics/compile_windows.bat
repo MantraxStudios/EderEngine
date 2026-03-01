@@ -3,7 +3,7 @@ setlocal
 
 rem --- Configuración ---
 set BUILD_DIR=build
-set BUILD_TYPE=Release
+set BUILD_TYPE=Debug
 
 echo [INFO] Compilando EderGraphics para Windows
 echo.
