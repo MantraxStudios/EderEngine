@@ -15,9 +15,10 @@ layout(set = 0, binding = 1) uniform sampler2D albedoTex;
 #define MAX_SPOT_LIGHTS  8
 
 struct DirectionalLight { vec3 direction; float intensity; vec3 color; float _pad; };
-struct PointLight       { vec3 position;  float radius;    vec3 color; float intensity; };
+struct PointLight       { vec3 position; float radius; vec3 color; float intensity;
+                          int shadowIdx; float _p0; float _p1; float _p2; };
 struct SpotLight        { vec3 position; float innerCos; vec3 direction; float outerCos;
-                          vec3 color; float intensity; float radius; float _p0; float _p1; float _p2; };
+                          vec3 color; float intensity; float radius; int shadowIdx; float _p0; float _p1; };
 
 layout(set = 1, binding = 0) uniform LightUBO {
     DirectionalLight dirLights[MAX_DIR_LIGHTS];
@@ -33,9 +34,13 @@ layout(set = 1, binding = 0) uniform LightUBO {
     float            _pad3;
     vec4             cascadeSplits;
     mat4             cascadeMatrices[4];
+    mat4             spotMatrices[4];
+    vec4             pointFarPlanes;
 } lights;
 
-layout(set = 1, binding = 1) uniform sampler2DArray shadowMap;
+layout(set = 1, binding = 1) uniform sampler2DArray    shadowMap;
+layout(set = 1, binding = 2) uniform sampler2DArray    spotShadowMap;
+layout(set = 1, binding = 3) uniform samplerCubeArray  pointShadowMap;
 
 layout(location = 0) out vec4 outColor;
 
@@ -150,6 +155,54 @@ float ShadowFactor(vec3 worldPos, vec3 N, vec3 L)
 }
 
 // ---------------------------------------------------------------------------
+// Spot light shadow — PCF 8-tap Vogel disk
+// ---------------------------------------------------------------------------
+float ShadowSpot(int slot, vec3 worldPos, vec3 N, vec3 L)
+{
+    vec4 lsPos = lights.spotMatrices[slot] * vec4(worldPos, 1.0);
+
+    // Puntos detrás del apex del cono (w <= 0) producen UVs inválidas
+    if (lsPos.w <= 0.0) return 1.0;
+
+    vec3 proj  = lsPos.xyz / lsPos.w;
+    vec2 uv    = proj.xy * 0.5 + 0.5;
+
+    if (proj.z < 0.0 || proj.z > 1.0 ||
+        uv.x < 0.0 || uv.x > 1.0 ||
+        uv.y < 0.0 || uv.y > 1.0)
+        return 1.0;
+
+    float NdotL = max(dot(N, L), 0.0);
+    float bias  = max(0.002 * (1.0 - NdotL), 0.0005);
+    float recvZ = proj.z - bias;
+
+    vec2  texelSize = 1.0 / vec2(textureSize(spotShadowMap, 0).xy);
+    float phi       = IGN(gl_FragCoord.xy) * 6.28318530;
+    float shadow    = 0.0;
+    const int N_PCF = 8;
+    for (int i = 0; i < N_PCF; i++)
+    {
+        vec2  o = VogelDisk(i, N_PCF, phi) * 2.5 * texelSize;
+        float d = texture(spotShadowMap, vec3(uv + o, float(slot))).r;
+        shadow += (recvZ < d) ? 1.0 : 0.0;
+    }
+    return shadow / float(N_PCF);
+}
+
+// ---------------------------------------------------------------------------
+// Point light shadow — linear depth cubemap comparison
+// ---------------------------------------------------------------------------
+float ShadowPoint(int slot, vec3 worldPos, vec3 lightPos)
+{
+    vec3  dir     = worldPos - lightPos;
+    float farPlane = lights.pointFarPlanes[slot];
+    float curDist  = length(dir) / farPlane;
+    float closest  = texture(pointShadowMap, vec4(dir, float(slot))).r;
+    float bias     = 0.005;
+    return (curDist - bias > closest) ? 0.0 : 1.0;
+}
+
+// ---------------------------------------------------------------------------
 // Main
 // ---------------------------------------------------------------------------
 void main()
@@ -179,7 +232,11 @@ void main()
         float r       = lights.pointLights[i].radius;
         float atten   = clamp(1.0 - (dist * dist) / (r * r), 0.0, 1.0);
         atten        *= atten;
-        result += CalcLight(N, toLight / dist, V,
+        float shadow  = (lights.pointLights[i].shadowIdx >= 0)
+                        ? ShadowPoint(lights.pointLights[i].shadowIdx, fragWorldPos,
+                                      lights.pointLights[i].position)
+                        : 1.0;
+        result += shadow * CalcLight(N, toLight / dist, V,
             lights.pointLights[i].color, lights.pointLights[i].intensity * atten,
             baseColor, fragRoughness, fragMetallic);
     }
@@ -195,7 +252,10 @@ void main()
         float theta   = dot(L, normalize(-lights.spotLights[i].direction));
         float eps     = lights.spotLights[i].innerCos - lights.spotLights[i].outerCos;
         float cone    = clamp((theta - lights.spotLights[i].outerCos) / eps, 0.0, 1.0);
-        result += CalcLight(N, L, V,
+        float shadow  = (lights.spotLights[i].shadowIdx >= 0)
+                        ? ShadowSpot(lights.spotLights[i].shadowIdx, fragWorldPos, N, L)
+                        : 1.0;
+        result += shadow * CalcLight(N, L, V,
             lights.spotLights[i].color, lights.spotLights[i].intensity * atten * cone,
             baseColor, fragRoughness, fragMetallic);
     }

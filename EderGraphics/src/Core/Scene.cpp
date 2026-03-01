@@ -5,6 +5,7 @@
 #include "Renderer/Vulkan/VulkanMesh.h"
 #include "Renderer/Vulkan/VulkanPipeline.h"
 #include "Renderer/Vulkan/VulkanShadowPipeline.h"
+#include "Renderer/Vulkan/VulkanPointShadowPipeline.h"
 #include <glm/glm.hpp>
 
 SceneObject& Scene::Add(VulkanMesh& mesh, Material& material)
@@ -64,6 +65,42 @@ void Scene::DrawShadow(vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeli
     instanceBuffer.Upload(allMatrices);
     instanceBuffer.Bind(cmd);
     cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &lightViewProj);
+
+    uint32_t first = 0;
+    for (auto& [key, matrices] : groups)
+    {
+        auto [mesh, mat] = key;
+        mesh->DrawInstanced(cmd, first, static_cast<uint32_t>(matrices.size()));
+        first += static_cast<uint32_t>(matrices.size());
+    }
+}
+
+void Scene::DrawShadowPoint(vk::CommandBuffer cmd, VulkanPointShadowPipeline& pipeline,
+                            const glm::mat4& lightViewProj, const glm::vec3& lightPos, float farPlane)
+{
+    vk::PipelineLayout layout = pipeline.GetLayout();
+
+    struct PushData { glm::mat4 viewProj; glm::vec4 lightPosAndFar; } push;
+    push.viewProj       = lightViewProj;
+    push.lightPosAndFar = glm::vec4(lightPos, farPlane);
+
+    std::map<std::pair<VulkanMesh*, Material*>, std::vector<glm::mat4>> groups;
+    for (auto& obj : objects)
+    {
+        if (!obj.mesh || !obj.material) continue;
+        groups[{ obj.mesh, obj.material }].push_back(obj.transform.GetMatrix());
+    }
+
+    std::vector<glm::mat4> allMatrices;
+    for (auto& [key, matrices] : groups)
+        for (auto& m : matrices)
+            allMatrices.push_back(m);
+
+    instanceBuffer.Upload(allMatrices);
+    instanceBuffer.Bind(cmd);
+    cmd.pushConstants(layout,
+        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+        0, static_cast<uint32_t>(sizeof(PushData)), &push);
 
     uint32_t first = 0;
     for (auto& [key, matrices] : groups)

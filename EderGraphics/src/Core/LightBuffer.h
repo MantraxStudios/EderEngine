@@ -16,6 +16,12 @@ public:
     void SetCascadeData   (const glm::mat4 matrices[4], const glm::vec4& splits);
     void SetCameraForward (const glm::vec3& forward);
     void BindShadowMap    (vk::ImageView arrayView, vk::Sampler sampler);
+    void BindSpotShadowMap (vk::ImageView arrayView,      vk::Sampler sampler);
+    void BindPointShadowMap(vk::ImageView cubeArrayView,  vk::Sampler sampler);
+    void SetSpotMatrix         (int slot, const glm::mat4& m);
+    void SetPointFarPlane      (int slot, float farPlane);
+    void UpdatePointPosition   (int idx,  const glm::vec3& pos);
+    void UpdateSpotPosDir      (int idx,  const glm::vec3& pos, const glm::vec3& dir);
 
     void AddDirectional(const DirectionalLight& light);
     void AddPoint      (const PointLight&       light);

@@ -140,7 +140,20 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
     shadowSamplerBinding.descriptorCount = 1;
     shadowSamplerBinding.stageFlags      = vk::ShaderStageFlagBits::eFragment;
 
-    std::array<vk::DescriptorSetLayoutBinding, 2> lightBindings = { lightUboBinding, shadowSamplerBinding };
+    vk::DescriptorSetLayoutBinding spotShadowBinding{};
+    spotShadowBinding.binding         = 2;
+    spotShadowBinding.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+    spotShadowBinding.descriptorCount = 1;
+    spotShadowBinding.stageFlags      = vk::ShaderStageFlagBits::eFragment;
+
+    vk::DescriptorSetLayoutBinding pointShadowBinding{};
+    pointShadowBinding.binding         = 3;
+    pointShadowBinding.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+    pointShadowBinding.descriptorCount = 1;
+    pointShadowBinding.stageFlags      = vk::ShaderStageFlagBits::eFragment;
+
+    std::array<vk::DescriptorSetLayoutBinding, 4> lightBindings = {
+        lightUboBinding, shadowSamplerBinding, spotShadowBinding, pointShadowBinding };
 
     vk::DescriptorSetLayoutCreateInfo lightDslInfo{};
     lightDslInfo.bindingCount = static_cast<uint32_t>(lightBindings.size());

@@ -120,6 +120,7 @@ void VulkanInstance::CreateDeviceLogic()
 
     vk::PhysicalDeviceFeatures2 features{};
     features.features.samplerAnisotropy = vk::True;
+    features.features.imageCubeArray    = vk::True;
     features.pNext = &vulkan13Features;
 
     float queuePriority = 1.0f;

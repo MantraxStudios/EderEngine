@@ -29,3 +29,5 @@ if !FAIL! equ 0 (
     echo !FAIL! shader(s) failed to compile.
     exit /b 1
 )
+
+PAUSE

@@ -15,7 +15,7 @@ void LightBuffer::Build(VulkanPipeline& pipeline)
     poolSizes[0].type            = vk::DescriptorType::eUniformBuffer;
     poolSizes[0].descriptorCount = 1;
     poolSizes[1].type            = vk::DescriptorType::eCombinedImageSampler;
-    poolSizes[1].descriptorCount = 1;
+    poolSizes[1].descriptorCount = 3;  // bindings 1 (cascade) + 2 (spot) + 3 (point)
 
     vk::DescriptorPoolCreateInfo poolInfo{};
     poolInfo.flags         = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
@@ -119,4 +119,62 @@ void LightBuffer::BindShadowMap(vk::ImageView arrayView, vk::Sampler sampler)
     write.pImageInfo      = &imgInfo;
 
     VulkanInstance::Get().GetDevice().updateDescriptorSets(write, nullptr);
+}
+
+void LightBuffer::BindSpotShadowMap(vk::ImageView arrayView, vk::Sampler sampler)
+{
+    vk::DescriptorImageInfo imgInfo{};
+    imgInfo.sampler     = sampler;
+    imgInfo.imageView   = arrayView;
+    imgInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+    vk::WriteDescriptorSet write{};
+    write.dstSet          = *descriptorSet;
+    write.dstBinding      = 2;
+    write.descriptorCount = 1;
+    write.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+    write.pImageInfo      = &imgInfo;
+
+    VulkanInstance::Get().GetDevice().updateDescriptorSets(write, nullptr);
+}
+
+void LightBuffer::BindPointShadowMap(vk::ImageView cubeArrayView, vk::Sampler sampler)
+{
+    vk::DescriptorImageInfo imgInfo{};
+    imgInfo.sampler     = sampler;
+    imgInfo.imageView   = cubeArrayView;
+    imgInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+    vk::WriteDescriptorSet write{};
+    write.dstSet          = *descriptorSet;
+    write.dstBinding      = 3;
+    write.descriptorCount = 1;
+    write.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+    write.pImageInfo      = &imgInfo;
+
+    VulkanInstance::Get().GetDevice().updateDescriptorSets(write, nullptr);
+}
+
+void LightBuffer::SetSpotMatrix(int slot, const glm::mat4& m)
+{
+    if (slot >= 0 && slot < MAX_SPOT_SHADOWS) ubo.spotMatrices[slot] = m;
+}
+
+void LightBuffer::SetPointFarPlane(int slot, float farPlane)
+{
+    if (slot >= 0 && slot < MAX_POINT_SHADOWS) ubo.pointFarPlanes[slot] = farPlane;
+}
+
+void LightBuffer::UpdatePointPosition(int idx, const glm::vec3& pos)
+{
+    if (idx >= 0 && idx < ubo.numPointLights) ubo.pointLights[idx].position = pos;
+}
+
+void LightBuffer::UpdateSpotPosDir(int idx, const glm::vec3& pos, const glm::vec3& dir)
+{
+    if (idx >= 0 && idx < ubo.numSpotLights)
+    {
+        ubo.spotLights[idx].position  = pos;
+        ubo.spotLights[idx].direction = dir;
+    }
 }

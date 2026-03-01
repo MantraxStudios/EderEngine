@@ -11,6 +11,9 @@
 #include "Renderer/Vulkan/VulkanSkybox.h"
 #include "Renderer/Vulkan/VulkanShadowMap.h"
 #include "Renderer/Vulkan/VulkanShadowPipeline.h"
+#include "Renderer/Vulkan/VulkanSpotShadowMap.h"
+#include "Renderer/Vulkan/VulkanPointShadowMap.h"
+#include "Renderer/Vulkan/VulkanPointShadowPipeline.h"
 #include "Renderer/VulkanRenderer.h"
 #include "Core/Material.h"
 #include "Core/MaterialLayout.h"
@@ -32,12 +35,11 @@ int main()
         VulkanRenderer::Get().SetFramebufferResized();
     });
 
-    Camera camera({ 0.0f, 1.5f, 0.0f }, 35.0f, 50.0f);
+    Camera camera({ 0.0f, 0.0f, 0.0f }, 35.0f, 50.0f);
+    camera.fpsMode = true;
+    camera.fpsPos  = { 0.0f, 2.0f, 12.0f };
     glfwSetWindowUserPointer(window, &camera);
-    glfwSetScrollCallback(window, [](GLFWwindow* w, double, double dy)
-    {
-        static_cast<Camera*>(glfwGetWindowUserPointer(w))->Zoom(static_cast<float>(dy));
-    });
+    glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
     VulkanPipeline       pipeline;
     VulkanMesh           mesh;
@@ -47,10 +49,21 @@ int main()
     VulkanFramebuffer    debugFb;
     VulkanDebugOverlay   debugOverlay;
     VulkanSkybox         skybox;
-    VulkanShadowMap      shadowMap;
-    VulkanShadowPipeline shadowPipeline;
+    VulkanShadowMap          shadowMap;
+    VulkanShadowPipeline     shadowPipeline;
+    VulkanSpotShadowMap       spotShadowMap;
+    VulkanPointShadowMap      pointShadowMap;
+    VulkanPointShadowPipeline pointShadowPipeline;
     Scene                scene;
     LightBuffer          lights;
+
+    glm::mat4 spotMatrix;
+    glm::vec3 spotPos      = glm::vec3(0.0f, 15.0f, 0.0f);
+    glm::vec3 spotDir      = glm::normalize(glm::vec3(0.0f, -1.0f, 0.3f));
+    float     spotOuterCos = std::cos(glm::radians(40.0f));
+    float     spotFar      = 50.0f;
+    glm::vec3 pointShadowPos = glm::vec3(-5.0f, 8.0f, 0.0f);
+    float     pointShadowFar = 100.0f;
 
     try
     {
@@ -129,14 +142,18 @@ int main()
         shadowMap.Create(1024);
         shadowPipeline.Create(shadowMap.GetFormat());
 
+        spotShadowMap.Create(1024);
+        pointShadowMap.Create(512);
+        pointShadowPipeline.Create(pointShadowMap.GetFormat());
+
         lights.Build(pipeline);
 
         // Sun — low angle to cast long shadows across the floor
         DirectionalLight sun;
         sun.direction = glm::normalize(glm::vec3(-1.0f, -0.8f, -0.4f));
         sun.color     = glm::vec3(1.0f, 0.95f, 0.85f);
-        sun.intensity = 1.4f;
-        lights.AddDirectional(sun);
+        sun.intensity = .0f;
+        //lights.AddDirectional(sun);
 
         // Soft fill light from above (no shadows)
         {
@@ -148,8 +165,36 @@ int main()
             lights.AddPoint(fill);
         }
 
+        // Spot light with shadow (slot 0)
+        {
+            SpotLight spot;
+            spot.position  = spotPos;
+            spot.direction = spotDir;
+            spot.innerCos  = std::cos(glm::radians(30.0f));
+            spot.outerCos  = spotOuterCos;
+            spot.color     = glm::vec3(1.0f, 0.9f, 0.7f);
+            spot.intensity = 1.0f;
+            spot.radius    = spotFar;
+            spot.shadowIdx = 0;  // uses spot shadow slot 0
+            lights.AddSpot(spot);
+        }
+
+        // Point light with shadow (slot 0)
+        {
+            PointLight pShadow;
+            pShadow.position  = pointShadowPos;
+            pShadow.color     = glm::vec3(1.0f, 0.7f, 0.4f);
+            pShadow.intensity = 1.0f;
+            pShadow.radius    = pointShadowFar;
+            pShadow.shadowIdx = 0;
+            lights.AddPoint(pShadow);
+        }
+        lights.SetPointFarPlane(0, pointShadowFar);
+
         // Bind cascade shadow map (array) into the light descriptor set
         lights.BindShadowMap(shadowMap.GetArrayView(), shadowMap.GetSampler());
+        lights.BindSpotShadowMap(spotShadowMap.GetArrayView(), spotShadowMap.GetSampler());
+        lights.BindPointShadowMap(pointShadowMap.GetCubeArrayView(), pointShadowMap.GetSampler());
 
         auto& sc = VulkanSwapchain::Get();
         debugFb.Create(sc.GetExtent().width / 2, sc.GetExtent().height / 2,
@@ -180,19 +225,30 @@ int main()
         float  dt       = static_cast<float>(currTime - prevTime);
         prevTime        = currTime;
 
-        // Orbit con botón izquierdo del mouse
+        // FPS look (cursor capturado)
         double mx, my;
         glfwGetCursorPos(window, &mx, &my);
-        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS)
-        {
-            if (!firstMouse)
-                camera.Orbit(static_cast<float>(mx - lastMouseX),
-                            -static_cast<float>(my - lastMouseY));
-            firstMouse = false;
-        }
-        else { firstMouse = true; }
+        if (!firstMouse)
+            camera.FPSLook(static_cast<float>(mx - lastMouseX),
+                           static_cast<float>(my - lastMouseY));
+        firstMouse = false;
         lastMouseX = mx;
         lastMouseY = my;
+
+        // Movimiento WASD (sin componente vertical en fwd para no "volar" con W)
+        {
+            const float spd  = 8.0f;
+            glm::vec3 fwd    = camera.GetForward();
+            glm::vec3 right  = camera.GetRight();
+            glm::vec3 fwdXZ  = glm::normalize(glm::vec3(fwd.x, 0.0f, fwd.z));
+            if (glfwGetKey(window, GLFW_KEY_W)            == GLFW_PRESS) camera.fpsPos += fwdXZ * spd * dt;
+            if (glfwGetKey(window, GLFW_KEY_S)            == GLFW_PRESS) camera.fpsPos -= fwdXZ * spd * dt;
+            if (glfwGetKey(window, GLFW_KEY_A)            == GLFW_PRESS) camera.fpsPos -= right  * spd * dt;
+            if (glfwGetKey(window, GLFW_KEY_D)            == GLFW_PRESS) camera.fpsPos += right  * spd * dt;
+            if (glfwGetKey(window, GLFW_KEY_SPACE)        == GLFW_PRESS) camera.fpsPos.y += spd * dt;
+            if (glfwGetKey(window, GLFW_KEY_LEFT_CONTROL) == GLFW_PRESS) camera.fpsPos.y -= spd * dt;
+            if (glfwGetKey(window, GLFW_KEY_ESCAPE)       == GLFW_PRESS) glfwSetWindowShouldClose(window, GLFW_TRUE);
+        }
 
         auto&  sc     = VulkanSwapchain::Get();
         float  aspect = static_cast<float>(sc.GetExtent().width) /
@@ -204,13 +260,23 @@ int main()
         for (size_t i = 1; i < objs.size(); i++)
             objs[i].transform.rotation.y = t * 25.0f + static_cast<float>(i) * 1.2f;
 
-        glm::vec3 camForward = glm::normalize(camera.target - camera.GetPosition());
+        glm::vec3 camForward = camera.GetForward();
         shadowMap.ComputeCascades(
             camera.GetView(), camera.GetProjection(aspect),
             sunDir, camera.nearPlane, camera.farPlane,
             cascadeMatrices, cascadeSplits);
+        pointShadowPos = camera.GetPosition();
+        lights.UpdatePointPosition(0, pointShadowPos);
+        // Spotlight tipo linterna: ligeramente por encima y delante de la camara
+        spotDir = camera.GetForward();
+        spotPos = camera.GetPosition()
+                + camera.GetRight()  * 0.25f   // desplazamiento lateral (hombro derecho)
+                + glm::vec3(0.0f, -0.15f, 0.0f); // ligeramente bajo el ojo
+        lights.UpdateSpotPosDir(0, spotPos, spotDir);
         lights.SetCascadeData(cascadeMatrices, cascadeSplits);
         lights.SetCameraForward(camForward);
+        spotMatrix = VulkanSpotShadowMap::ComputeMatrix(spotPos, spotDir, spotOuterCos, 0.3f, spotFar);
+        lights.SetSpotMatrix(0, spotMatrix);
         lights.Update(camera.GetPosition());
 
         VulkanRenderer::Get().BeginFrame();
@@ -235,6 +301,26 @@ int main()
             shadowMap.EndRendering(cmd);
         }
         shadowMap.TransitionToShaderRead(cmd);
+
+        // --- Spot shadow pass (slot 0) ---
+        spotShadowMap.BeginRendering(cmd, 0);
+        shadowPipeline.Bind(cmd);
+        scene.DrawShadow(cmd, shadowPipeline, spotMatrix);
+        spotShadowMap.EndRendering(cmd);
+        spotShadowMap.TransitionToShaderRead(cmd);
+
+        // --- Point shadow pass (6 faces, slot 0) ---
+        {
+            auto faceMats = VulkanPointShadowMap::ComputeFaceMatrices(pointShadowPos, 0.1f, pointShadowFar);
+            for (uint32_t face = 0; face < 6; face++)
+            {
+                pointShadowMap.BeginRendering(cmd, 0, face);
+                pointShadowPipeline.Bind(cmd);
+                scene.DrawShadowPoint(cmd, pointShadowPipeline, faceMats[face], pointShadowPos, pointShadowFar);
+                pointShadowMap.EndRendering(cmd);
+            }
+            pointShadowMap.TransitionToShaderRead(cmd);
+        }
 
         // --- Offscreen debug framebuffer pass ---
         float dbAspect = static_cast<float>(debugFb.GetExtent().width) /
@@ -266,6 +352,9 @@ int main()
     debugOverlay.Destroy();
     skybox.Destroy();
     debugFb.Destroy();
+    pointShadowPipeline.Destroy();
+    pointShadowMap.Destroy();
+    spotShadowMap.Destroy();
     shadowPipeline.Destroy();
     shadowMap.Destroy();
     lights.Destroy();
