@@ -1,6 +1,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <iostream>
+#include "Editor/Editor.h"
 #include "Renderer/Vulkan/VulkanInstance.h"
 #include "Renderer/Vulkan/VulkanSwapchain.h"
 #include "Renderer/Vulkan/VulkanPipeline.h"
@@ -34,8 +35,10 @@ int main()
     Camera camera({ 0.0f, 0.0f, 0.0f }, 35.0f, 50.0f);
     camera.fpsMode = true;
     camera.fpsPos  = { 0.0f, 2.0f, 12.0f };
-    camera.SetOrientation(0.0f, 0.0f);  // mirar horizontal al frente
-    SDL_SetWindowRelativeMouseMode(window, true);
+    camera.SetOrientation(0.0f, 0.0f);
+    SDL_SetWindowRelativeMouseMode(window, camera.fpsMode);
+
+    Editor editor;
 
     VulkanPipeline       pipeline;
     VulkanMesh           mesh;
@@ -70,6 +73,7 @@ int main()
         VulkanSwapchain::Get().Init(window);
         VulkanRenderer::Get().Init();
         VulkanRenderer::Get().SetWindow(window);
+        editor.Init(window);
 
         pipeline.Create(
             "shaders/triangle.vert.spv",
@@ -269,6 +273,7 @@ int main()
                        sc.GetFormat(), VulkanRenderer::Get().GetDepthFormat());
         debugOverlay.Create(sc.GetFormat(), VulkanRenderer::Get().GetDepthFormat());
         skybox.Create(sc.GetFormat(), VulkanRenderer::Get().GetDepthFormat());
+        editor.SetSceneViewFramebuffer(&debugFb);
     }
     catch (const std::exception& e)
     {
@@ -293,12 +298,20 @@ int main()
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
+            editor.ProcessEvent(event);
+
             if (event.type == SDL_EVENT_QUIT)
                 running = false;
             else if (event.type == SDL_EVENT_WINDOW_RESIZED ||
                      event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)
                 VulkanRenderer::Get().SetFramebufferResized();
-            else if (event.type == SDL_EVENT_MOUSE_MOTION)
+            else if (event.type == SDL_EVENT_KEY_DOWN &&
+                     event.key.scancode == SDL_SCANCODE_P)
+            {
+                camera.fpsMode = !camera.fpsMode;
+                SDL_SetWindowRelativeMouseMode(window, camera.fpsMode);
+            }
+            else if (event.type == SDL_EVENT_MOUSE_MOTION && camera.fpsMode)
             {
                 mouseDX += event.motion.xrel;
                 mouseDY += event.motion.yrel;
@@ -309,10 +322,29 @@ int main()
         float    dt       = static_cast<float>(currTime - prevTime) / 1000.0f;
         prevTime          = currTime;
 
+        // --- SceneView resize ---
+        {
+            uint32_t svW = 0, svH = 0;
+            editor.GetSceneViewSize(svW, svH);
+            if (svW > 4 && svH > 4 &&
+                (svW != debugFb.GetExtent().width || svH != debugFb.GetExtent().height))
+            {
+                VulkanInstance::Get().GetDevice().waitIdle();
+                editor.ReleaseSceneViewFramebuffer();
+                debugFb.Recreate(svW, svH);
+                editor.SetSceneViewFramebuffer(&debugFb);
+            }
+        }
+        // -------------------------
+
+        editor.BeginFrame();
+
         // FPS look (cursor capturado)
-        camera.FPSLook(mouseDX, mouseDY);
+        if (camera.fpsMode)
+            camera.FPSLook(mouseDX, mouseDY);
 
         // Movimiento WASD (sin componente vertical en fwd para no "volar" con W)
+        if (camera.fpsMode)
         {
             const bool* keys = SDL_GetKeyboardState(nullptr);
             const float spd  = 8.0f;
@@ -361,6 +393,7 @@ int main()
 
         if (!VulkanRenderer::Get().IsFrameStarted())
         {
+            editor.EndFrame();
             uint32_t fw = sc.GetExtent().width  / 2;
             uint32_t fh = sc.GetExtent().height / 2;
             if (fw != debugFb.GetExtent().width || fh != debugFb.GetExtent().height)
@@ -400,13 +433,19 @@ int main()
             pointShadowMap.TransitionToShaderRead(cmd, 0);
         }
 
-        // --- Offscreen debug framebuffer pass ---
+        // --- SceneView framebuffer pass (mismo contenido que el main pass) ---
         float dbAspect = static_cast<float>(debugFb.GetExtent().width) /
                          static_cast<float>(debugFb.GetExtent().height);
 
         debugFb.BeginRendering(cmd);
         pipeline.Bind(cmd);
         scene.Draw(cmd, pipeline, camera, dbAspect, lights);
+        {
+            auto invVP = glm::inverse(camera.GetProjection(dbAspect) * camera.GetView());
+            skybox.Draw(cmd, invVP, -sunDir);
+        }
+        pipeline.Bind(cmd);
+        scene.DrawTransparent(cmd, pipeline, camera, dbAspect, lights);
         debugFb.EndRendering(cmd);
         debugFb.TransitionToShaderRead(cmd);
 
@@ -427,10 +466,14 @@ int main()
 
         debugOverlay.Draw(cmd, debugFb, shadowMap);
 
+        editor.Draw(camera, scene, dt);
+        editor.Render(cmd);
+
         VulkanRenderer::Get().EndFrame();
     }
 
     VulkanInstance::Get().GetDevice().waitIdle();
+    editor.Shutdown();
     debugOverlay.Destroy();
     skybox.Destroy();
     debugFb.Destroy();

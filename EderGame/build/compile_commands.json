@@ -1,8 +1,86 @@
 [
 {
   "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build",
-  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderGame.dir\\src\\main.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\src\\main.cpp",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderGame.dir\\src\\Editor\\Editor.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\src\\Editor\\Editor.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src/Editor/Editor.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderGame.dir/src/Editor/Editor.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderGame.dir\\src\\Editor\\Panels\\CameraPanel.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\src\\Editor\\Panels\\CameraPanel.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src/Editor/Panels/CameraPanel.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderGame.dir/src/Editor/Panels/CameraPanel.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderGame.dir\\src\\Editor\\Panels\\HierarchyPanel.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\src\\Editor\\Panels\\HierarchyPanel.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src/Editor/Panels/HierarchyPanel.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderGame.dir/src/Editor/Panels/HierarchyPanel.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderGame.dir\\src\\Editor\\Panels\\InspectorPanel.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\src\\Editor\\Panels\\InspectorPanel.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src/Editor/Panels/InspectorPanel.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderGame.dir/src/Editor/Panels/InspectorPanel.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderGame.dir\\src\\Editor\\Panels\\SceneViewPanel.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\src\\Editor\\Panels\\SceneViewPanel.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src/Editor/Panels/SceneViewPanel.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderGame.dir/src/Editor/Panels/SceneViewPanel.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderGame.dir\\src\\Editor\\Panels\\StatsPanel.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\src\\Editor\\Panels\\StatsPanel.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src/Editor/Panels/StatsPanel.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderGame.dir/src/Editor/Panels/StatsPanel.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderGame.dir\\src\\main.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\src\\main.cpp",
   "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src/main.cpp",
   "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderGame.dir/src/main.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderGame.dir\\vendor\\include\\imgui\\imgui.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\vendor\\include\\imgui\\imgui.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderGame.dir/vendor/include/imgui/imgui.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderGame.dir\\vendor\\include\\imgui\\imgui_demo.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\vendor\\include\\imgui\\imgui_demo.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui_demo.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_demo.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderGame.dir\\vendor\\include\\imgui\\imgui_draw.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\vendor\\include\\imgui\\imgui_draw.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui_draw.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_draw.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderGame.dir\\vendor\\include\\imgui\\imgui_tables.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\vendor\\include\\imgui\\imgui_tables.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui_tables.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_tables.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderGame.dir\\vendor\\include\\imgui\\imgui_widgets.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\vendor\\include\\imgui\\imgui_widgets.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui_widgets.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_widgets.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderGame.dir\\vendor\\include\\imgui\\imgui_impl_sdl3.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\vendor\\include\\imgui\\imgui_impl_sdl3.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui_impl_sdl3.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_impl_sdl3.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderGame.dir\\vendor\\include\\imgui\\imgui_impl_vulkan.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\vendor\\include\\imgui\\imgui_impl_vulkan.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui_impl_vulkan.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_impl_vulkan.cpp.obj"
 }
 ]

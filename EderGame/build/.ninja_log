@@ -1,6 +1,21 @@
 # ninja log v7
-25	4742	7941016234007614	CMakeFiles/EderGame.dir/src/main.cpp.obj	55dc1b030da47528
-4608	5189	7941011826114157	EderGame.exe	f2779a66b9772d29
-4	109	7941016636401226	build.ninja	3361e71bdd89cd1a
-4	109	7941016636401226	C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/cmake_install.cmake	3361e71bdd89cd1a
-28	226	7941016637367275	EderGame.exe	37f2b55670b5c796
+31	6380	7941038336351776	CMakeFiles/EderGame.dir/src/main.cpp.obj	4f5a180c7df4c0b3
+6381	6589	7941038399851780	EderGame.exe	c0df3ceec15e7dbf
+4	109	7941042414068567	build.ninja	3361e71bdd89cd1a
+4	109	7941042414008290	C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/cmake_install.cmake	3361e71bdd89cd1a
+31	646	7941023701770888	CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_tables.cpp.obj	642b8ec65f842b2e
+41	728	7941023701829864	CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_impl_vulkan.cpp.obj	39832e18557a06ee
+38	755	7941023701829864	CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_impl_sdl3.cpp.obj	8a5cfa01202c37e1
+27	840	7941023701770888	CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_draw.cpp.obj	8469ee9ed3538836
+35	935	7941023701829864	CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_widgets.cpp.obj	49308c0a3d647473
+23	1394	7941023701693396	CMakeFiles/EderGame.dir/vendor/include/imgui/imgui.cpp.obj	6558223f4fefaa45
+17	370	7941024644130287	CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_demo.cpp.obj	ab6d7e00ce1accba
+29	8142	7941036993193775	CMakeFiles/EderGame.dir/src/Editor/Editor.cpp.obj	5d31449a18d07a81
+52	169	7941036993424168	CMakeFiles/EderGame.dir/src/Editor/Panels/StatsPanel.cpp.obj	e12b416efbf0b59f
+34	1043	7941036993243844	CMakeFiles/EderGame.dir/src/Editor/Panels/CameraPanel.cpp.obj	8ecea2556fa4aa96
+48	7651	7941036993379051	CMakeFiles/EderGame.dir/src/Editor/Panels/SceneViewPanel.cpp.obj	2595446fd9b50705
+38	7976	7941036993278901	CMakeFiles/EderGame.dir/src/Editor/Panels/HierarchyPanel.cpp.obj	7330896ae73646b8
+43	8291	7941036993334021	CMakeFiles/EderGame.dir/src/Editor/Panels/InspectorPanel.cpp.obj	5ddb99f587671caa
+31	5220	7941042415070833	CMakeFiles/EderGame.dir/src/Editor/Editor.cpp.obj	5d31449a18d07a81
+37	5830	7941042415110811	CMakeFiles/EderGame.dir/src/main.cpp.obj	4f5a180c7df4c0b3
+5830	6073	7941042473067909	EderGame.exe	c0df3ceec15e7dbf

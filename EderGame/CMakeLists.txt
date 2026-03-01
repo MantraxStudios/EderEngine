@@ -26,10 +26,22 @@ set(EDERGRAPHICS_DLL ${EDERGRAPHICS_DIR}/build/EderGraphics.dll)
 # Fuentes
 file(GLOB_RECURSE GAME_SOURCES src/*.cpp)
 
+# ImGui sources (compilados directamente en EderGame)
+set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/vendor/include/imgui)
+set(IMGUI_SOURCES
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_demo.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
+    ${IMGUI_DIR}/imgui_impl_sdl3.cpp
+    ${IMGUI_DIR}/imgui_impl_vulkan.cpp
+)
+
 # --------------------------------------------------
 # Crear ejecutable
 # --------------------------------------------------
-add_executable(EderGame ${GAME_SOURCES})
+add_executable(EderGame ${GAME_SOURCES} ${IMGUI_SOURCES})
 
 # --------------------------------------------------
 # Includes
@@ -38,6 +50,7 @@ target_include_directories(EderGame PRIVATE
     src
     ${EDERGRAPHICS_INCLUDE}
     ${EDERGRAPHICS_VENDOR_INCLUDE}
+    ${CMAKE_SOURCE_DIR}/vendor/include
 )
 
 # --------------------------------------------------
@@ -75,6 +88,7 @@ if (WIN32)
     target_link_libraries(EderGame PRIVATE
         ${EDERGRAPHICS_LIB}
         ${EDERGRAPHICS_VENDOR_LIB}/SDL3.lib
+        ${EDERGRAPHICS_VENDOR_LIB}/vulkan-1.lib
     )
 
     target_compile_definitions(EderGame PRIVATE
