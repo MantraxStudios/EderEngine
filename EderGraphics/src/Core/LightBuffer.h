@@ -22,6 +22,7 @@ public:
     void SetPointFarPlane      (int slot, float farPlane);
     void UpdatePointPosition   (int idx,  const glm::vec3& pos);
     void UpdateSpotPosDir      (int idx,  const glm::vec3& pos, const glm::vec3& dir);
+    void SetSkyAmbient         (const glm::vec3& sky, const glm::vec3& ground);
 
     void AddDirectional(const DirectionalLight& light);
     void AddPoint      (const PointLight&       light);

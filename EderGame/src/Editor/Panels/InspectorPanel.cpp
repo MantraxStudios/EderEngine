@@ -3,6 +3,7 @@
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/MeshRendererComponent.h"
 #include "ECS/Components/LightComponent.h"
+#include "ECS/Components/SunShaftsComponent.h"
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>
 #include <cstring>
@@ -84,6 +85,7 @@ void InspectorPanel::OnDraw()
     DrawTransformComponent();
     DrawMeshRendererComponent();
     DrawLightComponent();
+    DrawSunShaftsComponent();
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -182,12 +184,30 @@ void InspectorPanel::DrawLightComponent()
     ImGui::PopID();
 }
 
+void InspectorPanel::DrawSunShaftsComponent()
+{
+    if (!registry->Has<SunShaftsComponent>(selected)) return;
+    ImGui::PushID("SunShafts");
+    if (ComponentHeader<SunShaftsComponent>("Sun Shafts", registry, selected, ImVec4(1.0f, 0.7f, 0.2f, 1.0f)))
+    {
+        auto& s = registry->Get<SunShaftsComponent>(selected);
+        ImGui::Checkbox("Enabled",   &s.enabled);
+        ImGui::DragFloat("Intensity", &s.intensity, 0.01f, 0.0f, 5.0f);
+        ImGui::DragFloat("Decay",     &s.decay,     0.005f, 0.5f, 0.999f);
+        ImGui::DragFloat("Weight",    &s.weight,    0.01f,  0.0f, 2.0f);
+        ImGui::DragFloat("Exposure",  &s.exposure,  0.005f, 0.0f, 1.0f);
+        ImGui::ColorEdit3("Tint",     &s.tint.x);
+    }
+    ImGui::PopID();
+}
+
 void InspectorPanel::DrawAddComponent()
 {
     const bool canAddTransform    = !registry->Has<TransformComponent>(selected);
     const bool canAddMeshRenderer = !registry->Has<MeshRendererComponent>(selected);
     const bool canAddLight        = !registry->Has<LightComponent>(selected);
-    const bool anyAvailable       = canAddTransform || canAddMeshRenderer || canAddLight;
+    const bool canAddSunShafts    = !registry->Has<SunShaftsComponent>(selected);
+    const bool anyAvailable       = canAddTransform || canAddMeshRenderer || canAddLight || canAddSunShafts;
 
     float btnW = ImGui::GetContentRegionAvail().x;
     ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
@@ -206,6 +226,7 @@ void InspectorPanel::DrawAddComponent()
         if (canAddTransform    && ImGui::MenuItem("   Transform"))     registry->Add<TransformComponent>(selected);
         if (canAddMeshRenderer && ImGui::MenuItem("   Mesh Renderer")) registry->Add<MeshRendererComponent>(selected);
         if (canAddLight        && ImGui::MenuItem("   Light"))         registry->Add<LightComponent>(selected);
+        if (canAddSunShafts    && ImGui::MenuItem("   Sun Shafts"))    registry->Add<SunShaftsComponent>(selected);
         ImGui::EndPopup();
     }
 }

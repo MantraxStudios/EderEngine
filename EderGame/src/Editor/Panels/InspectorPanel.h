@@ -17,6 +17,7 @@ private:
     void DrawTransformComponent();
     void DrawMeshRendererComponent();
     void DrawLightComponent();
+    void DrawSunShaftsComponent();
     void DrawAddComponent();
 
     Registry* registry = nullptr;

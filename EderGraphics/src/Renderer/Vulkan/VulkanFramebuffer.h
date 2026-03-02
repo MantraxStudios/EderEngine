@@ -13,6 +13,7 @@ public:
     void TransitionToShaderRead(vk::CommandBuffer cmd);
 
     vk::ImageView GetColorView()   const { return *colorView;   }
+    vk::ImageView GetDepthView()   const { return *depthView;   }
     vk::Sampler   GetSampler()     const { return *sampler;     }
     vk::Format    GetColorFormat() const { return colorFormat;  }
     vk::Format    GetDepthFormat() const { return depthFormat;  }

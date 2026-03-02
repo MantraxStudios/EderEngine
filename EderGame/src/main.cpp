@@ -27,6 +27,7 @@
 #include "Core/LightBuffer.h"
 #include "EderCore.h"
 #include "VulkanGizmo.h"
+#include "VulkanSunShafts.h"
 #include <glm/gtc/constants.hpp>
 
 int main()
@@ -56,6 +57,7 @@ int main()
     VulkanDebugOverlay   debugOverlay;
     VulkanSkybox         skybox;
     VulkanGizmo          gizmo;
+    VulkanSunShafts      sunShafts;
     VulkanShadowMap          shadowMap;
     VulkanShadowPipeline     shadowPipeline;
     VulkanSpotShadowMap       spotShadowMap;
@@ -167,6 +169,7 @@ int main()
         debugOverlay.Create(sc.GetFormat(), VulkanRenderer::Get().GetDepthFormat());
         skybox.Create(sc.GetFormat(), VulkanRenderer::Get().GetDepthFormat());
         gizmo.Create(debugFb.GetColorFormat(), VulkanRenderer::Get().GetDepthFormat());
+        sunShafts.Create(debugFb.GetColorFormat(), sc.GetExtent().width / 2, sc.GetExtent().height / 2);
         editor.SetSceneViewFramebuffer(&debugFb);
     }
     catch (const std::exception& e)
@@ -250,6 +253,7 @@ int main()
                 VulkanInstance::Get().GetDevice().waitIdle();
                 editor.ReleaseSceneViewFramebuffer();
                 debugFb.Recreate(svW, svH);
+                sunShafts.Resize(svW, svH);
                 editor.SetSceneViewFramebuffer(&debugFb);
             }
         }
@@ -320,10 +324,13 @@ int main()
                     glm::mat4 m  = tr.GetMatrix();
                     glm::vec3 dir = glm::normalize(glm::vec3(m * glm::vec4(0,-1,0,0)));
                     if (!hasDir) { activeDirDir = dir; hasDir = true; }
+                    // Fade directional light to 0 as sun goes below horizon
+                    // (dir.y > 0 means light points upward = sun is below; -dir.y is sun altitude)
+                    float sunHorizon = glm::clamp(-dir.y * 5.0f + 1.0f, 0.0f, 1.0f);
                     DirectionalLight dl{};
                     dl.direction = dir;
                     dl.color     = l.color;
-                    dl.intensity = l.intensity;
+                    dl.intensity = l.intensity * sunHorizon;
                     lights.AddDirectional(dl);
                 }
                 else if (l.type == LightType::Point)
@@ -384,6 +391,21 @@ int main()
         lights.SetCameraForward(camForward);
         lights.Update(camera.GetPosition());
 
+        // Compute sky-driven ambient from the directional light (sun) direction.
+        // sunDirUp = how high the sun is. 1 = noon, 0 = horizon, <0 = below.
+        {
+            glm::vec3 sunDirUp = glm::normalize(-activeDirDir);
+            float sunY     = sunDirUp.y;
+            float sunAbove = glm::clamp(sunY * 5.0f + 1.0f, 0.0f, 1.0f);
+            // Interpolate sky colour: clear-blue at noon → warm orange near sunset
+            float t          = glm::clamp(1.0f - sunY * 4.0f, 0.0f, 1.0f);
+            glm::vec3 highSky    = glm::vec3(0.08f, 0.15f, 0.30f);
+            glm::vec3 sunsetSky  = glm::vec3(0.25f, 0.12f, 0.05f);
+            glm::vec3 skyAmb     = glm::mix(highSky, sunsetSky, t) * sunAbove;
+            glm::vec3 groundAmb  = glm::vec3(0.05f, 0.04f, 0.025f) * sunAbove;
+            lights.SetSkyAmbient(skyAmb, groundAmb);
+        }
+
         VulkanRenderer::Get().BeginFrame();
 
         if (!VulkanRenderer::Get().IsFrameStarted())
@@ -392,7 +414,10 @@ int main()
             uint32_t fw = sc.GetExtent().width  / 2;
             uint32_t fh = sc.GetExtent().height / 2;
             if (fw != debugFb.GetExtent().width || fh != debugFb.GetExtent().height)
+            {
                 debugFb.Recreate(fw, fh);
+                sunShafts.Resize(fw, fh);
+            }
             continue;
         }
 
@@ -496,6 +521,46 @@ int main()
         debugFb.EndRendering(cmd);
         debugFb.TransitionToShaderRead(cmd);
 
+        // --- Sun Shafts post-process ---
+        {
+            SunShaftsComponent* shaftsComp = nullptr;
+            registry.Each<SunShaftsComponent>([&](Entity e, SunShaftsComponent& ss) {
+                if (ss.enabled && !shaftsComp) shaftsComp = &ss;
+            });
+
+            if (shaftsComp && activeDirDir != glm::vec3(0.0f))
+            {
+                glm::mat4 vp       = camera.GetProjection(dbAspect) * camera.GetView();
+                glm::vec3 sunWorldDir = glm::normalize(-activeDirDir);
+                glm::vec4 sunClip  = vp * glm::vec4(sunWorldDir * 1000.0f, 1.0f);
+
+                // Sun behind the camera: push UV off-screen so the shader zeroes all effects
+                bool sunInFront = (sunClip.w > 0.0f) &&
+                                  (glm::dot(camForward, sunWorldDir) > 0.0f);
+                // NOTE: proj[1][1] is already negated (Vulkan Y-flip), so NDC Y
+                // is negative for points above the horizon.  No extra negation needed.
+                glm::vec2 sunUV = sunInFront
+                    ? glm::vec2(sunClip.x / sunClip.w, sunClip.y / sunClip.w) * 0.5f + 0.5f
+                    : glm::vec2(-10.0f);   // off-screen → onScreen gate = 0
+
+                float sunHeight = glm::normalize(-activeDirDir).y;
+                sunShafts.Draw(cmd,
+                    debugFb.GetColorView(), debugFb.GetSampler(),
+                    debugFb.GetDepthView(),
+                    sunUV,
+                    shaftsComp->intensity, shaftsComp->decay,
+                    shaftsComp->weight,    shaftsComp->exposure,
+                    shaftsComp->tint,
+                    sunHeight);
+                sunShafts.GetOutput().TransitionToShaderRead(cmd);
+                editor.SetSceneViewFramebuffer(&sunShafts.GetOutput());
+            }
+            else
+            {
+                editor.SetSceneViewFramebuffer(&debugFb);
+            }
+        }
+
         // --- Main pass ---
         VulkanRenderer::Get().BeginMainPass();
         pipeline.Bind(cmd);
@@ -522,6 +587,7 @@ int main()
     VulkanInstance::Get().GetDevice().waitIdle();
     editor.Shutdown();
     gizmo.Destroy();
+    sunShafts.Destroy();
     debugOverlay.Destroy();
     skybox.Destroy();
     debugFb.Destroy();

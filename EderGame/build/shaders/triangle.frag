@@ -36,6 +36,8 @@ layout(set = 1, binding = 0) uniform LightUBO {
     mat4             cascadeMatrices[4];
     mat4             spotMatrices[4];
     vec4             pointFarPlanes;
+    vec4             skyAmbient;     // hemisphere sky colour (from procedural skybox)
+    vec4             groundAmbient;  // hemisphere ground colour
 } lights;
 
 layout(set = 1, binding = 1) uniform sampler2DArray    shadowMap;
@@ -272,10 +274,9 @@ void main()
     vec3 N         = normalize(fragNormal);
     vec3 V         = normalize(lights.cameraPos - fragWorldPos);
 
-    float hemi         = N.y * 0.5 + 0.5;
-    vec3  ambientSky   = vec3(0.05, 0.06, 0.09);
-    vec3  ambientGround= vec3(0.03, 0.025, 0.015);
-    vec3 result = baseColor * mix(ambientGround, ambientSky, hemi);
+    float hemi  = N.y * 0.5 + 0.5;
+    // Use sky-driven ambient set each frame from the procedural skybox sun direction.
+    vec3 result = baseColor * mix(lights.groundAmbient.rgb, lights.skyAmbient.rgb, hemi);
 
     for (int i = 0; i < lights.numDirLights; i++)
     {

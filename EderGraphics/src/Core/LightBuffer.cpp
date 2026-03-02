@@ -178,3 +178,9 @@ void LightBuffer::UpdateSpotPosDir(int idx, const glm::vec3& pos, const glm::vec
         ubo.spotLights[idx].direction = dir;
     }
 }
+
+void LightBuffer::SetSkyAmbient(const glm::vec3& sky, const glm::vec3& ground)
+{
+    ubo.skyAmbient    = glm::vec4(sky,    1.0f);
+    ubo.groundAmbient = glm::vec4(ground, 1.0f);
+}

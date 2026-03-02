@@ -53,7 +53,7 @@ void VulkanFramebuffer::Create(uint32_t width, uint32_t height, vk::Format inCol
     sampler = vk::raii::Sampler(device, si);
 
     ci.format = depthFormat;
-    ci.usage  = vk::ImageUsageFlagBits::eDepthStencilAttachment;
+    ci.usage  = vk::ImageUsageFlagBits::eDepthStencilAttachment | vk::ImageUsageFlagBits::eSampled;
     depthImage = vk::raii::Image(device, ci);
     {
         auto req = depthImage.getMemoryRequirements();
@@ -113,7 +113,7 @@ void VulkanFramebuffer::BeginRendering(vk::CommandBuffer cmd)
     depthAtt.imageView   = *depthView;
     depthAtt.imageLayout = vk::ImageLayout::eDepthStencilAttachmentOptimal;
     depthAtt.loadOp      = vk::AttachmentLoadOp::eClear;
-    depthAtt.storeOp     = vk::AttachmentStoreOp::eDontCare;
+    depthAtt.storeOp     = vk::AttachmentStoreOp::eStore;
     depthAtt.clearValue  = vk::ClearDepthStencilValue{ 1.0f, 0 };
 
     vk::RenderingInfo ri{};
@@ -155,6 +155,20 @@ void VulkanFramebuffer::TransitionToShaderRead(vk::CommandBuffer cmd)
                         vk::PipelineStageFlagBits::eFragmentShader,
                         {}, {}, {}, barrier);
     colorLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+
+    // Also transition depth so it can be sampled
+    vk::ImageMemoryBarrier depthBarrier{};
+    depthBarrier.oldLayout           = vk::ImageLayout::eDepthStencilAttachmentOptimal;
+    depthBarrier.newLayout           = vk::ImageLayout::eShaderReadOnlyOptimal;
+    depthBarrier.srcQueueFamilyIndex = vk::QueueFamilyIgnored;
+    depthBarrier.dstQueueFamilyIndex = vk::QueueFamilyIgnored;
+    depthBarrier.image               = *depthImage;
+    depthBarrier.subresourceRange    = { vk::ImageAspectFlagBits::eDepth, 0, 1, 0, 1 };
+    depthBarrier.srcAccessMask       = vk::AccessFlagBits::eDepthStencilAttachmentWrite;
+    depthBarrier.dstAccessMask       = vk::AccessFlagBits::eShaderRead;
+    cmd.pipelineBarrier(vk::PipelineStageFlagBits::eLateFragmentTests,
+                        vk::PipelineStageFlagBits::eFragmentShader,
+                        {}, {}, {}, depthBarrier);
 }
 
 void VulkanFramebuffer::Recreate(uint32_t width, uint32_t height)

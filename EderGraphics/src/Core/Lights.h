@@ -58,4 +58,7 @@ struct LightUBO
     glm::mat4        cascadeMatrices[4]             = {};   // 256
     glm::mat4        spotMatrices[MAX_SPOT_SHADOWS] = {};   // 4 × 64 = 256
     glm::vec4        pointFarPlanes                 = {};   // far plane per point shadow slot
+    // Sky-driven ambient: set each frame from the procedural skybox sun direction.
+    glm::vec4        skyAmbient    = { 0.08f, 0.12f, 0.20f, 1.0f }; // hemisphere top
+    glm::vec4        groundAmbient = { 0.05f, 0.04f, 0.03f, 1.0f }; // hemisphere bottom
 };
