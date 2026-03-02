@@ -4,8 +4,13 @@
 
 void SceneViewPanel::SetFramebuffer(VulkanFramebuffer* fb)
 {
+    VkImageView newView = fb ? (VkImageView)fb->GetColorView() : VK_NULL_HANDLE;
+    // Skip re-registration when nothing actually changed (same fb, same backing image)
+    if (fb == framebuffer && newView == lastView && texDS != VK_NULL_HANDLE) return;
+
     ReleaseTexture();
     framebuffer = fb;
+    lastView    = newView;
     if (!fb) return;
 
     texDS = ImGui_ImplVulkan_AddTexture(
@@ -23,6 +28,7 @@ void SceneViewPanel::ReleaseTexture()
         texDS = VK_NULL_HANDLE;
     }
     framebuffer = nullptr;
+    lastView    = VK_NULL_HANDLE;
 }
 
 void SceneViewPanel::OnDraw() { OnDraw(GizmoMode::Translate, false, 1.0f); }

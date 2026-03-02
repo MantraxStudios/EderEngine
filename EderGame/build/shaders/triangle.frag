@@ -10,6 +10,14 @@ layout(location = 6) in vec3 fragWorldPos;
 
 layout(set = 0, binding = 1) uniform sampler2D albedoTex;
 
+layout(set = 0, binding = 0) uniform MaterialUBO {
+    vec4  albedo;
+    float roughness;
+    float metallic;
+    float emissiveIntensity;
+    float alphaThreshold;  // 0 = disabled; >0 = cutout (discard below threshold)
+} material;
+
 #define MAX_DIR_LIGHTS   4
 #define MAX_POINT_LIGHTS 16
 #define MAX_SPOT_LIGHTS  8
@@ -339,5 +347,7 @@ void main()
     result = pow(max(result, vec3(0.0)), vec3(1.0 / 2.2));
 
     float alpha = fragColor.a * texture(albedoTex, fragUV).a;
+    if (material.alphaThreshold > 0.0 && alpha < material.alphaThreshold)
+        discard;
     outColor = vec4(result, alpha);
 }

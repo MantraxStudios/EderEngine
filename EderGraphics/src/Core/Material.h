@@ -27,9 +27,18 @@ public:
 
     void Bind(vk::CommandBuffer cmd, vk::PipelineLayout pipelineLayout);
 
+    // Alpha mode ─────────────────────────────────────────────────────────────
+    // Opaque   : normal rendering, texture alpha ignored
+    // AlphaTest: texture alpha used; pixels below alphaCutoff are discarded
+    // AlphaBlend: object sorted and drawn with the transparent pipeline
+    enum class AlphaMode : uint8_t { Opaque, AlphaTest, AlphaBlend };
+
+    AlphaMode alphaMode   = AlphaMode::Opaque;
+    float     alphaCutoff = 0.5f;             // threshold for AlphaTest mode
     // Opacidad global: 1.0 = opaco, <1.0 = transparente
     float opacity         = 1.0f;
-    bool  IsTransparent() const { return opacity < 0.999f; }
+    bool  IsTransparent() const { return alphaMode == AlphaMode::AlphaBlend || opacity < 0.999f; }
+    bool  IsAlphaTested() const { return alphaMode == AlphaMode::AlphaTest; }
 
 private:
     void SetProperty(const std::string& name, MaterialPropertyValue value);

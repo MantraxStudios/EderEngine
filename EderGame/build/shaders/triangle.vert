@@ -21,7 +21,7 @@ layout(set = 0, binding = 0) uniform MaterialUBO {
     float roughness;
     float metallic;
     float emissiveIntensity;
-    float _pad;
+    float alphaThreshold;  // 0 = disabled; >0 = cutout (discard below threshold)
 } material;
 
 layout(location = 0) out vec3 fragNormal;

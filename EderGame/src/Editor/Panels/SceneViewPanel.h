@@ -26,5 +26,6 @@ public:
 private:
     VulkanFramebuffer* framebuffer = nullptr;
     VkDescriptorSet    texDS       = VK_NULL_HANDLE;
+    VkImageView        lastView    = VK_NULL_HANDLE;  // guards against redundant re-registration
     ImVec2             desiredSize = { 0.0f, 0.0f };
 };

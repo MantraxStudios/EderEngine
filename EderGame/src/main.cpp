@@ -28,6 +28,7 @@
 #include "EderCore.h"
 #include "VulkanGizmo.h"
 #include "VulkanSunShafts.h"
+#include "VulkanOcclusionPass.h"
 #include <glm/gtc/constants.hpp>
 
 int main()
@@ -58,6 +59,7 @@ int main()
     VulkanSkybox         skybox;
     VulkanGizmo          gizmo;
     VulkanSunShafts      sunShafts;
+    VulkanOcclusionPass  occlusionPass;
     VulkanShadowMap          shadowMap;
     VulkanShadowPipeline     shadowPipeline;
     VulkanSpotShadowMap       spotShadowMap;
@@ -86,7 +88,8 @@ int main()
             layout.AddVec4 ("albedo")
                   .AddFloat("roughness")
                   .AddFloat("metallic")
-                  .AddFloat("emissiveIntensity");
+                  .AddFloat("emissiveIntensity")
+                  .AddFloat("alphaThreshold");  // 0=opaque/blend, >0=cutout mode
             MaterialManager::Get().Add("default", layout, pipeline);
             floorMat.Build(layout, pipeline);
             glassMat.Build(layout, pipeline);
@@ -127,7 +130,7 @@ int main()
         glassMat3.SetFloat("emissiveIntensity", 0.0f);
         glassMat3.opacity = 0.45f;
 
-        try { albedoTex.Load("assets/box_albedo.jpg"); }
+        try { albedoTex.Load("assets/bush01.png"); }
         catch (const std::exception& e)
         {
             std::cerr << "[WARNING] " << e.what() << std::endl;
@@ -170,6 +173,7 @@ int main()
         skybox.Create(sc.GetFormat(), VulkanRenderer::Get().GetDepthFormat());
         gizmo.Create(debugFb.GetColorFormat(), VulkanRenderer::Get().GetDepthFormat());
         sunShafts.Create(debugFb.GetColorFormat(), sc.GetExtent().width / 2, sc.GetExtent().height / 2);
+        occlusionPass.Create(sc.GetExtent().width / 2, sc.GetExtent().height / 2);
         editor.SetSceneViewFramebuffer(&debugFb);
     }
     catch (const std::exception& e)
@@ -251,10 +255,12 @@ int main()
                 (svW != debugFb.GetExtent().width || svH != debugFb.GetExtent().height))
             {
                 VulkanInstance::Get().GetDevice().waitIdle();
-                editor.ReleaseSceneViewFramebuffer();
+                editor.ReleaseSceneViewFramebuffer();  // release stale imageview before resize
                 debugFb.Recreate(svW, svH);
                 sunShafts.Resize(svW, svH);
-                editor.SetSceneViewFramebuffer(&debugFb);
+                occlusionPass.Resize(svW, svH);
+                // The render loop (below) always calls SetSceneViewFramebuffer with the
+                // correct active framebuffer — no need to set it here and cause a double-set.
             }
         }
         // -------------------------
@@ -417,6 +423,7 @@ int main()
             {
                 debugFb.Recreate(fw, fh);
                 sunShafts.Resize(fw, fh);
+                occlusionPass.Resize(fw, fh);
             }
             continue;
         }
@@ -463,6 +470,14 @@ int main()
                 obj.transform.rotation = t.rotation;
                 obj.transform.scale    = t.scale;
             }
+        }
+        // 4. Sync Material::alphaMode → alphaThreshold UBO field every frame
+        for (auto& obj : scene.GetObjects())
+        {
+            if (!obj.material) continue;
+            float threshold = (obj.material->alphaMode == Material::AlphaMode::AlphaTest)
+                              ? obj.material->alphaCutoff : 0.0f;
+            obj.material->SetFloat("alphaThreshold", threshold);
         }
         // ─────────────────────────────────────────────────────────────────────
 
@@ -544,12 +559,20 @@ int main()
                     : glm::vec2(-10.0f);   // off-screen → onScreen gate = 0
 
                 float sunHeight = glm::normalize(-activeDirDir).y;
+
+                // Occlusion pass — builds depth-aware sun disk + sky mask
+                occlusionPass.Draw(cmd,
+                    debugFb.GetDepthView(), debugFb.GetSampler(),
+                    sunUV, shaftsComp->sunRadius);
+
                 sunShafts.Draw(cmd,
                     debugFb.GetColorView(), debugFb.GetSampler(),
+                    occlusionPass.GetView(),
                     debugFb.GetDepthView(),
                     sunUV,
-                    shaftsComp->intensity, shaftsComp->decay,
-                    shaftsComp->weight,    shaftsComp->exposure,
+                    shaftsComp->density,    shaftsComp->bloomScale,
+                    shaftsComp->decay,      shaftsComp->weight,
+                    shaftsComp->exposure,
                     shaftsComp->tint,
                     sunHeight);
                 sunShafts.GetOutput().TransitionToShaderRead(cmd);
@@ -587,6 +610,7 @@ int main()
     VulkanInstance::Get().GetDevice().waitIdle();
     editor.Shutdown();
     gizmo.Destroy();
+    occlusionPass.Destroy();
     sunShafts.Destroy();
     debugOverlay.Destroy();
     skybox.Destroy();

@@ -30,25 +30,29 @@ void VulkanSunShafts::Create(vk::Format colorFormat, uint32_t w, uint32_t h)
     auto& device = VulkanInstance::Get().GetDevice();
 
     // Descriptor set layout: binding 0 = scene colour, binding 1 = scene depth
-    vk::DescriptorSetLayoutBinding bindings[2]{};
+    vk::DescriptorSetLayoutBinding bindings[3]{};
     bindings[0].binding         = 0;
     bindings[0].descriptorType  = vk::DescriptorType::eCombinedImageSampler;
     bindings[0].descriptorCount = 1;
     bindings[0].stageFlags      = vk::ShaderStageFlagBits::eFragment;
-    bindings[1].binding         = 1;
+    bindings[1].binding         = 1;  // occlusionTex (scene reused as mask)
     bindings[1].descriptorType  = vk::DescriptorType::eCombinedImageSampler;
     bindings[1].descriptorCount = 1;
     bindings[1].stageFlags      = vk::ShaderStageFlagBits::eFragment;
+    bindings[2].binding         = 2;  // depthTex
+    bindings[2].descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+    bindings[2].descriptorCount = 1;
+    bindings[2].stageFlags      = vk::ShaderStageFlagBits::eFragment;
 
     vk::DescriptorSetLayoutCreateInfo layoutCI{};
-    layoutCI.bindingCount = 2;
+    layoutCI.bindingCount = 3;
     layoutCI.pBindings    = bindings;
     setLayout = vk::raii::DescriptorSetLayout(device, layoutCI);
 
-    // Descriptor pool (max 1 set with 2 combined image samplers)
+    // Descriptor pool (max 1 set with 3 combined image samplers)
     vk::DescriptorPoolSize poolSize{};
     poolSize.type            = vk::DescriptorType::eCombinedImageSampler;
-    poolSize.descriptorCount = 2;
+    poolSize.descriptorCount = 3;
 
     vk::DescriptorPoolCreateInfo poolCI{};
     poolCI.flags         = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
@@ -169,11 +173,14 @@ void VulkanSunShafts::BuildPipeline(vk::Format colorFormat)
     pipeline = vk::raii::Pipeline(device, nullptr, pipelineCI);
 }
 
-void VulkanSunShafts::UpdateDescriptor(vk::ImageView sceneView, vk::Sampler sampler, vk::ImageView depthView)
+void VulkanSunShafts::UpdateDescriptor(vk::ImageView sceneView, vk::Sampler sampler,
+                                        vk::ImageView occlusionView, vk::ImageView depthView)
 {
-    if (sceneView == lastView && sampler == lastSampler && depthView == lastDepthView) return;
+    if (sceneView == lastView && sampler == lastSampler &&
+        occlusionView == lastOccView && depthView == lastDepthView) return;
     lastView      = sceneView;
     lastSampler   = sampler;
+    lastOccView   = occlusionView;
     lastDepthView = depthView;
 
     vk::DescriptorImageInfo colorInfo{};
@@ -186,18 +193,29 @@ void VulkanSunShafts::UpdateDescriptor(vk::ImageView sceneView, vk::Sampler samp
     depthInfo.imageView   = depthView;
     depthInfo.sampler     = sampler;
 
-    vk::WriteDescriptorSet writes[2]{};
+    // binding 1 = dedicated occlusion texture (from VulkanOcclusionPass)
+    vk::WriteDescriptorSet writes[3]{};
     writes[0].dstSet          = *descriptorSet;
     writes[0].dstBinding      = 0;
     writes[0].descriptorCount = 1;
     writes[0].descriptorType  = vk::DescriptorType::eCombinedImageSampler;
     writes[0].pImageInfo      = &colorInfo;
 
+    vk::DescriptorImageInfo occInfo{};
+    occInfo.imageLayout = vk::ImageLayout::eShaderReadOnlyOptimal;
+    occInfo.imageView   = occlusionView;
+    occInfo.sampler     = sampler;
     writes[1].dstSet          = *descriptorSet;
-    writes[1].dstBinding      = 1;
+    writes[1].dstBinding      = 1;  // occlusionTex
     writes[1].descriptorCount = 1;
     writes[1].descriptorType  = vk::DescriptorType::eCombinedImageSampler;
-    writes[1].pImageInfo      = &depthInfo;
+    writes[1].pImageInfo      = &occInfo;
+
+    writes[2].dstSet          = *descriptorSet;
+    writes[2].dstBinding      = 2;  // depthTex
+    writes[2].descriptorCount = 1;
+    writes[2].descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+    writes[2].pImageInfo      = &depthInfo;
 
     VulkanInstance::Get().GetDevice().updateDescriptorSets(writes, nullptr);
 }
@@ -229,14 +247,16 @@ void VulkanSunShafts::Destroy()
 void VulkanSunShafts::Draw(vk::CommandBuffer cmd,
                             vk::ImageView    sceneView,
                             vk::Sampler      sceneSampler,
+                            vk::ImageView    occlusionView,
                             vk::ImageView    depthView,
                             glm::vec2        sunUV,
-                            float intensity, float decay,
-                            float weight,    float exposure,
+                            float density,    float bloomScale,
+                            float decay,      float weight,
+                            float exposure,
                             const glm::vec3& tint,
                             float            sunHeight)
 {
-    UpdateDescriptor(sceneView, sceneSampler, depthView);
+    UpdateDescriptor(sceneView, sceneSampler, occlusionView, depthView);
 
     outputFb.BeginRendering(cmd);
 
@@ -254,13 +274,14 @@ void VulkanSunShafts::Draw(vk::CommandBuffer cmd,
     cmd.setScissor(0, vk::Rect2D{{0,0}, ext});
 
     PushData push{};
-    push.sunUV     = sunUV;
-    push.decay     = decay;
-    push.weight    = weight;
-    push.exposure  = exposure;
-    push.intensity = intensity;
-    push.tint      = tint;
-    push.sunHeight = sunHeight;
+    push.sunUV      = sunUV;
+    push.decay      = decay;
+    push.weight     = weight;
+    push.exposure   = exposure;
+    push.density    = density;
+    push.bloomScale = bloomScale;
+    push.sunHeight  = sunHeight;
+    push.tint       = tint;
     cmd.pushConstants(*pipelineLayout,
         vk::ShaderStageFlagBits::eFragment,
         0, sizeof(PushData), &push);

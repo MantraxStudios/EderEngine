@@ -25,6 +25,7 @@ for %%E in (vert frag comp geom tesc tese) do (
 echo.
 if !FAIL! equ 0 (
     echo Compiled !COUNT! shader(s) successfully.
+    pause
 ) else (
     echo !FAIL! shader(s) failed to compile.
     exit /b 1

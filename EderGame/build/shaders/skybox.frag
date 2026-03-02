@@ -133,10 +133,24 @@ float StarField(vec3 rd, float density)
         faceId = rd.z > 0.0 ? 4.0 : 5.0;
     }
     const float GRID = 60.0;          // cells per face side — tweak for star density
-    vec2  cell  = floor(uv * GRID);
-    float s     = hash2(cell + vec2(faceId * 13.7, faceId * 7.3));   // existence
-    float bright= hash2(cell + vec2(faceId * 3.1,  faceId * 19.5));  // brightness
-    return step(1.0 - density, s) * (0.5 + 0.5 * bright);
+    vec2  cell    = floor(uv * GRID);
+    vec2  cellUV  = fract(uv * GRID); // position within cell [0,1]
+
+    float s      = hash2(cell + vec2(faceId * 13.7, faceId * 7.3));   // existence
+    float bright = hash2(cell + vec2(faceId * 3.1,  faceId * 19.5));  // brightness
+
+    // Random position of the star within its cell (kept away from edges)
+    vec2 jitter = vec2(
+        0.15 + 0.7 * hash2(cell + vec2(faceId * 5.23, 17.71)),
+        0.15 + 0.7 * hash2(cell + vec2(faceId * 2.71, 31.41))
+    );
+
+    // Circular distance to the star centre inside the cell
+    float dist   = length(cellUV - jitter);
+    // Smooth circular star — radius ~8% of cell size (pinpoint but round)
+    float circle = smoothstep(0.08, 0.0, dist);
+
+    return step(1.0 - density, s) * (0.5 + 0.5 * bright) * circle;
 }
 
 // ---------------------------------------------------------------------------

@@ -4,6 +4,8 @@
 #include "ECS/Components/MeshRendererComponent.h"
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/SunShaftsComponent.h"
+#include "Core/MaterialManager.h"
+#include "Core/Material.h"
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>
 #include <cstring>
@@ -153,6 +155,30 @@ void InspectorPanel::DrawMeshRendererComponent()
         ImGui::Checkbox("Visible",     &m.visible);
         ImGui::SameLine(120);
         ImGui::Checkbox("Cast Shadow", &m.castShadow);
+
+        // ── Alpha mode (edits shared material) ──
+        Material* mat = MaterialManager::Get().Has(m.materialName)
+                        ? &MaterialManager::Get().Get(m.materialName) : nullptr;
+        if (mat)
+        {
+            ImGui::Spacing();
+            ImGui::TextDisabled("-- Alpha --");
+            const char* modes[] = { "Opaque", "Alpha Test (Cutout)", "Alpha Blend" };
+            int current = static_cast<int>(mat->alphaMode);
+            if (ImGui::Combo("Alpha Mode", &current, modes, 3))
+            {
+                mat->alphaMode = static_cast<Material::AlphaMode>(current);
+                // For blend, lower opacity so IsTransparent() returns true
+                if (mat->alphaMode == Material::AlphaMode::AlphaBlend && mat->opacity >= 0.999f)
+                    mat->opacity = 0.5f;
+                else if (mat->alphaMode != Material::AlphaMode::AlphaBlend)
+                    mat->opacity = 1.0f;
+            }
+            if (mat->alphaMode == Material::AlphaMode::AlphaTest)
+                ImGui::DragFloat("Cutoff", &mat->alphaCutoff, 0.01f, 0.0f, 1.0f);
+            if (mat->alphaMode == Material::AlphaMode::AlphaBlend)
+                ImGui::DragFloat("Opacity", &mat->opacity, 0.01f, 0.0f, 1.0f);
+        }
     }
     ImGui::PopID();
 }
@@ -191,12 +217,19 @@ void InspectorPanel::DrawSunShaftsComponent()
     if (ComponentHeader<SunShaftsComponent>("Sun Shafts", registry, selected, ImVec4(1.0f, 0.7f, 0.2f, 1.0f)))
     {
         auto& s = registry->Get<SunShaftsComponent>(selected);
-        ImGui::Checkbox("Enabled",   &s.enabled);
-        ImGui::DragFloat("Intensity", &s.intensity, 0.01f, 0.0f, 5.0f);
-        ImGui::DragFloat("Decay",     &s.decay,     0.005f, 0.5f, 0.999f);
-        ImGui::DragFloat("Weight",    &s.weight,    0.01f,  0.0f, 2.0f);
-        ImGui::DragFloat("Exposure",  &s.exposure,  0.005f, 0.0f, 1.0f);
-        ImGui::ColorEdit3("Tint",     &s.tint.x);
+        ImGui::Checkbox("Enabled",      &s.enabled);
+        ImGui::Separator();
+        ImGui::TextDisabled("-- Shafts (god rays) --");
+        ImGui::DragFloat("Density",     &s.density,    0.05f,  0.0f, 20.0f);
+        ImGui::DragFloat("Weight",      &s.weight,     0.01f,  0.0f,  3.0f);
+        ImGui::DragFloat("Decay",       &s.decay,      0.005f, 0.5f,  0.999f);
+        ImGui::DragFloat("Sun Radius",  &s.sunRadius,  0.002f, 0.005f, 0.2f);
+        ImGui::Separator();
+        ImGui::TextDisabled("-- Bloom / Glare --");
+        ImGui::DragFloat("Bloom Scale", &s.bloomScale, 0.05f, 0.0f, 10.0f);
+        ImGui::DragFloat("Exposure",    &s.exposure,   0.005f,0.0f,  1.0f);
+        ImGui::Separator();
+        ImGui::ColorEdit3("Tint",       &s.tint.x);
     }
     ImGui::PopID();
 }

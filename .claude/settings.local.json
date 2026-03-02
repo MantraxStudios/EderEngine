@@ -5,7 +5,11 @@
       "Bash(cmake --build build)",
       "Bash(cmd /c compile_android.bat)",
       "Bash(cmake --build .)",
-      "Bash(cmake --build . --clean-first)"
+      "Bash(cmake --build . --clean-first)",
+      "Bash(cmd.exe /c \"compile_shaders.bat\")",
+      "Bash(cmake --build . --target EderGame)",
+      "Bash(cmd.exe /c \"taskkill /F /IM EderGame.exe\")",
+      "Bash(ninja -t clean)"
     ]
   }
 }
