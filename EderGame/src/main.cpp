@@ -1,5 +1,6 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
+#include <algorithm>
 #include <iostream>
 #include <imgui/imgui.h>
 #include "Editor/Editor.h"
@@ -18,12 +19,14 @@
 #include "Renderer/Vulkan/VulkanPointShadowMap.h"
 #include "Renderer/Vulkan/VulkanPointShadowPipeline.h"
 #include "Renderer/VulkanRenderer.h"
+#include "Core/MaterialManager.h"
 #include "Core/Material.h"
 #include "Core/MaterialLayout.h"
 #include "Core/Camera.h"
 #include "Core/Scene.h"
 #include "Core/LightBuffer.h"
 #include "EderCore.h"
+#include "VulkanGizmo.h"
 #include <glm/gtc/constants.hpp>
 
 int main()
@@ -43,10 +46,8 @@ int main()
     Editor editor;
 
     VulkanPipeline       pipeline;
-    VulkanPipeline       pipelineUnorm;  // mismo shader, formato UNORM para SceneView
     VulkanMesh           mesh;
     VulkanTexture        albedoTex;
-    Material             material;
     Material             floorMat;
     Material             glassMat;
     Material             glassMat2;  // green
@@ -54,7 +55,7 @@ int main()
     VulkanFramebuffer    debugFb;
     VulkanDebugOverlay   debugOverlay;
     VulkanSkybox         skybox;
-    VulkanSkybox         skyboxUnorm;  // skybox para el pass UNORM del SceneView
+    VulkanGizmo          gizmo;
     VulkanShadowMap          shadowMap;
     VulkanShadowPipeline     shadowPipeline;
     VulkanSpotShadowMap       spotShadowMap;
@@ -63,14 +64,6 @@ int main()
     Scene                scene;
     LightBuffer          lights;
     Registry             registry;
-
-    glm::mat4 spotMatrix;
-    glm::vec3 spotPos      = glm::vec3(0.0f, 15.0f, 0.0f);
-    glm::vec3 spotDir      = glm::normalize(glm::vec3(0.0f, -1.0f, 0.3f));
-    float     spotOuterCos = std::cos(glm::radians(40.0f));
-    float     spotFar      = 50.0f;
-    glm::vec3 pointShadowPos = glm::vec3(-5.0f, 8.0f, 0.0f);
-    float     pointShadowFar = 100.0f;
 
     try
     {
@@ -86,31 +79,24 @@ int main()
             VulkanSwapchain::Get().GetFormat(),
             VulkanRenderer::Get().GetDepthFormat());
 
-        // Pipeline UNORM para el SceneView (evita double sRGB encoding en ImGui)
-        pipelineUnorm.Create(
-            "shaders/triangle.vert.spv",
-            "shaders/triangle.frag.spv",
-            vk::Format::eB8G8R8A8Unorm,
-            VulkanRenderer::Get().GetDepthFormat());
-
         {
             MaterialLayout layout;
             layout.AddVec4 ("albedo")
                   .AddFloat("roughness")
                   .AddFloat("metallic")
                   .AddFloat("emissiveIntensity");
-            material.Build(layout, pipeline);
+            MaterialManager::Get().Add("default", layout, pipeline);
             floorMat.Build(layout, pipeline);
             glassMat.Build(layout, pipeline);
             glassMat2.Build(layout, pipeline);
             glassMat3.Build(layout, pipeline);
         }
 
-        // Box material — warm off-white
-        material.SetVec4 ("albedo",            glm::vec4(1.0f, 0.92f, 0.78f, 1.0f));
-        material.SetFloat("roughness",         0.55f);
-        material.SetFloat("metallic",          0.0f);
-        material.SetFloat("emissiveIntensity", 0.0f);
+        // Default material — warm off-white
+        MaterialManager::Get().GetDefault().SetVec4 ("albedo",            glm::vec4(1.0f, 0.92f, 0.78f, 1.0f));
+        MaterialManager::Get().GetDefault().SetFloat("roughness",         0.55f);
+        MaterialManager::Get().GetDefault().SetFloat("metallic",          0.0f);
+        MaterialManager::Get().GetDefault().SetFloat("emissiveIntensity", 0.0f);
 
         // Floor material — cool grey
         floorMat.SetVec4 ("albedo",            glm::vec4(0.55f, 0.58f, 0.62f, 1.0f));
@@ -145,7 +131,7 @@ int main()
             std::cerr << "[WARNING] " << e.what() << std::endl;
             albedoTex.CreateDefault();
         }
-        material.BindTexture(0, albedoTex);
+        MaterialManager::Get().GetDefault().BindTexture(0, albedoTex);
         floorMat.BindTexture(0, albedoTex);
         glassMat.BindTexture(0, albedoTex);
         glassMat2.BindTexture(0, albedoTex);
@@ -155,140 +141,7 @@ int main()
         if (mesh.GetIndexCount() == 0)
             throw std::runtime_error("Mesh empty");
 
-        // Floor — large flat slab at y = -1 (top face at y = -0.5)
-        {
-            SceneObject& floor = scene.Add(mesh, floorMat);
-            floor.transform.position = { 0.0f, -1.0f, 0.0f };
-            floor.transform.scale    = { 30.0f, 1.0f, 20.0f };
-        }
-
-        // Glass box — transparent panel in front of the boxes
-        {
-            SceneObject& g = scene.Add(mesh, glassMat);
-            g.transform.position = {  0.0f, 1.5f, -4.0f };
-            g.transform.scale    = {  3.0f, 4.0f,  0.2f };
-        }
-        // Green panel — behind/left, overlapping with blue from some angles
-        {
-            SceneObject& g = scene.Add(mesh, glassMat2);
-            g.transform.position = { -3.5f, 1.5f, -6.5f };
-            g.transform.scale    = {  0.2f, 4.0f,  3.5f };
-        }
-        // Amber panel — right side
-        {
-            SceneObject& g = scene.Add(mesh, glassMat3);
-            g.transform.position = {  3.5f, 1.5f, -6.5f };
-            g.transform.scale    = {  0.2f, 4.0f,  3.5f };
-        }
-        // Small floating blue cube
-        {
-            SceneObject& g = scene.Add(mesh, glassMat);
-            g.transform.position = { -6.0f, 3.0f, -2.0f };
-            g.transform.scale    = {  1.2f, 1.2f,  1.2f };
-        }
-        // Small floating green cube
-        {
-            SceneObject& g = scene.Add(mesh, glassMat2);
-            g.transform.position = {  6.0f, 2.0f, -2.0f };
-            g.transform.scale    = {  1.5f, 1.5f,  1.5f };
-        }
-        // Overlapping amber + blue slabs (stress-tests back-to-front sort)
-        {
-            SceneObject& g = scene.Add(mesh, glassMat3);
-            g.transform.position = {  0.0f, 1.0f,  2.0f };
-            g.transform.scale    = {  4.0f, 2.5f,  0.15f };
-        }
-        {
-            SceneObject& g = scene.Add(mesh, glassMat);
-            g.transform.position = {  0.0f, 1.0f,  2.5f };
-            g.transform.scale    = {  4.0f, 2.5f,  0.15f };
-        }
-
-        // Boxes on top of the floor (bottom at y = -0.5 = top of floor)
-        constexpr int   cols    = 5;
-        constexpr int   rows    = 3;
-        constexpr float spacing = 4.5f;
-        const float heights[3]  = { 1.0f, 2.0f, 1.5f };
-        for (int row = 0; row < rows; row++)
-        {
-            for (int col = 0; col < cols; col++)
-            {
-                float h = heights[(col + row) % 3];
-                SceneObject& obj = scene.Add(mesh, material);
-                obj.transform.position.x = (col - (cols - 1) * 0.5f) * spacing;
-                obj.transform.position.y = (h - 1.0f) * 0.5f; // center so bottom = -0.5
-                obj.transform.position.z = (row - (rows - 1) * 0.5f) * spacing;
-                obj.transform.scale.y    = h;
-            }
-        }
-
-        // ── ECS entities (mirror de la escena para el editor) ─────────────────
-        {
-            auto addMesh = [&](const char* name,
-                                glm::vec3 pos, glm::vec3 rot, glm::vec3 scl)
-            {
-                Entity e = registry.Create();
-                registry.Add<TagComponent>(e).name = name;
-                auto& t  = registry.Add<TransformComponent>(e);
-                t.position = pos; t.rotation = rot; t.scale = scl;
-                registry.Add<MeshRendererComponent>(e).meshPath = "assets/box.fbx";
-                return e;
-            };
-
-            addMesh("Floor",        { 0.0f,-1.0f, 0.0f}, {0,0,0}, {30.0f, 1.0f,20.0f});
-            addMesh("Glass Blue",   { 0.0f, 1.5f,-4.0f}, {0,0,0}, { 3.0f, 4.0f, 0.2f});
-            addMesh("Glass Green",  {-3.5f, 1.5f,-6.5f}, {0,0,0}, { 0.2f, 4.0f, 3.5f});
-            addMesh("Glass Amber",  { 3.5f, 1.5f,-6.5f}, {0,0,0}, { 0.2f, 4.0f, 3.5f});
-            addMesh("Cube Blue",    {-6.0f, 3.0f,-2.0f}, {0,0,0}, { 1.2f, 1.2f, 1.2f});
-            addMesh("Cube Green",   { 6.0f, 2.0f,-2.0f}, {0,0,0}, { 1.5f, 1.5f, 1.5f});
-            addMesh("Slab Amber",   { 0.0f, 1.0f, 2.0f}, {0,0,0}, { 4.0f, 2.5f,0.15f});
-            addMesh("Slab Blue",    { 0.0f, 1.0f, 2.5f}, {0,0,0}, { 4.0f, 2.5f,0.15f});
-
-            constexpr int   cols    = 5;
-            constexpr int   rows    = 3;
-            constexpr float spacing = 4.5f;
-            const float     heights[3] = { 1.0f, 2.0f, 1.5f };
-            for (int row = 0; row < rows; row++)
-            for (int col = 0; col < cols; col++)
-            {
-                char name[32];
-                snprintf(name, sizeof(name), "Box %d_%d", row, col);
-                float h = heights[(col + row) % 3];
-                addMesh(name,
-                    { (col-(cols-1)*0.5f)*spacing, (h-1.0f)*0.5f, (row-(rows-1)*0.5f)*spacing },
-                    {0,0,0}, {1.0f, h, 1.0f});
-            }
-
-            // Lights
-            {
-                Entity e = registry.Create();
-                registry.Add<TagComponent>(e).name = "Fill Light";
-                auto& t  = registry.Add<TransformComponent>(e).position = {0.0f,12.0f,0.0f};
-                auto& l  = registry.Add<LightComponent>(e);
-                l.type = LightType::Point; l.color = {0.45f,0.55f,0.75f};
-                l.intensity = 1.5f; l.range = 60.0f;
-            }
-            {
-                Entity e = registry.Create();
-                registry.Add<TagComponent>(e).name = "Spot Light";
-                auto& t  = registry.Add<TransformComponent>(e).position = spotPos;
-                auto& l  = registry.Add<LightComponent>(e);
-                l.type = LightType::Spot; l.color = {1.0f,0.9f,0.7f};
-                l.intensity = 1.0f; l.range = spotFar;
-                l.innerConeAngle = 30.0f; l.outerConeAngle = 40.0f;
-                l.castShadow = true;
-            }
-            {
-                Entity e = registry.Create();
-                registry.Add<TagComponent>(e).name = "Point Shadow Light";
-                auto& t  = registry.Add<TransformComponent>(e).position = pointShadowPos;
-                auto& l  = registry.Add<LightComponent>(e);
-                l.type = LightType::Point; l.color = {1.0f,0.7f,0.4f};
-                l.intensity = 1.0f; l.range = pointShadowFar;
-                l.castShadow = true;
-            }
-        }
-        // ──────────────────────────────────────────────────────────────────────
+        // Scene starts empty — add entities at runtime via the editor
 
         // Shadow map must be created before lights.Build so the sampler is available
         shadowMap.Create(1024);
@@ -300,48 +153,8 @@ int main()
 
         lights.Build(pipeline);
 
-        // Sun — low angle to cast long shadows across the floor
-        DirectionalLight sun;
-        sun.direction = glm::normalize(glm::vec3(-1.0f, -0.8f, -0.4f));
-        sun.color     = glm::vec3(1.0f, 0.95f, 0.85f);
-        sun.intensity = .0f;
-        //lights.AddDirectional(sun);
-
-        // Soft fill light from above (no shadows)
-        {
-            PointLight fill;
-            fill.position  = glm::vec3(0.0f, 12.0f, 0.0f);
-            fill.color     = glm::vec3(0.45f, 0.55f, 0.75f);
-            fill.intensity = 1.5f;
-            fill.radius    = 60.0f;
-            lights.AddPoint(fill);
-        }
-
-        // Spot light with shadow (slot 0)
-        {
-            SpotLight spot;
-            spot.position  = spotPos;
-            spot.direction = spotDir;
-            spot.innerCos  = std::cos(glm::radians(30.0f));
-            spot.outerCos  = spotOuterCos;
-            spot.color     = glm::vec3(1.0f, 0.9f, 0.7f);
-            spot.intensity = 1.0f;
-            spot.radius    = spotFar;
-            spot.shadowIdx = 0;  // uses spot shadow slot 0
-            lights.AddSpot(spot);
-        }
-
-        // Point light with shadow (slot 0)
-        {
-            PointLight pShadow;
-            pShadow.position  = pointShadowPos;
-            pShadow.color     = glm::vec3(1.0f, 0.7f, 0.4f);
-            pShadow.intensity = 1.0f;
-            pShadow.radius    = pointShadowFar;
-            pShadow.shadowIdx = 0;
-            lights.AddPoint(pShadow);
-        }
-        lights.SetPointFarPlane(0, pointShadowFar);
+        // Lights are managed entirely via ECS — no hardcoded lights at startup.
+        // LightBuffer is rebuilt each frame from LightComponent entities.
 
         // Bind cascade shadow map (array) into the light descriptor set
         lights.BindShadowMap(shadowMap.GetArrayView(), shadowMap.GetSampler());
@@ -353,7 +166,7 @@ int main()
                        vk::Format::eB8G8R8A8Unorm, VulkanRenderer::Get().GetDepthFormat());
         debugOverlay.Create(sc.GetFormat(), VulkanRenderer::Get().GetDepthFormat());
         skybox.Create(sc.GetFormat(), VulkanRenderer::Get().GetDepthFormat());
-        skyboxUnorm.Create(vk::Format::eB8G8R8A8Unorm, VulkanRenderer::Get().GetDepthFormat());
+        gizmo.Create(debugFb.GetColorFormat(), VulkanRenderer::Get().GetDepthFormat());
         editor.SetSceneViewFramebuffer(&debugFb);
     }
     catch (const std::exception& e)
@@ -361,8 +174,6 @@ int main()
         std::cerr << "[ERROR] " << e.what() << std::endl;
         return -1;
     }
-
-    const glm::vec3 sunDir = glm::normalize(glm::vec3(-1.0f, -0.8f, -0.4f));
 
     glm::mat4 cascadeMatrices[VulkanShadowMap::NUM_CASCADES];
     glm::vec4 cascadeSplits;
@@ -479,27 +290,98 @@ int main()
         float  aspect = static_cast<float>(sc.GetExtent().width) /
                         static_cast<float>(sc.GetExtent().height);
 
-        float  t    = static_cast<float>(currTimeSec);
-        auto&  objs = scene.GetObjects();
-        // Index 0 is the floor — skip it
-        for (size_t i = 1; i < objs.size(); i++)
-            objs[i].transform.rotation.y = t * 25.0f + static_cast<float>(i) * 1.2f;
-
         glm::vec3 camForward = camera.GetForward();
+
+        // ── ECS → LightBuffer sync ───────────────────────────────────────────
+        // Collect shadow-caster data first (needed for shadow passes below)
+        glm::vec3 activeDirDir       = glm::normalize(glm::vec3(-1,-1,-0.4f)); // fallback
+        bool      hasDir             = false;
+        bool      hasSpotShadow      = false;
+        glm::vec3 activeSpotPos      = glm::vec3(0);
+        glm::vec3 activeSpotDir      = glm::vec3(0,-1,0);
+        float     activeSpotOuterCos = std::cos(glm::radians(30.0f));
+        float     activeSpotNear     = 0.3f;
+        float     activeSpotFar      = 50.0f;
+        glm::mat4 activeSpotMatrix   = glm::mat4(1);
+        bool      hasPointShadow     = false;
+        glm::vec3 activePointPos     = glm::vec3(0);
+        float     activePointFar     = 50.0f;
+
+        lights.ClearLights();
+        {
+            int spotSlot = 0, pointSlot = 0;
+            registry.Each<LightComponent>([&](Entity e, LightComponent& l)
+            {
+                if (!registry.Has<TransformComponent>(e)) return;
+                const auto& tr = registry.Get<TransformComponent>(e);
+
+                if (l.type == LightType::Directional)
+                {
+                    glm::mat4 m  = tr.GetMatrix();
+                    glm::vec3 dir = glm::normalize(glm::vec3(m * glm::vec4(0,-1,0,0)));
+                    if (!hasDir) { activeDirDir = dir; hasDir = true; }
+                    DirectionalLight dl{};
+                    dl.direction = dir;
+                    dl.color     = l.color;
+                    dl.intensity = l.intensity;
+                    lights.AddDirectional(dl);
+                }
+                else if (l.type == LightType::Point)
+                {
+                    PointLight pl{};
+                    pl.position  = tr.position;
+                    pl.color     = l.color;
+                    pl.intensity = l.intensity;
+                    pl.radius    = l.range;
+                    if (l.castShadow && pointSlot < 1)
+                    {
+                        pl.shadowIdx    = 0;
+                        hasPointShadow  = true;
+                        activePointPos  = tr.position;
+                        activePointFar  = l.range;
+                        lights.SetPointFarPlane(0, l.range);
+                        pointSlot++;
+                    }
+                    else { pl.shadowIdx = -1; }
+                    lights.AddPoint(pl);
+                }
+                else if (l.type == LightType::Spot)
+                {
+                    glm::mat4 m   = tr.GetMatrix();
+                    glm::vec3 dir = glm::normalize(glm::vec3(m * glm::vec4(0,-1,0,0)));
+                    SpotLight sl{};
+                    sl.position  = tr.position;
+                    sl.direction = dir;
+                    sl.innerCos  = std::cos(glm::radians(l.innerConeAngle));
+                    sl.outerCos  = std::cos(glm::radians(l.outerConeAngle));
+                    sl.color     = l.color;
+                    sl.intensity = l.intensity;
+                    sl.radius    = l.range;
+                    if (l.castShadow && spotSlot < 1)
+                    {
+                        sl.shadowIdx      = 0;
+                        hasSpotShadow     = true;
+                        activeSpotPos     = tr.position;
+                        activeSpotDir     = dir;
+                        activeSpotOuterCos = sl.outerCos;
+                        activeSpotFar     = l.range;
+                        activeSpotMatrix  = VulkanSpotShadowMap::ComputeMatrix(
+                            activeSpotPos, activeSpotDir, activeSpotOuterCos, 0.3f, activeSpotFar);
+                        lights.SetSpotMatrix(0, activeSpotMatrix);
+                        spotSlot++;
+                    }
+                    else { sl.shadowIdx = -1; }
+                    lights.AddSpot(sl);
+                }
+            });
+        }
+
         shadowMap.ComputeCascades(
             camera.GetView(), camera.GetProjection(aspect),
-            sunDir, camera.nearPlane, camera.farPlane,
+            activeDirDir, camera.nearPlane, camera.farPlane,
             cascadeMatrices, cascadeSplits);
-        // Spotlight tipo linterna: ligeramente por encima y delante de la camara
-        spotDir = camera.GetForward();
-        spotPos = camera.GetPosition()
-                + camera.GetRight()  * 0.25f   // desplazamiento lateral (hombro derecho)
-                + glm::vec3(0.0f, -0.15f, 0.0f); // ligeramente bajo el ojo
-        lights.UpdateSpotPosDir(0, spotPos, spotDir);
         lights.SetCascadeData(cascadeMatrices, cascadeSplits);
         lights.SetCameraForward(camForward);
-        spotMatrix = VulkanSpotShadowMap::ComputeMatrix(spotPos, spotDir, spotOuterCos, 0.3f, spotFar);
-        lights.SetSpotMatrix(0, spotMatrix);
         lights.Update(camera.GetPosition());
 
         VulkanRenderer::Get().BeginFrame();
@@ -516,6 +398,49 @@ int main()
 
         auto cmd = VulkanRenderer::Get().GetCommandBuffer();
 
+        // ── ECS → Scene sync ─────────────────────────────────────────────────
+        // 1. Remove SceneObjects whose entity lost its MeshRenderer (or was destroyed)
+        {
+            auto& objs = scene.GetObjects();
+            objs.erase(std::remove_if(objs.begin(), objs.end(),
+                [&](const SceneObject& o) {
+                    return o.entityId != 0 && !registry.Has<MeshRendererComponent>(o.entityId);
+                }), objs.end());
+        }
+        // 2. Create SceneObjects for entities that have MeshRenderer but no SceneObject yet
+        registry.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
+        {
+            auto& objs = scene.GetObjects();
+            bool exists = false;
+            for (const auto& o : objs)
+                if (o.entityId == e) { exists = true; break; }
+            if (!exists)
+            {
+                Material& mat = MaterialManager::Get().Get(mr.materialName);
+                SceneObject& obj = scene.Add(mesh, mat);
+                obj.entityId = e;
+                if (registry.Has<TransformComponent>(e))
+                {
+                    const auto& t = registry.Get<TransformComponent>(e);
+                    obj.transform.position = t.position;
+                    obj.transform.rotation = t.rotation;
+                    obj.transform.scale    = t.scale;
+                }
+            }
+        });
+        // 3. Mirror TransformComponent → SceneObject::transform every frame
+        for (auto& obj : scene.GetObjects())
+        {
+            if (obj.entityId != 0 && registry.Has<TransformComponent>(obj.entityId))
+            {
+                const auto& t = registry.Get<TransformComponent>(obj.entityId);
+                obj.transform.position = t.position;
+                obj.transform.rotation = t.rotation;
+                obj.transform.scale    = t.scale;
+            }
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         // --- Shadow pass (4 cascades) ---
         for (uint32_t c = 0; c < VulkanShadowMap::NUM_CASCADES; c++)
         {
@@ -527,38 +452,47 @@ int main()
         shadowMap.TransitionToShaderRead(cmd);
 
         // --- Spot shadow pass (slot 0) ---
-        spotShadowMap.BeginRendering(cmd, 0);
-        shadowPipeline.Bind(cmd);
-        scene.DrawShadow(cmd, shadowPipeline, spotMatrix);
-        spotShadowMap.EndRendering(cmd);
+        if (hasSpotShadow)
+        {
+            spotShadowMap.BeginRendering(cmd, 0);
+            shadowPipeline.Bind(cmd);
+            scene.DrawShadow(cmd, shadowPipeline, activeSpotMatrix);
+            spotShadowMap.EndRendering(cmd);
+        }
         spotShadowMap.TransitionToShaderRead(cmd);
 
         // --- Point shadow pass (6 faces, slot 0) ---
+        if (hasPointShadow)
         {
-            auto faceMats = VulkanPointShadowMap::ComputeFaceMatrices(pointShadowPos, 0.1f, pointShadowFar);
+            auto faceMats = VulkanPointShadowMap::ComputeFaceMatrices(activePointPos, 0.1f, activePointFar);
             for (uint32_t face = 0; face < 6; face++)
             {
                 pointShadowMap.BeginRendering(cmd, 0, face);
                 pointShadowPipeline.Bind(cmd);
-                scene.DrawShadowPoint(cmd, pointShadowPipeline, faceMats[face], pointShadowPos, pointShadowFar);
+                scene.DrawShadowPoint(cmd, pointShadowPipeline, faceMats[face], activePointPos, activePointFar);
                 pointShadowMap.EndRendering(cmd);
             }
-            pointShadowMap.TransitionToShaderRead(cmd, 0);
         }
+        pointShadowMap.TransitionToShaderRead(cmd, 0);
 
         // --- SceneView framebuffer pass (mismo contenido que el main pass) ---
         float dbAspect = static_cast<float>(debugFb.GetExtent().width) /
                          static_cast<float>(debugFb.GetExtent().height);
 
         debugFb.BeginRendering(cmd);
-        pipelineUnorm.Bind(cmd);
-        scene.Draw(cmd, pipelineUnorm, camera, dbAspect, lights);
+        pipeline.Bind(cmd);
+        scene.Draw(cmd, pipeline, camera, dbAspect, lights);
         {
             auto invVP = glm::inverse(camera.GetProjection(dbAspect) * camera.GetView());
-            skyboxUnorm.Draw(cmd, invVP, -sunDir);
+            skybox.Draw(cmd, invVP, -activeDirDir);
         }
-        pipelineUnorm.BindTransparent(cmd);
-        scene.DrawTransparent(cmd, pipelineUnorm, camera, dbAspect, lights);
+        pipeline.BindTransparent(cmd);
+        scene.DrawTransparent(cmd, pipeline, camera, dbAspect, lights);
+        // Light gizmos drawn on top in the scene-view framebuffer
+        {
+            glm::mat4 vp = camera.GetProjection(dbAspect) * camera.GetView();
+            gizmo.Draw(cmd, registry, vp, editor.GetSelected());
+        }
         debugFb.EndRendering(cmd);
         debugFb.TransitionToShaderRead(cmd);
 
@@ -570,7 +504,7 @@ int main()
         // Skybox — drawn after opaques so depth test skips covered pixels
         {
             auto invVP = glm::inverse(camera.GetProjection(aspect) * camera.GetView());
-            skybox.Draw(cmd, invVP, -sunDir);
+            skybox.Draw(cmd, invVP, -activeDirDir);
         }
 
         // Transparents drawn after skybox so skybox doesn't overwrite them
@@ -587,8 +521,8 @@ int main()
 
     VulkanInstance::Get().GetDevice().waitIdle();
     editor.Shutdown();
+    gizmo.Destroy();
     debugOverlay.Destroy();
-    skyboxUnorm.Destroy();
     skybox.Destroy();
     debugFb.Destroy();
     pointShadowPipeline.Destroy();
@@ -598,11 +532,10 @@ int main()
     shadowMap.Destroy();
     lights.Destroy();
     scene.Destroy();
+    MaterialManager::Get().Destroy();
     floorMat.Destroy();
-    material.Destroy();
     albedoTex.Destroy();
     mesh.Destroy();
-    pipelineUnorm.Destroy();
     pipeline.Destroy();
     SDL_DestroyWindow(window);
     SDL_Quit();

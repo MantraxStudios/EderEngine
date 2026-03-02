@@ -29,3 +29,4 @@ if %ERRORLEVEL% neq 0 (
 echo.
 echo [OK] EderGraphics.dll generado en %BUILD_DIR%\
 endlocal
+PAUSE

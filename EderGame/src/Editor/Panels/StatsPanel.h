@@ -9,5 +9,8 @@ public:
     void        Update(float dt);
 
 private:
-    float smooth = 0.016f;
+    static constexpr int HISTORY = 90;
+    float smooth          = 0.016f;
+    float fpsHistory[HISTORY] = {};
+    int   histOffset      = 0;
 };

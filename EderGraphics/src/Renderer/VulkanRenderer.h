@@ -39,6 +39,12 @@ private:
     std::vector<vk::raii::Semaphore>     renderFinished;
     std::vector<vk::raii::Fence>         inFlightFences;
 
+    // Raw function pointers with KHR fallback (needed on Android where
+    // vkCmdBeginRendering / vkCmdEndRendering core-1.3 names may be null in
+    // the device dispatch table while the KHR aliases are available).
+    PFN_vkCmdBeginRendering pfnCmdBeginRendering = nullptr;
+    PFN_vkCmdEndRendering   pfnCmdEndRendering   = nullptr;
+
     VulkanDepthBuffer   depthBuffer;
     NativeWindow*         window             = nullptr;
     bool                framebufferResized = false;

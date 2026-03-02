@@ -11,8 +11,16 @@
 
 SceneObject& Scene::Add(VulkanMesh& mesh, Material& material)
 {
-    objects.push_back({ &mesh, &material, Transform{} });
+    objects.push_back({ &mesh, &material, Transform{}, 0 });
     return objects.back();
+}
+
+void Scene::Remove(uint32_t entityId)
+{
+    objects.erase(
+        std::remove_if(objects.begin(), objects.end(),
+            [entityId](const SceneObject& o){ return o.entityId == entityId; }),
+        objects.end());
 }
 
 void Scene::Draw(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights)

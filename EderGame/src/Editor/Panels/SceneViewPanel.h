@@ -1,6 +1,7 @@
 #pragma once
 #include "Panel.h"
 #include "Renderer/Vulkan/VulkanFramebuffer.h"
+#include "../EditorTypes.h"
 #include <vulkan/vulkan.h>
 #include <imgui/imgui.h>
 
@@ -9,8 +10,9 @@ class SceneViewPanel : public Panel
 public:
     ~SceneViewPanel() { ReleaseTexture(); }
 
-    const char* Title() const override { return "Scene View"; }
-    void        OnDraw()      override;
+    const char* Title() const override { return "Viewport"; }
+    void        OnDraw(GizmoMode gizmoMode, bool snap, float snapValue);
+    void        OnDraw() override;
 
     // Registra el framebuffer como textura de ImGui. Llamar después de (re)crear el framebuffer.
     void SetFramebuffer(VulkanFramebuffer* fb);

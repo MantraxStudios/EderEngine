@@ -6,7 +6,7 @@
 class InspectorPanel : public Panel
 {
 public:
-    const char* Title() const override { return "Inspector"; }
+    const char* Title() const override { return "Details"; }
     void        OnDraw()      override;
 
     void SetRegistry(Registry* r) { registry = r; }

@@ -16,6 +16,7 @@ class EDERGRAPHICS_API Scene
 {
 public:
     SceneObject& Add(VulkanMesh& mesh, Material& material);
+    void         Remove(uint32_t entityId);   // removes first object linked to entityId
     void         Draw            (vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights);
     void         DrawTransparent (vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights);
     void         DrawShadow      (vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeline, const glm::mat4& lightViewProj);

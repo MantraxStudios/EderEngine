@@ -22,16 +22,17 @@ public:
     glm::vec3 GetPosition()           const;
 
     // -- configuración pública --
-    bool      fpsMode  = false;
-    glm::vec3 fpsPos   = { 0.0f, 1.5f, 8.0f };
+    bool      fpsMode   = false;
+    glm::vec3 fpsPos    = { 0.0f, 1.5f, 8.0f };
+    float     moveSpeed = 5.0f;
 
     glm::vec3 target;
     float     distance;
     float     nearPlane = 0.1f;
     float     farPlane  = 500.0f;
+    float     fov       = 45.0f;
 
 private:
     float azimuth;    // yaw  (reutilizado en FPS)
     float elevation;  // pitch (reutilizado en FPS)
-    float fov;
 };

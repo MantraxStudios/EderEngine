@@ -4,35 +4,56 @@
 #include "ECS/Components/MeshRendererComponent.h"
 #include "ECS/Components/LightComponent.h"
 #include <imgui/imgui.h>
+#include <imgui/imgui_internal.h>
 #include <cstring>
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Helper: component header with right-click "Remove" option.
-// Returns true if the header is open AND the component was NOT removed.
-// ─────────────────────────────────────────────────────────────────────────────
+static void ComponentStripe(ImVec4 color)
+{
+    ImVec2 min = ImGui::GetItemRectMin();
+    ImVec2 max = ImVec2(min.x + 3.0f, ImGui::GetItemRectMax().y);
+    ImGui::GetWindowDrawList()->AddRectFilled(min, max, ImGui::ColorConvertFloat4ToU32(color));
+}
+
 template<typename T>
-static bool ComponentHeader(const char* label, Registry* reg, Entity e)
+static bool ComponentHeader(const char* label, Registry* reg, Entity e, ImVec4 stripe)
 {
     bool open    = ImGui::CollapsingHeader(label, ImGuiTreeNodeFlags_DefaultOpen);
+    ComponentStripe(stripe);
     bool removed = false;
-
-    // Right-click context menu on the header item
     if (ImGui::BeginPopupContextItem())
     {
-        if (ImGui::MenuItem("Remove Component"))
-        {
-            reg->Remove<T>(e);
-            removed = true;
-        }
+        ImGui::TextDisabled("%s", label);
+        ImGui::Separator();
+        ImGui::PushStyleColor(ImGuiCol_Text, ImVec4(1.0f, 0.35f, 0.35f, 1.0f));
+        if (ImGui::MenuItem("Remove Component")) { reg->Remove<T>(e); removed = true; }
+        ImGui::PopStyleColor();
         ImGui::EndPopup();
     }
-
     return open && !removed;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// OnDraw
-// ─────────────────────────────────────────────────────────────────────────────
+static bool Vec3Row(const char* label, float* v, float speed,
+                    float vMin = -FLT_MAX, float vMax = FLT_MAX, float resetVal = 0.0f)
+{
+    bool changed = false;
+    ImGui::PushID(label);
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("%s", label);
+    ImGui::TableSetColumnIndex(1);
+    ImGui::SetNextItemWidth(-28);
+    changed = ImGui::DragFloat3("##v", v, speed, vMin, vMax);
+    ImGui::TableSetColumnIndex(2);
+    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.25f, 0.25f, 0.25f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.45f, 0.45f, 0.45f, 1.0f));
+    if (ImGui::Button("R##r", ImVec2(22, 0)))
+    { v[0] = v[1] = v[2] = resetVal; changed = true; }
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Reset");
+    ImGui::PopStyleColor(2);
+    ImGui::PopID();
+    return changed;
+}
 
 void InspectorPanel::OnDraw()
 {
@@ -40,13 +61,22 @@ void InspectorPanel::OnDraw()
 
     if (!registry || selected == NULL_ENTITY)
     {
-        ImGui::TextDisabled("No entity selected");
+        ImVec2 avail = ImGui::GetContentRegionAvail();
+        const char* hint = "Select an actor in the\nWorld Outliner to edit it.";
+        ImVec2 sz = ImGui::CalcTextSize(hint, nullptr, false, avail.x);
+        ImGui::SetCursorPosY((avail.y - sz.y) * 0.45f);
+        ImGui::SetCursorPosX((avail.x - sz.x) * 0.5f);
+        ImGui::TextDisabled("%s", hint);
         ImGui::End();
         return;
     }
 
-    // ── Entity header ────────────────────────────────────────────────────────
-    ImGui::Text("Entity  #%u", selected);
+    const char* entityName = registry->Has<TagComponent>(selected)
+        ? registry->Get<TagComponent>(selected).name.c_str()
+        : "Entity";
+    ImGui::TextColored(ImVec4(0.92f, 0.92f, 0.92f, 1.0f), "%s", entityName);
+    ImGui::SameLine();
+    ImGui::TextDisabled("  #%u", selected);
     ImGui::Separator();
     ImGui::Spacing();
 
@@ -55,7 +85,6 @@ void InspectorPanel::OnDraw()
     DrawMeshRendererComponent();
     DrawLightComponent();
 
-    // ── Add Component ────────────────────────────────────────────────────────
     ImGui::Spacing();
     ImGui::Separator();
     ImGui::Spacing();
@@ -64,17 +93,13 @@ void InspectorPanel::OnDraw()
     ImGui::End();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Component sections
-// ─────────────────────────────────────────────────────────────────────────────
-
 void InspectorPanel::DrawTagComponent()
 {
     if (!registry->Has<TagComponent>(selected)) return;
-
-    // Tag is not removable — use plain CollapsingHeader
+    ImGui::PushID("Tag");
     if (ImGui::CollapsingHeader("Tag", ImGuiTreeNodeFlags_DefaultOpen))
     {
+        ComponentStripe(ImVec4(0.6f, 0.6f, 0.6f, 1.0f));
         auto& tag = registry->Get<TagComponent>(selected);
         char buf[128];
         strncpy(buf, tag.name.c_str(), sizeof(buf) - 1);
@@ -83,98 +108,104 @@ void InspectorPanel::DrawTagComponent()
         if (ImGui::InputText("##tagname", buf, sizeof(buf)))
             tag.name = buf;
     }
+    ImGui::PopID();
 }
 
 void InspectorPanel::DrawTransformComponent()
 {
     if (!registry->Has<TransformComponent>(selected)) return;
-
-    if (ComponentHeader<TransformComponent>("Transform", registry, selected))
+    ImGui::PushID("Transform");
+    if (ComponentHeader<TransformComponent>(
+            "Transform", registry, selected, ImVec4(0.25f, 0.85f, 0.45f, 1.0f)))
     {
         auto& t = registry->Get<TransformComponent>(selected);
-        ImGui::DragFloat3("Position", &t.position.x, 0.05f);
-        ImGui::DragFloat3("Rotation", &t.rotation.x, 0.5f);
-        ImGui::DragFloat3("Scale",    &t.scale.x,    0.05f, 0.001f, 100.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(4, 3));
+        if (ImGui::BeginTable("##xform", 3, ImGuiTableFlags_None))
+        {
+            ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed,  68.0f);
+            ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
+            ImGui::TableSetupColumn("reset", ImGuiTableColumnFlags_WidthFixed,  26.0f);
+            Vec3Row("Location", &t.position.x, 0.05f, -FLT_MAX, FLT_MAX, 0.0f);
+            Vec3Row("Rotation", &t.rotation.x, 0.5f,  -FLT_MAX, FLT_MAX, 0.0f);
+            Vec3Row("Scale",    &t.scale.x,    0.01f,  0.001f,   100.0f,  1.0f);
+            ImGui::EndTable();
+        }
+        ImGui::PopStyleVar();
     }
+    ImGui::PopID();
 }
 
 void InspectorPanel::DrawMeshRendererComponent()
 {
     if (!registry->Has<MeshRendererComponent>(selected)) return;
-
-    if (ComponentHeader<MeshRendererComponent>("Mesh Renderer", registry, selected))
+    ImGui::PushID("MeshRenderer");
+    if (ComponentHeader<MeshRendererComponent>(
+            "Mesh Renderer", registry, selected, ImVec4(0.30f, 0.60f, 1.0f, 1.0f)))
     {
         auto& m = registry->Get<MeshRendererComponent>(selected);
-
-        ImGui::LabelText("Mesh",     "%s", m.meshPath.empty()     ? "(none)" : m.meshPath.c_str());
-        ImGui::LabelText("Material", "%s", m.materialPath.empty() ? "(none)" : m.materialPath.c_str());
-
+        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.10f, 0.10f, 1.0f));
+        ImGui::LabelText("Mesh##mr",  "%s", m.meshPath.empty() ? "(none)" : m.meshPath.c_str());
+        ImGui::LabelText("Material##mr", "%s", m.materialName.c_str());
+        ImGui::PopStyleColor();
         ImGui::Spacing();
         ImGui::Checkbox("Visible",     &m.visible);
-        ImGui::SameLine();
+        ImGui::SameLine(120);
         ImGui::Checkbox("Cast Shadow", &m.castShadow);
     }
+    ImGui::PopID();
 }
 
 void InspectorPanel::DrawLightComponent()
 {
     if (!registry->Has<LightComponent>(selected)) return;
-
-    if (ComponentHeader<LightComponent>("Light", registry, selected))
+    ImGui::PushID("Light");
+    if (ComponentHeader<LightComponent>(
+            "Light", registry, selected, ImVec4(1.0f, 0.85f, 0.20f, 1.0f)))
     {
         auto& l = registry->Get<LightComponent>(selected);
-
         const char* types[] = { "Directional", "Point", "Spot" };
         int typeIdx = static_cast<int>(l.type);
         if (ImGui::Combo("Type", &typeIdx, types, IM_ARRAYSIZE(types)))
             l.type = static_cast<LightType>(typeIdx);
-
         ImGui::ColorEdit3("Color",     &l.color.x);
         ImGui::DragFloat ("Intensity", &l.intensity, 0.05f, 0.0f, 100.0f);
-
         if (l.type != LightType::Directional)
             ImGui::DragFloat("Range", &l.range, 0.5f, 0.0f, 1000.0f);
-
         if (l.type == LightType::Spot)
         {
             ImGui::DragFloat("Inner Angle", &l.innerConeAngle, 0.5f, 0.0f, 89.0f);
             ImGui::DragFloat("Outer Angle", &l.outerConeAngle, 0.5f, 1.0f, 90.0f);
         }
-
         ImGui::Spacing();
         ImGui::Checkbox("Cast Shadow", &l.castShadow);
     }
+    ImGui::PopID();
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Add Component
-// ─────────────────────────────────────────────────────────────────────────────
 
 void InspectorPanel::DrawAddComponent()
 {
-    // Check if there is at least one component that can be added
-    const bool canAddTransform     = !registry->Has<TransformComponent>(selected);
-    const bool canAddMeshRenderer  = !registry->Has<MeshRendererComponent>(selected);
-    const bool canAddLight         = !registry->Has<LightComponent>(selected);
-    const bool anyAvailable        = canAddTransform || canAddMeshRenderer || canAddLight;
+    const bool canAddTransform    = !registry->Has<TransformComponent>(selected);
+    const bool canAddMeshRenderer = !registry->Has<MeshRendererComponent>(selected);
+    const bool canAddLight        = !registry->Has<LightComponent>(selected);
+    const bool anyAvailable       = canAddTransform || canAddMeshRenderer || canAddLight;
 
     float btnW = ImGui::GetContentRegionAvail().x;
+    ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.80f, 0.10f, 0.10f, 0.60f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(0.80f, 0.10f, 0.10f, 1.0f));
     if (!anyAvailable) ImGui::BeginDisabled();
-    if (ImGui::Button("Add Component", ImVec2(btnW, 0)))
+    if (ImGui::Button("+ Add Component", ImVec2(btnW, 0)))
         ImGui::OpenPopup("##add_comp_popup");
     if (!anyAvailable) ImGui::EndDisabled();
+    ImGui::PopStyleColor(3);
 
     if (ImGui::BeginPopup("##add_comp_popup"))
     {
-        if (canAddTransform && ImGui::MenuItem("Transform"))
-            registry->Add<TransformComponent>(selected);
-
-        if (canAddMeshRenderer && ImGui::MenuItem("Mesh Renderer"))
-            registry->Add<MeshRendererComponent>(selected);
-
-        if (canAddLight && ImGui::MenuItem("Light"))
-            registry->Add<LightComponent>(selected);
-
+        ImGui::TextDisabled("COMPONENTS");
+        ImGui::Separator();
+        if (canAddTransform    && ImGui::MenuItem("   Transform"))     registry->Add<TransformComponent>(selected);
+        if (canAddMeshRenderer && ImGui::MenuItem("   Mesh Renderer")) registry->Add<MeshRendererComponent>(selected);
+        if (canAddLight        && ImGui::MenuItem("   Light"))         registry->Add<LightComponent>(selected);
         ImGui::EndPopup();
     }
 }

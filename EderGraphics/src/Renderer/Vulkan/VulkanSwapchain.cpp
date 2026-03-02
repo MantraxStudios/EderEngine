@@ -130,13 +130,9 @@ vk::Extent2D VulkanSwapchain::ChooseExtent(const vk::SurfaceCapabilitiesKHR& cap
     if (caps.currentExtent.width != std::numeric_limits<uint32_t>::max())
         return caps.currentExtent;
 
-#if defined(_WIN32)
+    // SDL3 handles window size on all platforms
     int w, h;
     SDL_GetWindowSizeInPixels(window, &w, &h);
-#elif defined(__ANDROID__)
-    int w = ANativeWindow_getWidth(window);
-    int h = ANativeWindow_getHeight(window);
-#endif
 
     vk::Extent2D actual{ static_cast<uint32_t>(w), static_cast<uint32_t>(h) };
     actual.width  = std::clamp(actual.width,  caps.minImageExtent.width,  caps.maxImageExtent.width);
@@ -152,7 +148,6 @@ void VulkanSwapchain::Cleanup()
 
 void VulkanSwapchain::Recreate(NativeWindow* window)
 {
-#if defined(_WIN32)
     int w = 0, h = 0;
     SDL_GetWindowSizeInPixels(window, &w, &h);
     while (w == 0 || h == 0)
@@ -160,10 +155,6 @@ void VulkanSwapchain::Recreate(NativeWindow* window)
         SDL_GetWindowSizeInPixels(window, &w, &h);
         SDL_WaitEvent(nullptr);
     }
-#elif defined(__ANDROID__)
-    int w = ANativeWindow_getWidth(window);
-    int h = ANativeWindow_getHeight(window);
-#endif
 
     VulkanInstance::Get().GetDevice().waitIdle();
     Cleanup();

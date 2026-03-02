@@ -1,17 +1,27 @@
 #include "VulkanSkybox.h"
 #include "VulkanInstance.h"
-#include <fstream>
+#include <SDL3/SDL.h>
 #include <glm/gtc/type_ptr.hpp>
 
 std::vector<uint32_t> VulkanSkybox::LoadSpv(const std::string& path)
 {
-    std::ifstream file(path, std::ios::binary | std::ios::ate);
-    if (!file.is_open())
-        throw std::runtime_error("VulkanSkybox: cannot open shader: " + path);
-    size_t size = static_cast<size_t>(file.tellg());
-    std::vector<uint32_t> buf(size / sizeof(uint32_t));
-    file.seekg(0);
-    file.read(reinterpret_cast<char*>(buf.data()), size);
+    // SDL_IOFromFile works on both desktop (regular filesystem) and Android
+    // (APK AAssetManager), so a single implementation covers all platforms.
+    SDL_IOStream* io = SDL_IOFromFile(path.c_str(), "rb");
+    if (!io)
+        throw std::runtime_error("VulkanSkybox: cannot open shader: " + path +
+                                 " — " + SDL_GetError());
+
+    Sint64 size = SDL_GetIOSize(io);
+    if (size <= 0 || (size % sizeof(uint32_t)) != 0)
+    {
+        SDL_CloseIO(io);
+        throw std::runtime_error("VulkanSkybox: invalid SPV size in: " + path);
+    }
+
+    std::vector<uint32_t> buf(static_cast<size_t>(size) / sizeof(uint32_t));
+    SDL_ReadIO(io, buf.data(), static_cast<size_t>(size));
+    SDL_CloseIO(io);
     return buf;
 }
 

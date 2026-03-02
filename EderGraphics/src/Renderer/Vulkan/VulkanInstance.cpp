@@ -25,44 +25,29 @@ void VulkanInstance::CreateInstance(NativeWindow* window)
     vk::InstanceCreateInfo createInfo{};
     createInfo.pApplicationInfo = &appInfo;
 
-#if defined(_WIN32)
+    // SDL3 handles Vulkan instance extensions and surface creation on all platforms
     uint32_t          sdlExtCount = 0;
     const char* const* sdlExts   = SDL_Vulkan_GetInstanceExtensions(&sdlExtCount);
     createInfo.enabledExtensionCount   = sdlExtCount;
     createInfo.ppEnabledExtensionNames = sdlExts;
-#elif defined(__ANDROID__)
-    static const char* androidExts[] = {
-        VK_KHR_SURFACE_EXTENSION_NAME,
-        VK_KHR_ANDROID_SURFACE_EXTENSION_NAME
-    };
-    createInfo.enabledExtensionCount   = 2;
-    createInfo.ppEnabledExtensionNames = androidExts;
-#endif
 
     instance = vk::raii::Instance(context, createInfo);
 
-#if defined(_WIN32)
     VkSurfaceKHR _surface;
     if (!SDL_Vulkan_CreateSurface(window, *instance, nullptr, &_surface))
-        throw std::runtime_error("Failed to create window surface!");
+        throw std::runtime_error("Failed to create window surface: " + std::string(SDL_GetError()));
     surface = vk::raii::SurfaceKHR(instance, _surface);
-#elif defined(__ANDROID__)
-    vk::AndroidSurfaceCreateInfoKHR surfaceInfo{};
-    surfaceInfo.window = window;
-    surface = instance.createAndroidSurfaceKHR(surfaceInfo);
-#endif
 
     std::cout << "[Vulkan] Instance + Surface OK" << std::endl;
 }
 
 void VulkanInstance::RecreateSurface(NativeWindow* window)
 {
-#if defined(__ANDROID__)
-    surface = nullptr; // destroy old surface
-    vk::AndroidSurfaceCreateInfoKHR surfaceInfo{};
-    surfaceInfo.window = window;
-    surface = instance.createAndroidSurfaceKHR(surfaceInfo);
-#endif
+    surface = nullptr;
+    VkSurfaceKHR _surface;
+    if (!SDL_Vulkan_CreateSurface(window, *instance, nullptr, &_surface))
+        throw std::runtime_error("Failed to recreate surface: " + std::string(SDL_GetError()));
+    surface = vk::raii::SurfaceKHR(instance, _surface);
 }
 
 void VulkanInstance::PickPhysicalDevice()
@@ -124,16 +109,15 @@ void VulkanInstance::CreateDeviceLogic()
     if (graphicsIndex == queueFamilyProperties.size() || presentIndex == queueFamilyProperties.size())
         throw std::runtime_error("Could not find graphics or present queue!");
 
-    // Features Vulkan 1.3
-    vk::PhysicalDeviceVulkan13Features vulkan13Features{};
-    vulkan13Features.dynamicRendering = vk::True;
-
     // Query supported features before enabling them
     vk::PhysicalDeviceFeatures2 supported = physicalDevice.getFeatures2();
 
     vk::PhysicalDeviceFeatures2 features{};
     features.features.samplerAnisotropy = supported.features.samplerAnisotropy;
     features.features.imageCubeArray    = supported.features.imageCubeArray;
+
+    vk::PhysicalDeviceVulkan13Features vulkan13Features{};
+    vulkan13Features.dynamicRendering = vk::True;
     features.pNext = &vulkan13Features;
 
     float queuePriority = 1.0f;
@@ -143,10 +127,11 @@ void VulkanInstance::CreateDeviceLogic()
     queueCreateInfo.queueCount       = 1;
     queueCreateInfo.pQueuePriorities = &queuePriority;
 
-    // Build final extensions list — on Android, only add dynamic_rendering if the driver lists it
-    // (on Vulkan 1.3 devices it is core and may not appear as an extension)
     std::vector<const char*> extensions = deviceExtensions;
 #if defined(__ANDROID__)
+    // On Android, try to explicitly add VK_KHR_dynamic_rendering if the driver
+    // lists it as an extension (older firmware). On 1.3 core devices the
+    // extension is promoted and may not be listed -- that's fine, core covers it.
     {
         auto availableExts = physicalDevice.enumerateDeviceExtensionProperties();
         bool hasDynRendering = std::any_of(availableExts.begin(), availableExts.end(),
@@ -155,8 +140,8 @@ void VulkanInstance::CreateDeviceLogic()
             });
         if (hasDynRendering)
             extensions.push_back(VK_KHR_DYNAMIC_RENDERING_EXTENSION_NAME);
-        std::cout << "[Vulkan] dynamic_rendering extension: "
-                  << (hasDynRendering ? "enabled via ext" : "core (skipped ext)") << std::endl;
+        std::cout << "[Vulkan] dynamic_rendering: "
+                  << (hasDynRendering ? "KHR extension" : "core 1.3") << std::endl;
     }
 #endif
 

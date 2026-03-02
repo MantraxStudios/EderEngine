@@ -1,5 +1,6 @@
 #include "Editor.h"
 #include <imgui/imgui.h>
+#include <imgui/imgui_internal.h>
 #include <imgui/imgui_impl_sdl3.h>
 #include <imgui/imgui_impl_vulkan.h>
 #include "Renderer/Vulkan/VulkanInstance.h"
@@ -212,13 +213,14 @@ void Editor::Draw(Camera& cam, Registry& registry, float dt)
     inspector  .SetSelected(hierarchy.GetSelected());
 
     DrawMenuBar();
+    DrawToolbar();
     DrawDockspace();
 
     if (stats      .open) stats      .OnDraw();
     if (cameraPanel.open) cameraPanel.OnDraw();
     if (hierarchy  .open) hierarchy  .OnDraw();
     if (inspector  .open) inspector  .OnDraw();
-    if (sceneView  .open) sceneView  .OnDraw();
+    if (sceneView  .open) sceneView  .OnDraw(gizmoMode, snapEnabled, snapValue);
     if (showDemo)         ImGui::ShowDemoWindow(&showDemo);
 }
 
@@ -260,50 +262,236 @@ void Editor::DrawMenuBar()
 {
     if (!ImGui::BeginMainMenuBar()) return;
 
-    if (ImGui::BeginMenu("View"))
+    if (ImGui::BeginMenu("File"))
     {
-        ImGui::MenuItem("Stats",       nullptr, &stats    .open);
-        ImGui::MenuItem("Camera",      nullptr, &cameraPanel.open);
-        ImGui::MenuItem("Hierarchy",   nullptr, &hierarchy.open);
-        ImGui::MenuItem("Inspector",   nullptr, &inspector.open);
-        ImGui::MenuItem("Scene View",  nullptr, &sceneView.open);
+        if (ImGui::MenuItem("New Level",   "Ctrl+N")) {}
+        if (ImGui::MenuItem("Open Level",  "Ctrl+O")) {}
         ImGui::Separator();
-        ImGui::MenuItem("ImGui Demo",  nullptr, &showDemo);
+        if (ImGui::MenuItem("Save",        "Ctrl+S")) {}
+        if (ImGui::MenuItem("Save As...",  "Ctrl+Shift+S")) {}
+        ImGui::Separator();
+        if (ImGui::MenuItem("Exit",        "Alt+F4")) {}
         ImGui::EndMenu();
     }
 
+    if (ImGui::BeginMenu("Edit"))
+    {
+        ImGui::BeginDisabled();
+        ImGui::MenuItem("Undo",  "Ctrl+Z");
+        ImGui::MenuItem("Redo",  "Ctrl+Y");
+        ImGui::EndDisabled();
+        ImGui::Separator();
+        ImGui::BeginDisabled();
+        ImGui::MenuItem("Cut",   "Ctrl+X");
+        ImGui::MenuItem("Copy",  "Ctrl+C");
+        ImGui::MenuItem("Paste", "Ctrl+V");
+        ImGui::EndDisabled();
+        ImGui::Separator();
+        if (ImGui::BeginMenu("Editor Preferences"))
+        {
+            ImGui::MenuItem("Snap", nullptr, &snapEnabled);
+            ImGui::SetNextItemWidth(80);
+            ImGui::DragFloat("Snap Value", &snapValue, 1.0f, 0.25f, 100.0f, "%.2f");
+            ImGui::EndMenu();
+        }
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Window"))
+    {
+        ImGui::MenuItem("World Outliner", nullptr, &hierarchy  .open);
+        ImGui::MenuItem("Details",        nullptr, &inspector  .open);
+        ImGui::MenuItem("Viewport",       nullptr, &sceneView  .open);
+        ImGui::MenuItem("Camera",         nullptr, &cameraPanel.open);
+        ImGui::MenuItem("Stats",          nullptr, &stats      .open);
+        ImGui::Separator();
+        ImGui::MenuItem("ImGui Demo",     nullptr, &showDemo);
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Build"))
+    {
+        ImGui::BeginDisabled();
+        ImGui::MenuItem("Build All Levels");
+        ImGui::MenuItem("Build Lighting Only");
+        ImGui::EndDisabled();
+        ImGui::EndMenu();
+    }
+
+    if (ImGui::BeginMenu("Help"))
+    {
+        if (ImGui::MenuItem("About EderEngine"))
+            ImGui::OpenPopup("##about");
+        ImGui::EndMenu();
+    }
+
+    // Framerate on the right
+    float fps = ImGui::GetIO().Framerate;
+    char frStr[32];
+    snprintf(frStr, sizeof(frStr), "%.0f FPS", fps);
+    ImGui::SetCursorPosX(ImGui::GetContentRegionMax().x - ImGui::CalcTextSize(frStr).x - 8.0f);
+    ImGui::TextDisabled("%s", frStr);
+
     ImGui::EndMainMenuBar();
+}
+
+void Editor::DrawToolbar()
+{
+    ImGuiViewport* vp     = ImGui::GetMainViewport();
+    float          menuH  = ImGui::GetFrameHeight();
+    const float    toolH  = 36.0f;
+
+    ImGui::SetNextWindowPos (ImVec2(vp->Pos.x, vp->Pos.y + menuH));
+    ImGui::SetNextWindowSize(ImVec2(vp->Size.x, toolH));
+    ImGui::SetNextWindowViewport(vp->ID);
+
+    ImGuiWindowFlags flags =
+        ImGuiWindowFlags_NoDocking    | ImGuiWindowFlags_NoTitleBar  |
+        ImGuiWindowFlags_NoCollapse   | ImGuiWindowFlags_NoResize    |
+        ImGuiWindowFlags_NoMove       | ImGuiWindowFlags_NoScrollbar |
+        ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoSavedSettings;
+
+    ImGui::PushStyleVar  (ImGuiStyleVar_WindowRounding,  0.0f);
+    ImGui::PushStyleVar  (ImGuiStyleVar_WindowBorderSize, 1.0f);
+    ImGui::PushStyleVar  (ImGuiStyleVar_WindowPadding,   ImVec2(6.0f, 4.0f));
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.10f, 0.10f, 0.10f, 1.0f));
+    ImGui::Begin("##Toolbar", nullptr, flags);
+    ImGui::PopStyleColor();
+    ImGui::PopStyleVar(3);
+
+    // ── Gizmo mode buttons (left) ────────────────────────────────────────────
+    auto GizmoBtn = [&](const char* label, GizmoMode mode, const char* tooltip)
+    {
+        bool active = (gizmoMode == mode);
+        if (active)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.80f, 0.10f, 0.10f, 1.0f));
+        if (ImGui::Button(label, ImVec2(28, 24)))
+            gizmoMode = mode;
+        if (active)
+            ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("%s", tooltip);
+        ImGui::SameLine();
+    };
+
+    GizmoBtn("T", GizmoMode::Translate, "Translate  [W]");
+    GizmoBtn("R", GizmoMode::Rotate,    "Rotate     [E]");
+    GizmoBtn("S", GizmoMode::Scale,     "Scale      [R]");
+
+    // Snap toggle
+    ImGui::SameLine();
+    {
+        bool snap = snapEnabled;
+        if (snap) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.80f, 0.10f, 0.10f, 1.0f));
+        if (ImGui::Button("SNAP", ImVec2(44, 24))) snapEnabled = !snapEnabled;
+        if (snap) ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Snap");
+    }
+
+    // ── Play / Pause / Stop (center) ─────────────────────────────────────────
+    float centerX = (vp->Size.x - 3.0f * (60.0f + 4.0f)) * 0.5f;
+    ImGui::SameLine(centerX);
+
+    // Play
+    {
+        bool playing = (playState == PlayState::Playing);
+        if (playing) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.10f, 0.55f, 0.10f, 1.0f));
+        if (ImGui::Button(playing ? "|| Play" : "> Play", ImVec2(60, 24)))
+        {
+            if (playState == PlayState::Stopped || playState == PlayState::Paused)
+                playState = PlayState::Playing;
+        }
+        if (playing) ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Play  [F5]");
+    }
+    ImGui::SameLine();
+
+    // Pause
+    {
+        bool paused = (playState == PlayState::Paused);
+        if (paused) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.65f, 0.50f, 0.05f, 1.0f));
+        ImGui::BeginDisabled(playState == PlayState::Stopped);
+        if (ImGui::Button("|| Pause", ImVec2(60, 24)))
+        {
+            if (playState == PlayState::Playing) playState = PlayState::Paused;
+            else if (playState == PlayState::Paused) playState = PlayState::Playing;
+        }
+        ImGui::EndDisabled();
+        if (paused) ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pause  [F6]");
+    }
+    ImGui::SameLine();
+
+    // Stop
+    {
+        ImGui::BeginDisabled(playState == PlayState::Stopped);
+        if (ImGui::Button("[ ] Stop", ImVec2(60, 24)))
+            playState = PlayState::Stopped;
+        ImGui::EndDisabled();
+        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop  [F7]");
+    }
+
+    ImGui::End();
 }
 
 void Editor::DrawDockspace()
 {
     ImGuiViewport* vp = ImGui::GetMainViewport();
 
-    // Dejar espacio para la barra de menú
-    float menuH = ImGui::GetFrameHeight();
-    ImGui::SetNextWindowPos (ImVec2(vp->Pos.x,  vp->Pos.y  + menuH));
-    ImGui::SetNextWindowSize(ImVec2(vp->Size.x, vp->Size.y - menuH));
+    // Menu bar + toolbar
+    float menuH   = ImGui::GetFrameHeight();
+    float toolH   = 36.0f;
+    float offsetY = menuH + toolH;
+
+    ImGui::SetNextWindowPos (ImVec2(vp->Pos.x,  vp->Pos.y  + offsetY));
+    ImGui::SetNextWindowSize(ImVec2(vp->Size.x, vp->Size.y - offsetY));
     ImGui::SetNextWindowViewport(vp->ID);
 
     ImGuiWindowFlags flags =
-        ImGuiWindowFlags_NoDocking          |
-        ImGuiWindowFlags_NoTitleBar         |
-        ImGuiWindowFlags_NoCollapse         |
-        ImGuiWindowFlags_NoResize           |
-        ImGuiWindowFlags_NoMove             |
+        ImGuiWindowFlags_NoDocking             |
+        ImGuiWindowFlags_NoTitleBar            |
+        ImGuiWindowFlags_NoCollapse            |
+        ImGuiWindowFlags_NoResize              |
+        ImGuiWindowFlags_NoMove                |
         ImGuiWindowFlags_NoBringToFrontOnFocus |
-        ImGuiWindowFlags_NoNavFocus         |
+        ImGuiWindowFlags_NoNavFocus            |
         ImGuiWindowFlags_NoBackground;
 
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,  0.0f);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding,   0.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding,    ImVec2(0.0f, 0.0f));
     ImGui::Begin("##Dockspace", nullptr, flags);
     ImGui::PopStyleVar(3);
 
-    // PassthruCentralNode: el área central sin panel muestra el render de Vulkan
-    ImGui::DockSpace(ImGui::GetID("MainDock"), ImVec2(0, 0),
-                     ImGuiDockNodeFlags_PassthruCentralNode);
+    ImGuiID dockId = ImGui::GetID("MainDock");
+    ImGui::DockSpace(dockId, ImVec2(0, 0), ImGuiDockNodeFlags_PassthruCentralNode);
+
+    // ── Default layout (runs only once on first startup) ─────────────────────
+    if (firstLayout && ImGui::DockBuilderGetNode(dockId) == nullptr)
+    {
+        firstLayout = false;
+
+        ImGui::DockBuilderRemoveNode(dockId);
+        ImGui::DockBuilderAddNode  (dockId, ImGuiDockNodeFlags_DockSpace);
+        ImGui::DockBuilderSetNodeSize(dockId, ImVec2(vp->Size.x, vp->Size.y - offsetY));
+
+        // Split: left panel (Outliner) | center (Viewport) | right panel (Details)
+        ImGuiID left, center, right;
+        ImGui::DockBuilderSplitNode(dockId,  ImGuiDir_Left,  0.18f, &left,   &center);
+        ImGui::DockBuilderSplitNode(center,  ImGuiDir_Right, 0.22f, &right,  &center);
+
+        // Split left panel vertically: Outliner top | Camera bottom
+        ImGuiID leftTop, leftBot;
+        ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.35f, &leftBot, &leftTop);
+
+        ImGui::DockBuilderDockWindow("World Outliner", leftTop);
+        ImGui::DockBuilderDockWindow("Camera",         leftBot);
+        ImGui::DockBuilderDockWindow("Viewport",       center);
+        ImGui::DockBuilderDockWindow("Details",        right);
+        ImGui::DockBuilderDockWindow("Stats",          right); // stacked with Details
+
+        ImGui::DockBuilderFinish(dockId);
+    }
 
     ImGui::End();
 }

@@ -4,19 +4,10 @@
 
 #include <vulkan/vulkan_raii.hpp>
 
-#if defined(_WIN32)
-
-    #include <SDL3/SDL.h>
-    #include <SDL3/SDL_vulkan.h>
-    using NativeWindow = SDL_Window;
-
-#elif defined(__ANDROID__)
-
-    #include <android/native_window.h>
-    #include <android/native_activity.h>
-    using NativeWindow = ANativeWindow;
-
-#endif
+// SDL3 is used on all platforms (Windows, Android, etc.)
+#include <SDL3/SDL.h>
+#include <SDL3/SDL_vulkan.h>
+using NativeWindow = SDL_Window;
 
 #include <iostream>
 #include <vector>

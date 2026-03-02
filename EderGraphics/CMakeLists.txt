@@ -121,7 +121,17 @@ if (ANDROID)
         VULKAN_HPP_NO_SPACESHIP_OPERATOR
     )
 
+    # SDL3 prebuilt — extracted from SDL3-3.4.2.aar by compile_android.bat
+    set(SDL3_SO "${CMAKE_SOURCE_DIR}/vendor/androidlib/${ANDROID_ABI}/libSDL3.so")
+    if (NOT EXISTS "${SDL3_SO}")
+        message(FATAL_ERROR "libSDL3.so not found at ${SDL3_SO}. Run compile_android.bat to extract it from the AAR first.")
+    endif()
+
+    add_library(SDL3 SHARED IMPORTED)
+    set_target_properties(SDL3 PROPERTIES IMPORTED_LOCATION "${SDL3_SO}")
+
     target_link_libraries(EderGraphics PRIVATE
+        SDL3
         vulkan
         android
         log

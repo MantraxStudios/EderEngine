@@ -1,6 +1,7 @@
 #pragma once
 #include <SDL3/SDL.h>
 #include <vulkan/vulkan.h>
+#include "EditorTypes.h"
 #include "Core/Camera.h"
 #include "ECS/Registry.h"
 #include "Renderer/Vulkan/VulkanFramebuffer.h"
@@ -30,12 +31,23 @@ public:
     bool WantCaptureMouse()    const;
     bool WantCaptureKeyboard() const;
 
+    PlayState GetPlayState() const { return playState; }
+    GizmoMode GetGizmoMode() const { return gizmoMode; }
+    Entity    GetSelected()  const { return hierarchy.GetSelected(); }
+
 private:
     void DrawMenuBar();
+    void DrawToolbar();
     void DrawDockspace();
     void ApplyTheme();
 
-    bool showDemo = false;
+    bool showDemo          = false;
+    bool firstLayout       = true;
+
+    PlayState playState    = PlayState::Stopped;
+    GizmoMode gizmoMode    = GizmoMode::Translate;
+    bool      snapEnabled  = false;
+    float     snapValue    = 10.0f;
 
     StatsPanel     stats;
     CameraPanel    cameraPanel;

@@ -1,6 +1,12 @@
 #include "VulkanRenderer.h"
 #include "Renderer/Vulkan/VulkanInstance.h"
 #include "Renderer/Vulkan/VulkanSwapchain.h"
+#ifdef __ANDROID__
+#include <android/log.h>
+#define VKLOG(...) __android_log_print(ANDROID_LOG_DEBUG, "EderVKRend", __VA_ARGS__)
+#else
+#define VKLOG(...) do {} while(0)
+#endif
 
 VulkanRenderer& VulkanRenderer::Get()
 {
@@ -15,7 +21,32 @@ void VulkanRenderer::Init()
     CreateSyncObjects();
 
     auto ext = VulkanSwapchain::Get().GetExtent();
+    VKLOG("Init: creating depth buffer %ux%u", ext.width, ext.height);
     depthBuffer.Create(ext.width, ext.height);
+    VKLOG("Init: depthBuffer created, format=%d view=%p",
+        (int)depthBuffer.GetFormat(),
+        (void*)(VkImageView)depthBuffer.GetImageView());
+
+    // Load vkCmdBeginRendering / vkCmdEndRendering with KHR extension fallback.
+    // On some Android devices the Vulkan 1.3 core name is not returned by
+    // vkGetDeviceProcAddr even though the KHR extension alias is available.
+    VkDevice rawDevice = *VulkanInstance::Get().GetDevice();
+    pfnCmdBeginRendering = reinterpret_cast<PFN_vkCmdBeginRendering>(
+        vkGetDeviceProcAddr(rawDevice, "vkCmdBeginRendering"));
+    if (!pfnCmdBeginRendering)
+        pfnCmdBeginRendering = reinterpret_cast<PFN_vkCmdBeginRendering>(
+            vkGetDeviceProcAddr(rawDevice, "vkCmdBeginRenderingKHR"));
+    VKLOG("Init: pfnCmdBeginRendering=%p", (void*)pfnCmdBeginRendering);
+
+    pfnCmdEndRendering = reinterpret_cast<PFN_vkCmdEndRendering>(
+        vkGetDeviceProcAddr(rawDevice, "vkCmdEndRendering"));
+    if (!pfnCmdEndRendering)
+        pfnCmdEndRendering = reinterpret_cast<PFN_vkCmdEndRendering>(
+            vkGetDeviceProcAddr(rawDevice, "vkCmdEndRenderingKHR"));
+    VKLOG("Init: pfnCmdEndRendering=%p", (void*)pfnCmdEndRendering);
+
+    if (!pfnCmdBeginRendering || !pfnCmdEndRendering)
+        throw std::runtime_error("vkCmdBeginRendering / vkCmdEndRendering not available!");
 
     std::cout << "[Vulkan] Renderer OK" << std::endl;
 }
@@ -99,6 +130,11 @@ void VulkanRenderer::BeginMainPass()
     auto& swapchain = VulkanSwapchain::Get();
     auto& cmd       = commandBuffers[currentFrame];
 
+    VKLOG("BeginMainPass: imageIndex=%u imageCount=%zu depthView=%p",
+        imageIndex,
+        swapchain.GetImages().size(),
+        (void*)(VkImageView)depthBuffer.GetImageView());
+
     vk::ImageMemoryBarrier colorBarrier{};
     colorBarrier.oldLayout           = vk::ImageLayout::eUndefined;
     colorBarrier.newLayout           = vk::ImageLayout::eColorAttachmentOptimal;
@@ -108,6 +144,7 @@ void VulkanRenderer::BeginMainPass()
     colorBarrier.subresourceRange    = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
     colorBarrier.srcAccessMask       = vk::AccessFlagBits::eNone;
     colorBarrier.dstAccessMask       = vk::AccessFlagBits::eColorAttachmentWrite;
+    VKLOG("BeginMainPass: calling pipelineBarrier");
     cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe,
                         vk::PipelineStageFlagBits::eColorAttachmentOutput,
                         {}, {}, {}, colorBarrier);
@@ -133,8 +170,11 @@ void VulkanRenderer::BeginMainPass()
     renderingInfo.pColorAttachments    = &colorAttachment;
     renderingInfo.pDepthAttachment     = &depthAttachment;
 
-    cmd.beginRendering(renderingInfo);
+    VKLOG("BeginMainPass: calling beginRendering extent=%ux%u",
+        swapchain.GetExtent().width, swapchain.GetExtent().height);
+    pfnCmdBeginRendering(*cmd, reinterpret_cast<const VkRenderingInfo*>(&renderingInfo));
 
+    VKLOG("BeginMainPass: setting viewport/scissor");
     vk::Viewport vp{};
     vp.width    = static_cast<float>(swapchain.GetExtent().width);
     vp.height   = static_cast<float>(swapchain.GetExtent().height);
@@ -142,6 +182,7 @@ void VulkanRenderer::BeginMainPass()
     vp.maxDepth = 1.0f;
     cmd.setViewport(0, vp);
     cmd.setScissor(0, vk::Rect2D{ vk::Offset2D{ 0, 0 }, swapchain.GetExtent() });
+    VKLOG("BeginMainPass: done");
 }
 
 void VulkanRenderer::EndFrame()
@@ -152,7 +193,7 @@ void VulkanRenderer::EndFrame()
     auto& swapchain = VulkanSwapchain::Get();
     auto& cmd       = commandBuffers[currentFrame];
 
-    cmd.endRendering();
+    pfnCmdEndRendering(*cmd);
 
     vk::ImageMemoryBarrier barrier{};
     barrier.oldLayout           = vk::ImageLayout::eColorAttachmentOptimal;
