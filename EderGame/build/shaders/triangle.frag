@@ -289,10 +289,14 @@ void main()
     for (int i = 0; i < lights.numPointLights; i++)
     {
         vec3  toLight = lights.pointLights[i].position - fragWorldPos;
-        float dist    = length(toLight);
+        float distSqr = dot(toLight, toLight);
+        float dist    = sqrt(distSqr);
         float r       = lights.pointLights[i].radius;
-        float atten   = clamp(1.0 - (dist * dist) / (r * r), 0.0, 1.0);
-        atten        *= atten;
+        if (dist >= r) continue;   // hard cutoff — no light, no shadow past range
+        // Unity-style: inverse-square × smooth window → natural falloff, 0 at range
+        float normDist = dist / r;
+        float window   = max(1.0 - normDist * normDist * normDist * normDist, 0.0);
+        float atten    = (window * window) / (distSqr + 1.0);
         float shadow  = (lights.pointLights[i].shadowIdx >= 0)
                         ? ShadowPoint(lights.pointLights[i].shadowIdx, fragWorldPos,
                                       lights.pointLights[i].position, N)
@@ -305,14 +309,20 @@ void main()
     for (int i = 0; i < lights.numSpotLights; i++)
     {
         vec3  toLight = lights.spotLights[i].position - fragWorldPos;
-        float dist    = length(toLight);
+        float distSqr = dot(toLight, toLight);
+        float dist    = sqrt(distSqr);
         vec3  L       = toLight / dist;
         float r       = lights.spotLights[i].radius;
-        float atten   = clamp(1.0 - (dist * dist) / (r * r), 0.0, 1.0);
-        atten        *= atten;
+        if (dist >= r) continue;   // hard cutoff
+        // Unity-style distance attenuation
+        float normDist = dist / r;
+        float window   = max(1.0 - normDist * normDist * normDist * normDist, 0.0);
+        float atten    = (window * window) / (distSqr + 1.0);
+        // Spot cone
         float theta   = dot(L, normalize(-lights.spotLights[i].direction));
         float eps     = lights.spotLights[i].innerCos - lights.spotLights[i].outerCos;
-        float cone    = clamp((theta - lights.spotLights[i].outerCos) / eps, 0.0, 1.0);
+        float cone    = clamp((theta - lights.spotLights[i].outerCos) / max(eps, 0.0001), 0.0, 1.0);
+        if (cone <= 0.0) continue;  // outside cone
         float shadow  = (lights.spotLights[i].shadowIdx >= 0)
                         ? ShadowSpot(lights.spotLights[i].shadowIdx, fragWorldPos, N, L)
                         : 1.0;
