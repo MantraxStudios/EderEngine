@@ -1,6 +1,7 @@
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <iostream>
+#include <imgui/imgui.h>
 #include "Editor/Editor.h"
 #include "Renderer/Vulkan/VulkanInstance.h"
 #include "Renderer/Vulkan/VulkanSwapchain.h"
@@ -22,6 +23,7 @@
 #include "Core/Camera.h"
 #include "Core/Scene.h"
 #include "Core/LightBuffer.h"
+#include "EderCore.h"
 #include <glm/gtc/constants.hpp>
 
 int main()
@@ -33,14 +35,15 @@ int main()
     if (!window) return -1;
 
     Camera camera({ 0.0f, 0.0f, 0.0f }, 35.0f, 50.0f);
-    camera.fpsMode = true;
+    camera.fpsMode = true;   
     camera.fpsPos  = { 0.0f, 2.0f, 12.0f };
     camera.SetOrientation(0.0f, 0.0f);
-    SDL_SetWindowRelativeMouseMode(window, camera.fpsMode);
+    SDL_SetWindowRelativeMouseMode(window, false);
 
     Editor editor;
 
     VulkanPipeline       pipeline;
+    VulkanPipeline       pipelineUnorm;  // mismo shader, formato UNORM para SceneView
     VulkanMesh           mesh;
     VulkanTexture        albedoTex;
     Material             material;
@@ -51,6 +54,7 @@ int main()
     VulkanFramebuffer    debugFb;
     VulkanDebugOverlay   debugOverlay;
     VulkanSkybox         skybox;
+    VulkanSkybox         skyboxUnorm;  // skybox para el pass UNORM del SceneView
     VulkanShadowMap          shadowMap;
     VulkanShadowPipeline     shadowPipeline;
     VulkanSpotShadowMap       spotShadowMap;
@@ -58,6 +62,7 @@ int main()
     VulkanPointShadowPipeline pointShadowPipeline;
     Scene                scene;
     LightBuffer          lights;
+    Registry             registry;
 
     glm::mat4 spotMatrix;
     glm::vec3 spotPos      = glm::vec3(0.0f, 15.0f, 0.0f);
@@ -79,6 +84,13 @@ int main()
             "shaders/triangle.vert.spv",
             "shaders/triangle.frag.spv",
             VulkanSwapchain::Get().GetFormat(),
+            VulkanRenderer::Get().GetDepthFormat());
+
+        // Pipeline UNORM para el SceneView (evita double sRGB encoding en ImGui)
+        pipelineUnorm.Create(
+            "shaders/triangle.vert.spv",
+            "shaders/triangle.frag.spv",
+            vk::Format::eB8G8R8A8Unorm,
             VulkanRenderer::Get().GetDepthFormat());
 
         {
@@ -210,6 +222,74 @@ int main()
             }
         }
 
+        // ── ECS entities (mirror de la escena para el editor) ─────────────────
+        {
+            auto addMesh = [&](const char* name,
+                                glm::vec3 pos, glm::vec3 rot, glm::vec3 scl)
+            {
+                Entity e = registry.Create();
+                registry.Add<TagComponent>(e).name = name;
+                auto& t  = registry.Add<TransformComponent>(e);
+                t.position = pos; t.rotation = rot; t.scale = scl;
+                registry.Add<MeshRendererComponent>(e).meshPath = "assets/box.fbx";
+                return e;
+            };
+
+            addMesh("Floor",        { 0.0f,-1.0f, 0.0f}, {0,0,0}, {30.0f, 1.0f,20.0f});
+            addMesh("Glass Blue",   { 0.0f, 1.5f,-4.0f}, {0,0,0}, { 3.0f, 4.0f, 0.2f});
+            addMesh("Glass Green",  {-3.5f, 1.5f,-6.5f}, {0,0,0}, { 0.2f, 4.0f, 3.5f});
+            addMesh("Glass Amber",  { 3.5f, 1.5f,-6.5f}, {0,0,0}, { 0.2f, 4.0f, 3.5f});
+            addMesh("Cube Blue",    {-6.0f, 3.0f,-2.0f}, {0,0,0}, { 1.2f, 1.2f, 1.2f});
+            addMesh("Cube Green",   { 6.0f, 2.0f,-2.0f}, {0,0,0}, { 1.5f, 1.5f, 1.5f});
+            addMesh("Slab Amber",   { 0.0f, 1.0f, 2.0f}, {0,0,0}, { 4.0f, 2.5f,0.15f});
+            addMesh("Slab Blue",    { 0.0f, 1.0f, 2.5f}, {0,0,0}, { 4.0f, 2.5f,0.15f});
+
+            constexpr int   cols    = 5;
+            constexpr int   rows    = 3;
+            constexpr float spacing = 4.5f;
+            const float     heights[3] = { 1.0f, 2.0f, 1.5f };
+            for (int row = 0; row < rows; row++)
+            for (int col = 0; col < cols; col++)
+            {
+                char name[32];
+                snprintf(name, sizeof(name), "Box %d_%d", row, col);
+                float h = heights[(col + row) % 3];
+                addMesh(name,
+                    { (col-(cols-1)*0.5f)*spacing, (h-1.0f)*0.5f, (row-(rows-1)*0.5f)*spacing },
+                    {0,0,0}, {1.0f, h, 1.0f});
+            }
+
+            // Lights
+            {
+                Entity e = registry.Create();
+                registry.Add<TagComponent>(e).name = "Fill Light";
+                auto& t  = registry.Add<TransformComponent>(e).position = {0.0f,12.0f,0.0f};
+                auto& l  = registry.Add<LightComponent>(e);
+                l.type = LightType::Point; l.color = {0.45f,0.55f,0.75f};
+                l.intensity = 1.5f; l.range = 60.0f;
+            }
+            {
+                Entity e = registry.Create();
+                registry.Add<TagComponent>(e).name = "Spot Light";
+                auto& t  = registry.Add<TransformComponent>(e).position = spotPos;
+                auto& l  = registry.Add<LightComponent>(e);
+                l.type = LightType::Spot; l.color = {1.0f,0.9f,0.7f};
+                l.intensity = 1.0f; l.range = spotFar;
+                l.innerConeAngle = 30.0f; l.outerConeAngle = 40.0f;
+                l.castShadow = true;
+            }
+            {
+                Entity e = registry.Create();
+                registry.Add<TagComponent>(e).name = "Point Shadow Light";
+                auto& t  = registry.Add<TransformComponent>(e).position = pointShadowPos;
+                auto& l  = registry.Add<LightComponent>(e);
+                l.type = LightType::Point; l.color = {1.0f,0.7f,0.4f};
+                l.intensity = 1.0f; l.range = pointShadowFar;
+                l.castShadow = true;
+            }
+        }
+        // ──────────────────────────────────────────────────────────────────────
+
         // Shadow map must be created before lights.Build so the sampler is available
         shadowMap.Create(1024);
         shadowPipeline.Create(shadowMap.GetFormat());
@@ -270,9 +350,10 @@ int main()
 
         auto& sc = VulkanSwapchain::Get();
         debugFb.Create(sc.GetExtent().width / 2, sc.GetExtent().height / 2,
-                       sc.GetFormat(), VulkanRenderer::Get().GetDepthFormat());
+                       vk::Format::eB8G8R8A8Unorm, VulkanRenderer::Get().GetDepthFormat());
         debugOverlay.Create(sc.GetFormat(), VulkanRenderer::Get().GetDepthFormat());
         skybox.Create(sc.GetFormat(), VulkanRenderer::Get().GetDepthFormat());
+        skyboxUnorm.Create(vk::Format::eB8G8R8A8Unorm, VulkanRenderer::Get().GetDepthFormat());
         editor.SetSceneViewFramebuffer(&debugFb);
     }
     catch (const std::exception& e)
@@ -286,15 +367,13 @@ int main()
     glm::mat4 cascadeMatrices[VulkanShadowMap::NUM_CASCADES];
     glm::vec4 cascadeSplits;
 
-    uint64_t prevTime = SDL_GetTicks();
-    float    mouseDX  = 0.0f, mouseDY = 0.0f;
-    bool     running  = true;
+    uint64_t prevTime  = SDL_GetTicks();
+    float    mouseDX   = 0.0f, mouseDY = 0.0f;
+    bool     running   = true;
+    bool     lookActive = false;  // true solo mientras se mantiene click derecho
 
     while (running)
     {
-        mouseDX = 0.0f;
-        mouseDY = 0.0f;
-
         SDL_Event event;
         while (SDL_PollEvent(&event))
         {
@@ -306,17 +385,45 @@ int main()
                      event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED)
                 VulkanRenderer::Get().SetFramebufferResized();
             else if (event.type == SDL_EVENT_KEY_DOWN &&
-                     event.key.scancode == SDL_SCANCODE_P)
+                     event.key.scancode == SDL_SCANCODE_ESCAPE)
+                running = false;
+        }
+
+        // ── Right-click FPS mode — polled each frame, not event-based ────────
+        // Calling SDL_SetWindowRelativeMouseMode inside the event loop can
+        // discard queued keyboard events. Poll the button state here instead.
+        {
+            float mx, my;
+            bool rmb = (SDL_GetMouseState(&mx, &my) & SDL_BUTTON_RMASK) != 0;
+
+            if (rmb && !lookActive)
             {
-                camera.fpsMode = !camera.fpsMode;
-                SDL_SetWindowRelativeMouseMode(window, camera.fpsMode);
+                lookActive = true;
+                SDL_SetWindowRelativeMouseMode(window, true);
+                SDL_RaiseWindow(window);
+                SDL_GetRelativeMouseState(&mouseDX, &mouseDY); // flush
+                mouseDX = 0.0f;
+                mouseDY = 0.0f;
             }
-            else if (event.type == SDL_EVENT_MOUSE_MOTION && camera.fpsMode)
+            else if (!rmb && lookActive)
             {
-                mouseDX += event.motion.xrel;
-                mouseDY += event.motion.yrel;
+                lookActive = false;
+                SDL_SetWindowRelativeMouseMode(window, false);
+                SDL_GetRelativeMouseState(&mouseDX, &mouseDY); // flush
+                mouseDX = 0.0f;
+                mouseDY = 0.0f;
+            }
+            else if (lookActive)
+            {
+                SDL_GetRelativeMouseState(&mouseDX, &mouseDY);
+            }
+            else
+            {
+                mouseDX = 0.0f;
+                mouseDY = 0.0f;
             }
         }
+        // ─────────────────────────────────────────────────────────────────────
 
         uint64_t currTime = SDL_GetTicks();
         float    dt       = static_cast<float>(currTime - prevTime) / 1000.0f;
@@ -339,25 +446,31 @@ int main()
 
         editor.BeginFrame();
 
-        // FPS look (cursor capturado)
-        if (camera.fpsMode)
+        // Mientras lookActive, ImGui no captura teclado ni mouse
+        if (lookActive)
+        {
+            ImGui::GetIO().WantCaptureKeyboard = false;
+            ImGui::GetIO().WantCaptureMouse    = false;
+        }
+
+        // FPS look — solo con click derecho sostenido
+        if (lookActive)
             camera.FPSLook(mouseDX, mouseDY);
 
-        // Movimiento WASD (sin componente vertical en fwd para no "volar" con W)
-        if (camera.fpsMode)
+        // Movimiento WASD — solo con click derecho sostenido
+        if (lookActive)
         {
             const bool* keys = SDL_GetKeyboardState(nullptr);
             const float spd  = 8.0f;
             glm::vec3 fwd    = camera.GetForward();
             glm::vec3 right  = camera.GetRight();
             glm::vec3 fwdXZ  = glm::normalize(glm::vec3(fwd.x, 0.0f, fwd.z));
-            if (keys[SDL_SCANCODE_W])      camera.fpsPos += fwdXZ * spd * dt;
-            if (keys[SDL_SCANCODE_S])      camera.fpsPos -= fwdXZ * spd * dt;
-            if (keys[SDL_SCANCODE_A])      camera.fpsPos -= right  * spd * dt;
-            if (keys[SDL_SCANCODE_D])      camera.fpsPos += right  * spd * dt;
-            if (keys[SDL_SCANCODE_SPACE])  camera.fpsPos.y += spd * dt;
-            if (keys[SDL_SCANCODE_LCTRL]) camera.fpsPos.y -= spd * dt;
-            if (keys[SDL_SCANCODE_ESCAPE]) running = false;
+            if (keys[SDL_SCANCODE_W])     camera.fpsPos += fwdXZ * spd * dt;
+            if (keys[SDL_SCANCODE_S])     camera.fpsPos -= fwdXZ * spd * dt;
+            if (keys[SDL_SCANCODE_A])     camera.fpsPos -= right  * spd * dt;
+            if (keys[SDL_SCANCODE_D])     camera.fpsPos += right  * spd * dt;
+            if (keys[SDL_SCANCODE_SPACE]) camera.fpsPos.y += spd * dt;
+            if (keys[SDL_SCANCODE_LCTRL])camera.fpsPos.y -= spd * dt;
         }
 
         double currTimeSec = static_cast<double>(currTime) / 1000.0;
@@ -438,14 +551,14 @@ int main()
                          static_cast<float>(debugFb.GetExtent().height);
 
         debugFb.BeginRendering(cmd);
-        pipeline.Bind(cmd);
-        scene.Draw(cmd, pipeline, camera, dbAspect, lights);
+        pipelineUnorm.Bind(cmd);
+        scene.Draw(cmd, pipelineUnorm, camera, dbAspect, lights);
         {
             auto invVP = glm::inverse(camera.GetProjection(dbAspect) * camera.GetView());
-            skybox.Draw(cmd, invVP, -sunDir);
+            skyboxUnorm.Draw(cmd, invVP, -sunDir);
         }
-        pipeline.Bind(cmd);
-        scene.DrawTransparent(cmd, pipeline, camera, dbAspect, lights);
+        pipelineUnorm.BindTransparent(cmd);
+        scene.DrawTransparent(cmd, pipelineUnorm, camera, dbAspect, lights);
         debugFb.EndRendering(cmd);
         debugFb.TransitionToShaderRead(cmd);
 
@@ -466,7 +579,7 @@ int main()
 
         debugOverlay.Draw(cmd, debugFb, shadowMap);
 
-        editor.Draw(camera, scene, dt);
+        editor.Draw(camera, registry, dt);
         editor.Render(cmd);
 
         VulkanRenderer::Get().EndFrame();
@@ -475,6 +588,7 @@ int main()
     VulkanInstance::Get().GetDevice().waitIdle();
     editor.Shutdown();
     debugOverlay.Destroy();
+    skyboxUnorm.Destroy();
     skybox.Destroy();
     debugFb.Destroy();
     pointShadowPipeline.Destroy();
@@ -488,6 +602,7 @@ int main()
     material.Destroy();
     albedoTex.Destroy();
     mesh.Destroy();
+    pipelineUnorm.Destroy();
     pipeline.Destroy();
     SDL_DestroyWindow(window);
     SDL_Quit();

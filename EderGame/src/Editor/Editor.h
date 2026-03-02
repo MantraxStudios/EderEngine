@@ -2,7 +2,7 @@
 #include <SDL3/SDL.h>
 #include <vulkan/vulkan.h>
 #include "Core/Camera.h"
-#include "Core/Scene.h"
+#include "ECS/Registry.h"
 #include "Renderer/Vulkan/VulkanFramebuffer.h"
 #include "Panels/StatsPanel.h"
 #include "Panels/CameraPanel.h"
@@ -19,7 +19,7 @@ public:
     void ProcessEvent(const SDL_Event& event);
     void BeginFrame();
     void EndFrame();                          // frame Vulkan saltado
-    void Draw    (Camera& camera, Scene& scene, float dt);
+    void Draw    (Camera& camera, Registry& registry, float dt);
     void Render  (VkCommandBuffer cmd);
 
     // Escena 3D — llamar tras crear/recrear el framebuffer de escena
@@ -33,11 +33,12 @@ public:
 private:
     void DrawMenuBar();
     void DrawDockspace();
+    void ApplyTheme();
 
     bool showDemo = false;
 
     StatsPanel     stats;
-    CameraPanel    camera;
+    CameraPanel    cameraPanel;
     HierarchyPanel hierarchy;
     InspectorPanel inspector;
     SceneViewPanel sceneView;

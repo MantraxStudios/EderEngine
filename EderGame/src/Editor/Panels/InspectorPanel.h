@@ -1,6 +1,7 @@
 #pragma once
 #include "Panel.h"
-#include "Core/Scene.h"
+#include "ECS/Registry.h"
+#include "ECS/Entity.h"
 
 class InspectorPanel : public Panel
 {
@@ -8,10 +9,16 @@ public:
     const char* Title() const override { return "Inspector"; }
     void        OnDraw()      override;
 
-    void SetScene   (Scene* s) { scene    = s; }
-    void SetSelected(int    i) { selected = i; }
+    void SetRegistry(Registry* r) { registry = r; }
+    void SetSelected(Entity e)    { selected = e; }
 
 private:
-    Scene* scene    = nullptr;
-    int    selected = -1;
+    void DrawTagComponent();
+    void DrawTransformComponent();
+    void DrawMeshRendererComponent();
+    void DrawLightComponent();
+    void DrawAddComponent();
+
+    Registry* registry = nullptr;
+    Entity    selected = NULL_ENTITY;
 };

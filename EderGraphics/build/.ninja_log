@@ -14,11 +14,11 @@
 37	11627	7941015995408527	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanDebugOverlay.cpp.obj	2e4b9195d8cd3526
 61	12290	7941015995698884	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPipeline.cpp.obj	39611b8860c52634
 28	4685	7941016356303625	CMakeFiles/EderGraphics.dir/src/Renderer/VulkanRenderer.cpp.obj	4b38e1f6b2888ea2
-102	10574	7941015996107958	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSwapchain.cpp.obj	171c6389efc664ea
+24	4797	7941161769185686	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSwapchain.cpp.obj	171c6389efc664ea
 22	11687	7941015995295565	CMakeFiles/EderGraphics.dir/src/Core/LightBuffer.cpp.obj	1902eb346db95679
 9626	15832	7941016091347272	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanTexture.cpp.obj	1d680e78e15da465
-4685	4888	7941016403866371	EderGraphics.dll	d831b2b0799eb459
-4685	4888	7941016403866371	EderGraphics.lib	d831b2b0799eb459
+4797	5097	7941161816919711	EderGraphics.dll	d831b2b0799eb459
+4797	5097	7941161816919711	EderGraphics.lib	d831b2b0799eb459
 89	11659	7941015995980907	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSkybox.cpp.obj	f0289e825205dc17
 96	11141	7941015996046206	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSpotShadowMap.cpp.obj	e56fb236e4442105
 71	11807	7941015995795302	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPointShadowPipeline.cpp.obj	e702127c92c9c70a

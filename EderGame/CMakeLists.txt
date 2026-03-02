@@ -16,6 +16,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # set(CMAKE_MAKE_PROGRAM "ninja")
 
 # Paths
+set(EDERCORE_DIR ${CMAKE_SOURCE_DIR}/../EderCore)
 set(EDERGRAPHICS_DIR ${CMAKE_SOURCE_DIR}/../EderGraphics)
 set(EDERGRAPHICS_INCLUDE ${EDERGRAPHICS_DIR}/src)
 set(EDERGRAPHICS_VENDOR_INCLUDE ${EDERGRAPHICS_DIR}/vendor/include)
@@ -48,6 +49,7 @@ add_executable(EderGame ${GAME_SOURCES} ${IMGUI_SOURCES})
 # --------------------------------------------------
 target_include_directories(EderGame PRIVATE
     src
+    ${EDERCORE_DIR}/src
     ${EDERGRAPHICS_INCLUDE}
     ${EDERGRAPHICS_VENDOR_INCLUDE}
     ${CMAKE_SOURCE_DIR}/vendor/include

@@ -323,6 +323,10 @@ void main()
 
     result += baseColor * fragEmissive;
 
+    // Gamma correction: swapchain is UNORM (no auto sRGB conversion by GPU),
+    // so we convert linear light output to sRGB manually here.
+    result = pow(max(result, vec3(0.0)), vec3(1.0 / 2.2));
+
     float alpha = fragColor.a * texture(albedoTex, fragUV).a;
     outColor = vec4(result, alpha);
 }

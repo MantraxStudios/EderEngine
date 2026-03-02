@@ -104,8 +104,15 @@ SwapchainSupportDetails VulkanSwapchain::QuerySupport()
 
 vk::SurfaceFormatKHR VulkanSwapchain::ChooseFormat(const std::vector<vk::SurfaceFormatKHR>& formats)
 {
+    // Prefer UNORM so the GPU does NOT apply automatic sRGB gamma conversion.
+    // Gamma correction is applied manually in fragment shaders, which lets ImGui
+    // (and other UI) write already-correct sRGB values without being double-corrected.
     for (const auto& f : formats)
-        if (f.format == vk::Format::eB8G8R8A8Srgb && f.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+        if (f.format == vk::Format::eB8G8R8A8Unorm && f.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
+            return f;
+    // Fallback: any UNORM variant
+    for (const auto& f : formats)
+        if (f.format == vk::Format::eR8G8B8A8Unorm && f.colorSpace == vk::ColorSpaceKHR::eSrgbNonlinear)
             return f;
     return formats.front();
 }
