@@ -27,13 +27,12 @@
 #include "Core/Scene.h"
 #include "Core/LightBuffer.h"
 #include "EderCore.h"
-#include "VulkanGizmo.h"
-#include "VulkanSunShafts.h"
-#include "VulkanOcclusionPass.h"
-#include "VulkanVolumetricLight.h"
-#include "VulkanVolumetricFog.h"
+#include "Renderer/Vulkan/VulkanGizmo.h"
+#include "Renderer/Vulkan/VulkanSunShafts.h"
+#include "Renderer/Vulkan/VulkanOcclusionPass.h"
+#include "Renderer/Vulkan/VulkanVolumetricLight.h"
+#include "Renderer/Vulkan/VulkanVolumetricFog.h"
 #include "Renderer/Vulkan/BoneSSBO.h"
-#include "ECS/Components/VolumetricLightComponent.h"
 #include "ECS/Components/VolumetricFogComponent.h"
 #include "ECS/Components/AnimationComponent.h"
 #include <glm/gtc/constants.hpp>
@@ -634,16 +633,20 @@ int main()
         // postFb tracks the latest composited framebuffer (starts on debugFb, advances with each pass)
         VulkanFramebuffer* postFb = &debugFb;
         {
-            VolumetricLightComponent* volComp = nullptr;
-            registry.Each<VolumetricLightComponent>([&](Entity e, VolumetricLightComponent& v) {
-                if (v.enabled && !volComp) volComp = &v;
+            LightComponent* volComp = nullptr;
+            registry.Each<LightComponent>([&](Entity e, LightComponent& l) {
+                if (l.volumetricEnabled && !volComp) volComp = &l;
             });
 
-            if (volComp && hasDir)
+            if (volComp)
             {
-                glm::vec3 sunWorldDir = glm::normalize(-activeDirDir);
-                // Fade out below horizon
-                float sunAbove = glm::clamp(sunWorldDir.y * 5.0f + 1.0f, 0.0f, 1.0f);
+                glm::vec3 sunWorldDir = hasDir
+                    ? glm::normalize(-activeDirDir)
+                    : glm::vec3(0.0f, 1.0f, 0.0f);  // no directional → sun contribution will be 0
+                // Fade directional scatter out below horizon
+                float sunAbove = hasDir
+                    ? glm::clamp(sunWorldDir.y * 5.0f + 1.0f, 0.0f, 1.0f)
+                    : 0.0f;
 
                 glm::mat4 view  = camera.GetView();
                 glm::mat4 proj  = camera.GetProjection(dbAspect);
@@ -657,18 +660,18 @@ int main()
                     cascadeMatrices,
                     cascadeSplits,
                     sunWorldDir,
-                    activeDirColor,
-                    activeDirIntensity,
+                    hasDir ? activeDirColor     : glm::vec3(0.0f),
+                    hasDir ? activeDirIntensity : 0.0f,
                     camera.GetPosition(),
                     lights.GetDescriptorSet(),
-                    volComp->numSteps,
-                    volComp->density,
-                    volComp->absorption,
-                    volComp->g,
-                    volComp->intensity * sunAbove,
-                    volComp->maxDistance,
-                    volComp->jitter,
-                    volComp->tint);
+                    volComp->volNumSteps,
+                    volComp->volDensity,
+                    volComp->volAbsorption,
+                    volComp->volG,
+                    volComp->volIntensity * sunAbove,
+                    volComp->volMaxDistance,
+                    volComp->volJitter,
+                    volComp->volTint);
 
                 volumetricLight.GetOutput().TransitionToShaderRead(cmd);
                 postFb = &volumetricLight.GetOutput();
@@ -713,9 +716,9 @@ int main()
 
         // --- Sun Shafts post-process ---
         {
-            SunShaftsComponent* shaftsComp = nullptr;
-            registry.Each<SunShaftsComponent>([&](Entity e, SunShaftsComponent& ss) {
-                if (ss.enabled && !shaftsComp) shaftsComp = &ss;
+            LightComponent* shaftsComp = nullptr;
+            registry.Each<LightComponent>([&](Entity e, LightComponent& l) {
+                if (l.sunShaftsEnabled && l.type == LightType::Directional && !shaftsComp) shaftsComp = &l;
             });
 
             if (shaftsComp && activeDirDir != glm::vec3(0.0f))
@@ -738,7 +741,7 @@ int main()
                 // Occlusion pass — builds depth-aware sun disk + sky mask
                 occlusionPass.Draw(cmd,
                     debugFb.GetDepthView(), debugFb.GetSampler(),
-                    sunUV, shaftsComp->sunRadius);
+                    sunUV, shaftsComp->shaftsSunRadius);
 
                 // Sun shafts reads from postFb so volumetric + god-rays stack correctly
                 sunShafts.Draw(cmd,
@@ -746,10 +749,10 @@ int main()
                     occlusionPass.GetView(),
                     debugFb.GetDepthView(),
                     sunUV,
-                    shaftsComp->density,    shaftsComp->bloomScale,
-                    shaftsComp->decay,      shaftsComp->weight,
-                    shaftsComp->exposure,
-                    shaftsComp->tint,
+                    shaftsComp->shaftsDensity,    shaftsComp->shaftsBloomScale,
+                    shaftsComp->shaftsDecay,      shaftsComp->shaftsWeight,
+                    shaftsComp->shaftsExposure,
+                    shaftsComp->shaftsTint,
                     sunHeight);
                 sunShafts.GetOutput().TransitionToShaderRead(cmd);
                 editor.SetSceneViewFramebuffer(&sunShafts.GetOutput());

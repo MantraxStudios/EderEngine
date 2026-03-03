@@ -48,6 +48,8 @@ endif()
 
 add_library(EderGraphics SHARED ${SOURCES})
 
+set(EDERCORE_DIR ${CMAKE_SOURCE_DIR}/../EderCore)
+
 # --------------------------------------------------
 # Includes
 # --------------------------------------------------
@@ -55,6 +57,7 @@ add_library(EderGraphics SHARED ${SOURCES})
 target_include_directories(EderGraphics PRIVATE
     src
     ${VENDOR_INCLUDE_DIR}
+    ${EDERCORE_DIR}/src
 )
 
 # --------------------------------------------------

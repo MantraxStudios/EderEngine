@@ -17,8 +17,6 @@ private:
     void DrawTransformComponent();
     void DrawMeshRendererComponent();
     void DrawLightComponent();
-    void DrawSunShaftsComponent();
-    void DrawVolumetricLightComponent();
     void DrawVolumetricFogComponent();
     void DrawAnimationComponent();
     void DrawAddComponent();

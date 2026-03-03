@@ -9,7 +9,6 @@
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/MeshRendererComponent.h"
 #include "ECS/Components/LightComponent.h"
-#include "ECS/Components/SunShaftsComponent.h"
 #include "ECS/Components/AnimationComponent.h"
 
 // ── Systems ──────────────────────────────────────────────────────────────────

@@ -23,7 +23,8 @@ void main()
     // Disco visual del sol (controlado por sunRadius).
     // Sin exp falloff por distancia: cuando el sol esta fuera de pantalla
     // el cielo visible sigue aportando energia para los rayos de interior.
-    float sunDisk = smoothstep(sunRadius, sunRadius * 0.5, dist);
+    // edge0 must be < edge1 per GLSL spec; use (1 - smoothstep) for the inverse.
+    float sunDisk = 1.0 - smoothstep(sunRadius * 0.5, sunRadius, dist);
 
     // Gaussian glow centrado en el sol: solo el area cercana al sol aporta
     // energia a los rayos. Evita que todo el cielo blanco sea fuente uniforme.

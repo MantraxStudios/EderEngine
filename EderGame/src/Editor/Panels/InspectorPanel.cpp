@@ -3,8 +3,6 @@
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/MeshRendererComponent.h"
 #include "ECS/Components/LightComponent.h"
-#include "ECS/Components/SunShaftsComponent.h"
-#include "ECS/Components/VolumetricLightComponent.h"
 #include "ECS/Components/VolumetricFogComponent.h"
 #include "ECS/Components/AnimationComponent.h"
 #include "Core/MaterialManager.h"
@@ -90,8 +88,6 @@ void InspectorPanel::OnDraw()
     DrawTransformComponent();
     DrawMeshRendererComponent();
     DrawLightComponent();
-    DrawSunShaftsComponent();
-    DrawVolumetricLightComponent();
     DrawVolumetricFogComponent();
     DrawAnimationComponent();
 
@@ -212,56 +208,48 @@ void InspectorPanel::DrawLightComponent()
         }
         ImGui::Spacing();
         ImGui::Checkbox("Cast Shadow", &l.castShadow);
-    }
-    ImGui::PopID();
-}
 
-void InspectorPanel::DrawSunShaftsComponent()
-{
-    if (!registry->Has<SunShaftsComponent>(selected)) return;
-    ImGui::PushID("SunShafts");
-    if (ComponentHeader<SunShaftsComponent>("Sun Shafts", registry, selected, ImVec4(1.0f, 0.7f, 0.2f, 1.0f)))
-    {
-        auto& s = registry->Get<SunShaftsComponent>(selected);
-        ImGui::Checkbox("Enabled",      &s.enabled);
+        // -- Volumetric Light (all light types) --
+        ImGui::Spacing();
         ImGui::Separator();
-        ImGui::TextDisabled("-- Shafts (god rays) --");
-        ImGui::DragFloat("Density",     &s.density,    0.05f,  0.0f, 20.0f);
-        ImGui::DragFloat("Weight",      &s.weight,     0.01f,  0.0f,  3.0f);
-        ImGui::DragFloat("Decay",       &s.decay,      0.005f, 0.5f,  0.999f);
-        ImGui::DragFloat("Sun Radius",  &s.sunRadius,  0.002f, 0.005f, 0.2f);
-        ImGui::Separator();
-        ImGui::TextDisabled("-- Bloom / Glare --");
-        ImGui::DragFloat("Bloom Scale", &s.bloomScale, 0.05f, 0.0f, 10.0f);
-        ImGui::DragFloat("Exposure",    &s.exposure,   0.005f,0.0f,  1.0f);
-        ImGui::Separator();
-        ImGui::ColorEdit3("Tint",       &s.tint.x);
-    }
-    ImGui::PopID();
-}
+        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Volumetric Light");
+        ImGui::Checkbox("Enabled##vol", &l.volumetricEnabled);
+        if (l.volumetricEnabled)
+        {
+            ImGui::TextDisabled("-- Ray March --");
+            ImGui::DragInt  ("Steps##vol",        &l.volNumSteps,    1,     8,    256);
+            ImGui::DragFloat("Max Distance##vol", &l.volMaxDistance, 1.0f,  1.0f, 500.0f);
+            ImGui::DragFloat("Jitter##vol",       &l.volJitter,      0.05f, 0.0f, 2.0f);
+            ImGui::TextDisabled("-- Participating Medium --");
+            ImGui::DragFloat("Density##vol",      &l.volDensity,     0.001f, 0.0f, 1.0f, "%.4f");
+            ImGui::DragFloat("Absorption##vol",   &l.volAbsorption,  0.001f, 0.0f, 1.0f, "%.4f");
+            ImGui::DragFloat("Anisotropy g##vol", &l.volG,           0.01f, -0.99f, 0.99f);
+            ImGui::TextDisabled("-- Output --");
+            ImGui::DragFloat("Intensity##vol",    &l.volIntensity,   0.01f, 0.0f, 5.0f);
+            ImGui::ColorEdit3("Tint##vol",        &l.volTint.x);
+        }
 
-void InspectorPanel::DrawVolumetricLightComponent()
-{
-    if (!registry->Has<VolumetricLightComponent>(selected)) return;
-    ImGui::PushID("VolumetricLight");
-    if (ComponentHeader<VolumetricLightComponent>("Volumetric Light", registry, selected, ImVec4(0.4f, 0.8f, 1.0f, 1.0f)))
-    {
-        auto& v = registry->Get<VolumetricLightComponent>(selected);
-        ImGui::Checkbox("Enabled",      &v.enabled);
-        ImGui::Separator();
-        ImGui::TextDisabled("-- Ray March --");
-        ImGui::DragInt  ("Steps",       &v.numSteps,    1,     8,    256);
-        ImGui::DragFloat("Max Distance",&v.maxDistance, 1.0f,  1.0f, 500.0f);
-        ImGui::DragFloat("Jitter",      &v.jitter,      0.05f, 0.0f, 2.0f);
-        ImGui::Separator();
-        ImGui::TextDisabled("-- Participating Medium --");
-        ImGui::DragFloat("Density",     &v.density,     0.001f, 0.0f, 1.0f, "%.4f");
-        ImGui::DragFloat("Absorption",  &v.absorption,  0.001f, 0.0f, 1.0f, "%.4f");
-        ImGui::DragFloat("Anisotropy g",&v.g,           0.01f, -0.99f, 0.99f);
-        ImGui::Separator();
-        ImGui::TextDisabled("-- Output --");
-        ImGui::DragFloat("Intensity",   &v.intensity,   0.01f, 0.0f, 5.0f);
-        ImGui::ColorEdit3("Tint",       &v.tint.x);
+        if (l.type == LightType::Directional)
+        {
+            // -- Sun Shafts (Directional only) --
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "Sun Shafts");
+            ImGui::Checkbox("Enabled##ss", &l.sunShaftsEnabled);
+            if (l.sunShaftsEnabled)
+            {
+                ImGui::TextDisabled("-- Shafts (god rays) --");
+                ImGui::DragFloat("Density##ss",     &l.shaftsDensity,    0.05f,  0.0f, 20.0f);
+                ImGui::DragFloat("Weight##ss",      &l.shaftsWeight,     0.01f,  0.0f,  3.0f);
+                ImGui::DragFloat("Decay##ss",       &l.shaftsDecay,      0.005f, 0.5f,  0.999f);
+                ImGui::DragFloat("Sun Radius##ss",  &l.shaftsSunRadius,  0.002f, 0.005f, 0.2f);
+                ImGui::TextDisabled("-- Bloom / Glare --");
+                ImGui::DragFloat("Bloom Scale##ss", &l.shaftsBloomScale, 0.05f, 0.0f, 10.0f);
+                ImGui::DragFloat("Exposure##ss",    &l.shaftsExposure,   0.005f, 0.0f, 1.0f);
+                ImGui::Separator();
+                ImGui::ColorEdit3("Tint##ss",       &l.shaftsTint.x);
+            }
+        }
     }
     ImGui::PopID();
 }
@@ -338,12 +326,10 @@ void InspectorPanel::DrawAddComponent()
     const bool canAddTransform    = !registry->Has<TransformComponent>(selected);
     const bool canAddMeshRenderer = !registry->Has<MeshRendererComponent>(selected);
     const bool canAddLight        = !registry->Has<LightComponent>(selected);
-    const bool canAddSunShafts    = !registry->Has<SunShaftsComponent>(selected);
-    const bool canAddVolumetric   = !registry->Has<VolumetricLightComponent>(selected);
     const bool canAddFog          = !registry->Has<VolumetricFogComponent>(selected);
     const bool canAddAnim         = !registry->Has<AnimationComponent>(selected);
     const bool anyAvailable       = canAddTransform || canAddMeshRenderer || canAddLight
-                                 || canAddSunShafts || canAddVolumetric || canAddFog || canAddAnim;
+                                 || canAddFog || canAddAnim;
 
     float btnW = ImGui::GetContentRegionAvail().x;
     ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
@@ -359,13 +345,11 @@ void InspectorPanel::DrawAddComponent()
     {
         ImGui::TextDisabled("COMPONENTS");
         ImGui::Separator();
-        if (canAddTransform    && ImGui::MenuItem("   Transform"))        registry->Add<TransformComponent>(selected);
-        if (canAddMeshRenderer && ImGui::MenuItem("   Mesh Renderer"))    registry->Add<MeshRendererComponent>(selected);
-        if (canAddLight        && ImGui::MenuItem("   Light"))            registry->Add<LightComponent>(selected);
-        if (canAddSunShafts    && ImGui::MenuItem("   Sun Shafts"))       registry->Add<SunShaftsComponent>(selected);
-        if (canAddVolumetric   && ImGui::MenuItem("   Volumetric Light")) registry->Add<VolumetricLightComponent>(selected);
-        if (canAddFog          && ImGui::MenuItem("   Volumetric Fog"))   registry->Add<VolumetricFogComponent>(selected);
-        if (canAddAnim         && ImGui::MenuItem("   Animation"))        registry->Add<AnimationComponent>(selected);
+        if (canAddTransform    && ImGui::MenuItem("   Transform"))      registry->Add<TransformComponent>(selected);
+        if (canAddMeshRenderer && ImGui::MenuItem("   Mesh Renderer"))  registry->Add<MeshRendererComponent>(selected);
+        if (canAddLight        && ImGui::MenuItem("   Light"))          registry->Add<LightComponent>(selected);
+        if (canAddFog          && ImGui::MenuItem("   Volumetric Fog")) registry->Add<VolumetricFogComponent>(selected);
+        if (canAddAnim         && ImGui::MenuItem("   Animation"))      registry->Add<AnimationComponent>(selected);
         ImGui::EndPopup();
     }
 }

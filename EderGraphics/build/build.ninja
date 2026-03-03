@@ -54,7 +54,7 @@ build CMakeFiles/EderGraphics.dir/src/Core/Camera.cpp.obj: CXX_COMPILER__EderGra
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Core\Camera.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Core
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -66,7 +66,7 @@ build CMakeFiles/EderGraphics.dir/src/Core/LightBuffer.cpp.obj: CXX_COMPILER__Ed
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Core\LightBuffer.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Core
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -78,7 +78,7 @@ build CMakeFiles/EderGraphics.dir/src/Core/Material.cpp.obj: CXX_COMPILER__EderG
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Core\Material.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Core
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -90,7 +90,7 @@ build CMakeFiles/EderGraphics.dir/src/Core/MaterialLayout.cpp.obj: CXX_COMPILER_
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Core\MaterialLayout.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Core
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -102,7 +102,7 @@ build CMakeFiles/EderGraphics.dir/src/Core/MaterialManager.cpp.obj: CXX_COMPILER
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Core\MaterialManager.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Core
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -114,7 +114,7 @@ build CMakeFiles/EderGraphics.dir/src/Core/MeshManager.cpp.obj: CXX_COMPILER__Ed
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Core\MeshManager.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Core
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -126,7 +126,7 @@ build CMakeFiles/EderGraphics.dir/src/Core/Scene.cpp.obj: CXX_COMPILER__EderGrap
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Core\Scene.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Core
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -138,7 +138,7 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/BoneSSBO.cpp.obj: CXX_COMP
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\BoneSSBO.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -150,7 +150,7 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanBuffer.cpp.obj: CXX_
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanBuffer.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -162,7 +162,7 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanDebugOverlay.cpp.obj
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanDebugOverlay.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -174,7 +174,7 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanDepthBuffer.cpp.obj:
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanDepthBuffer.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -186,7 +186,19 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanFramebuffer.cpp.obj:
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanFramebuffer.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
+  OBJECT_DIR = CMakeFiles\EderGraphics.dir
+  OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
+  TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
+  TARGET_PDB = EderGraphics.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\EderGraphics.dir
+
+build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanGizmo.cpp.obj: CXX_COMPILER__EderGraphics_unscanned_Debug C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src/Renderer/Vulkan/VulkanGizmo.cpp || cmake_object_order_depends_target_EderGraphics
+  CONFIG = Debug
+  DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
+  DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanGizmo.cpp.obj.d
+  FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -198,7 +210,7 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanInstance.cpp.obj: CX
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanInstance.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -210,7 +222,7 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanInstanceBuffer.cpp.o
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanInstanceBuffer.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -222,7 +234,19 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanMesh.cpp.obj: CXX_CO
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanMesh.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
+  OBJECT_DIR = CMakeFiles\EderGraphics.dir
+  OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
+  TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
+  TARGET_PDB = EderGraphics.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\EderGraphics.dir
+
+build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanOcclusionPass.cpp.obj: CXX_COMPILER__EderGraphics_unscanned_Debug C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src/Renderer/Vulkan/VulkanOcclusionPass.cpp || cmake_object_order_depends_target_EderGraphics
+  CONFIG = Debug
+  DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
+  DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanOcclusionPass.cpp.obj.d
+  FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -234,7 +258,7 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPipeline.cpp.obj: CX
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanPipeline.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -246,7 +270,7 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPointShadowMap.cpp.o
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanPointShadowMap.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -258,7 +282,7 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPointShadowPipeline.
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanPointShadowPipeline.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -270,7 +294,7 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanShadowMap.cpp.obj: C
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanShadowMap.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -282,7 +306,7 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanShadowPipeline.cpp.o
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanShadowPipeline.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -294,7 +318,7 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSkybox.cpp.obj: CXX_
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanSkybox.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -306,7 +330,19 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSpotShadowMap.cpp.ob
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanSpotShadowMap.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
+  OBJECT_DIR = CMakeFiles\EderGraphics.dir
+  OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
+  TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
+  TARGET_PDB = EderGraphics.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\EderGraphics.dir
+
+build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSunShafts.cpp.obj: CXX_COMPILER__EderGraphics_unscanned_Debug C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src/Renderer/Vulkan/VulkanSunShafts.cpp || cmake_object_order_depends_target_EderGraphics
+  CONFIG = Debug
+  DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
+  DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanSunShafts.cpp.obj.d
+  FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -318,7 +354,7 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSwapchain.cpp.obj: C
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanSwapchain.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -330,7 +366,31 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanTexture.cpp.obj: CXX
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanTexture.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
+  OBJECT_DIR = CMakeFiles\EderGraphics.dir
+  OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
+  TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
+  TARGET_PDB = EderGraphics.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\EderGraphics.dir
+
+build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanVolumetricFog.cpp.obj: CXX_COMPILER__EderGraphics_unscanned_Debug C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src/Renderer/Vulkan/VulkanVolumetricFog.cpp || cmake_object_order_depends_target_EderGraphics
+  CONFIG = Debug
+  DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
+  DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanVolumetricFog.cpp.obj.d
+  FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
+  OBJECT_DIR = CMakeFiles\EderGraphics.dir
+  OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
+  TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
+  TARGET_PDB = EderGraphics.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\EderGraphics.dir
+
+build CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanVolumetricLight.cpp.obj: CXX_COMPILER__EderGraphics_unscanned_Debug C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src/Renderer/Vulkan/VulkanVolumetricLight.cpp || cmake_object_order_depends_target_EderGraphics
+  CONFIG = Debug
+  DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
+  DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan\VulkanVolumetricLight.cpp.obj.d
+  FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer\Vulkan
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -342,7 +402,7 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/VulkanRenderer.cpp.obj: CXX_COMPI
   DEFINES = -DEDERGRAPHICS_EXPORTS -DEderGraphics_EXPORTS -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
   DEP_FILE = CMakeFiles\EderGraphics.dir\src\Renderer\VulkanRenderer.cpp.obj.d
   FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
-  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/../EderCore/src
   OBJECT_DIR = CMakeFiles\EderGraphics.dir
   OBJECT_FILE_DIR = CMakeFiles\EderGraphics.dir\src\Renderer
   TARGET_COMPILE_PDB = CMakeFiles\EderGraphics.dir\
@@ -357,7 +417,7 @@ build CMakeFiles/EderGraphics.dir/src/Renderer/VulkanRenderer.cpp.obj: CXX_COMPI
 #############################################
 # Link the shared library EderGraphics.dll
 
-build EderGraphics.dll EderGraphics.lib: CXX_SHARED_LIBRARY_LINKER__EderGraphics_Debug CMakeFiles/EderGraphics.dir/src/Core/Camera.cpp.obj CMakeFiles/EderGraphics.dir/src/Core/LightBuffer.cpp.obj CMakeFiles/EderGraphics.dir/src/Core/Material.cpp.obj CMakeFiles/EderGraphics.dir/src/Core/MaterialLayout.cpp.obj CMakeFiles/EderGraphics.dir/src/Core/MaterialManager.cpp.obj CMakeFiles/EderGraphics.dir/src/Core/MeshManager.cpp.obj CMakeFiles/EderGraphics.dir/src/Core/Scene.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/BoneSSBO.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanBuffer.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanDebugOverlay.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanDepthBuffer.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanFramebuffer.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanInstance.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanInstanceBuffer.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanMesh.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPipeline.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPointShadowMap.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPointShadowPipeline.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanShadowMap.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanShadowPipeline.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSkybox.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSpotShadowMap.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSwapchain.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanTexture.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/VulkanRenderer.cpp.obj | C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/lib/SDL3.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/lib/assimp-vc143-mt.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/lib/vulkan-1.lib
+build EderGraphics.dll EderGraphics.lib: CXX_SHARED_LIBRARY_LINKER__EderGraphics_Debug CMakeFiles/EderGraphics.dir/src/Core/Camera.cpp.obj CMakeFiles/EderGraphics.dir/src/Core/LightBuffer.cpp.obj CMakeFiles/EderGraphics.dir/src/Core/Material.cpp.obj CMakeFiles/EderGraphics.dir/src/Core/MaterialLayout.cpp.obj CMakeFiles/EderGraphics.dir/src/Core/MaterialManager.cpp.obj CMakeFiles/EderGraphics.dir/src/Core/MeshManager.cpp.obj CMakeFiles/EderGraphics.dir/src/Core/Scene.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/BoneSSBO.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanBuffer.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanDebugOverlay.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanDepthBuffer.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanFramebuffer.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanGizmo.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanInstance.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanInstanceBuffer.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanMesh.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanOcclusionPass.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPipeline.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPointShadowMap.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPointShadowPipeline.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanShadowMap.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanShadowPipeline.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSkybox.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSpotShadowMap.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSunShafts.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSwapchain.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanTexture.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanVolumetricFog.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanVolumetricLight.cpp.obj CMakeFiles/EderGraphics.dir/src/Renderer/VulkanRenderer.cpp.obj | C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/lib/SDL3.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/lib/assimp-vc143-mt.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGraphics/vendor/lib/vulkan-1.lib
   CONFIG = Debug
   LANGUAGE_COMPILE_FLAGS = -O0 -g -Xclang -gcodeview -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd
   LINK_FLAGS = -shared -fuse-ld=lld-link
