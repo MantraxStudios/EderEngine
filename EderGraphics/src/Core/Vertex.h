@@ -5,12 +5,14 @@
 
 struct Vertex
 {
-    glm::vec3 position;
-    glm::vec3 normal;
-    glm::vec2 uv;
-    glm::vec3 tangent;
-    glm::vec3 bitangent;
-    glm::vec4 color;
+    glm::vec3  position;
+    glm::vec3  normal;
+    glm::vec2  uv;
+    glm::vec3  tangent;
+    glm::vec3  bitangent;
+    glm::vec4  color;
+    glm::uvec4 boneIndices = glm::uvec4(0);  // up to 4 bone influences per vertex
+    glm::vec4  boneWeights = glm::vec4(0.0f); // corresponding blend weights (0 = no skinning)
 
     static vk::VertexInputBindingDescription GetBindingDescription()
     {
@@ -21,9 +23,9 @@ struct Vertex
         return binding;
     }
 
-    static std::array<vk::VertexInputAttributeDescription, 6> GetAttributeDescriptions()
+    static std::array<vk::VertexInputAttributeDescription, 8> GetAttributeDescriptions()
     {
-        std::array<vk::VertexInputAttributeDescription, 6> attrs{};
+        std::array<vk::VertexInputAttributeDescription, 8> attrs{};
 
         attrs[0].binding  = 0;
         attrs[0].location = 0;
@@ -54,6 +56,18 @@ struct Vertex
         attrs[5].location = 5;
         attrs[5].format   = vk::Format::eR32G32B32A32Sfloat;
         attrs[5].offset   = offsetof(Vertex, color);
+
+        // Bone indices — uint32 x4 (location 6)
+        attrs[6].binding  = 0;
+        attrs[6].location = 6;
+        attrs[6].format   = vk::Format::eR32G32B32A32Uint;
+        attrs[6].offset   = offsetof(Vertex, boneIndices);
+
+        // Bone weights — float x4 (location 7)
+        attrs[7].binding  = 0;
+        attrs[7].location = 7;
+        attrs[7].format   = vk::Format::eR32G32B32A32Sfloat;
+        attrs[7].offset   = offsetof(Vertex, boneWeights);
 
         return attrs;
     }

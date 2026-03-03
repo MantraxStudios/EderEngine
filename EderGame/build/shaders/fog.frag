@@ -9,15 +9,14 @@ layout(set = 0, binding = 1) uniform sampler2D depthTex;
 layout(set = 0, binding = 2) uniform FogUBO
 {
     mat4  invViewProj;
-    vec4  camPos;           // xyz = camera world position
-    vec4  fogColor;         // xyz = base fog colour,    w = density
-    vec4  horizonColor;     // xyz = horizon fog colour, w = heightFalloff
-    vec4  sunScatterColor;  // xyz = sun glow colour,    w = scatter strength
-    vec4  lightDir;         // xyz = direction toward sun (normalised), w = sun intensity
-    vec4  params;           // x = heightOffset, y = maxFogAmount, z = fogStart, w = fogEnd
+    vec4  camPos;
+    vec4  fogColor;
+    vec4  horizonColor;
+    vec4  sunScatterColor;
+    vec4  lightDir;
+    vec4  params;
 } ubo;
 
-// ── Set 1 : LightBuffer ───────────────────────────────────────────────────────
 #define MAX_DIR_LIGHTS   4
 #define MAX_POINT_LIGHTS 16
 #define MAX_SPOT_LIGHTS   8
@@ -30,12 +29,11 @@ struct SpotLight  { vec3 position; float innerCos; vec3 direction; float outerCo
                     vec3 color; float intensity; float radius; int shadowIdx;
                     float _p0; float _p1; };
 
-// Correct std140 layout: dir → point → spot → counts (matches Lights.h exactly)
 layout(set = 1, binding = 0) uniform LightUBO
 {
-    DirectionalLight dirLights[MAX_DIR_LIGHTS];      // 4 × 32  = 128 bytes
-    PointLight       pointLights[MAX_POINT_LIGHTS];  // 16 × 48 = 768 bytes
-    SpotLight        spotLights[MAX_SPOT_LIGHTS];    // 8 × 64  = 512 bytes
+    DirectionalLight dirLights[MAX_DIR_LIGHTS];
+    PointLight       pointLights[MAX_POINT_LIGHTS];
+    SpotLight        spotLights[MAX_SPOT_LIGHTS];
     int   numDirLights;
     int   numPointLights;
     int   numSpotLights;
@@ -50,7 +48,6 @@ layout(set = 1, binding = 0) uniform LightUBO
     vec4  groundAmbient;
 } lights;
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
 vec3 ReconstructWorldPos(vec2 uv, float depth)
 {
     vec4 ndc   = vec4(uv * 2.0 - 1.0, depth, 1.0);
@@ -73,8 +70,6 @@ float DistAtten(float dist, float radius)
     return f * f;
 }
 
-// Returns chord length through the sphere along the view ray (0 if it misses).
-// Uses closest-approach distance; clamps t to [0, marchDist].
 float RaySphereChord(vec3 origin, vec3 dir, float marchDist, vec3 center, float radius)
 {
     vec3  oc = center - origin;
@@ -86,7 +81,6 @@ float RaySphereChord(vec3 origin, vec3 dir, float marchDist, vec3 center, float 
     return 2.0 * sqrt(r2 - d2);
 }
 
-// ── Main ─────────────────────────────────────────────────────────────────────
 void main()
 {
     vec3  sceneColor = texture(sceneTex, fragUV).rgb;
@@ -109,7 +103,7 @@ void main()
     float fogEnd        = ubo.params.w;
     float marchDist     = min(dist, fogEnd);
 
-    // ── Height-based exponential fog ─────────────────────────────────────────
+    // Height-based exponential fog
     float avgH      = ((camPos.y) + (isSky ? camPos.y : worldPos.y)) * 0.5;
     float heightFog = density * exp(-heightFalloff * max(avgH - heightOffset, 0.0));
 
@@ -117,20 +111,26 @@ void main()
     fogFactor = clamp(fogFactor, 0.0, maxFogAmount);
     fogFactor *= clamp((dist - fogStart) / max(fogStart * 0.15 + 0.5, 0.5), 0.0, 1.0);
 
-    // ── Atmospheric colour (sun scatter) ─────────────────────────────────────
-    float horizonBlend    = pow(1.0 - abs(rayDir.y), 3.0);
-    vec3  baseFogColor    = mix(ubo.fogColor.xyz, ubo.horizonColor.xyz, horizonBlend);
+    // Atmospheric colour
+    // horizonBlend capped at 0.85 to avoid full saturation at the exact horizon line
+    float horizonBlend = pow(clamp(1.0 - abs(rayDir.y), 0.0, 0.85), 3.0);
+    vec3  baseFogColor = mix(ubo.fogColor.xyz, ubo.horizonColor.xyz, horizonBlend);
+
+    // Sun scatter: attenuate by sun elevation so it fades when sun is below horizon.
+    // sunElevFade goes 0→1 as sun goes from -0.04 to +0.15 (same ramp as sky shader).
+    float sunY        = ubo.lightDir.y;
+    float sunElevFade = smoothstep(-0.04, 0.15, sunY);
+
     float cosTheta        = dot(rayDir, ubo.lightDir.xyz);
     float mie             = MiePhase(cosTheta, 0.76);
-    float scatterStrength = ubo.sunScatterColor.w * ubo.lightDir.w;
-    vec3  sunContrib      = ubo.sunScatterColor.xyz * mie * scatterStrength
-                            * (isSky ? 0.3 : 1.0) * fogFactor;
+    // Clamp mie peak so forward-scatter spike doesn't blow out the horizon.
+    mie                   = min(mie, 4.0);
+    float scatterStrength = ubo.sunScatterColor.w * ubo.lightDir.w * sunElevFade;
+    // Do NOT multiply by fogFactor here — the mix() at the end already gates it.
+    vec3  sunContrib = ubo.sunScatterColor.xyz * mie * scatterStrength
+                       * (isSky ? 0.3 : 1.0);
 
-    // ── Point light scatter (analytical ray-sphere) ───────────────────────────
-    // Each point light casts a glowing halo through the fog volume.
-    // Chord length = how "wide" the sphere looks along this ray.
-    // Weighted by local attenuation and overall fog density so it fades
-    // naturally where there is no fog.
+    // Point light scatter
     vec3 lightScatter = vec3(0.0);
     for (int p = 0; p < lights.numPointLights; p++)
     {
@@ -140,7 +140,6 @@ void main()
         float chord = RaySphereChord(camPos, rayDir, marchDist, lpos, lrad);
         if (chord <= 0.0) continue;
 
-        // Distance from ray to light centre at closest point
         vec3  oc    = lpos - camPos;
         float tc    = clamp(dot(oc, rayDir), 0.0, marchDist);
         float dCl   = length(lpos - (camPos + rayDir * tc));
@@ -151,7 +150,7 @@ void main()
                       * lights.pointLights[p].intensity * weight;
     }
 
-    // ── Spot light scatter (ray-sphere + cone check at closest point) ─────────
+    // Spot light scatter
     for (int s = 0; s < lights.numSpotLights; s++)
     {
         vec3  lpos  = lights.spotLights[s].position;
@@ -164,7 +163,6 @@ void main()
         float tc  = clamp(dot(oc, rayDir), 0.0, marchDist);
         vec3  cp  = camPos + rayDir * tc;
 
-        // Cone factor at the closest point on the ray
         vec3  toCP  = normalize(cp - lpos);
         float cosA  = dot(toCP, lights.spotLights[s].direction);
         float inner = lights.spotLights[s].innerCos;
@@ -179,7 +177,10 @@ void main()
                       * lights.spotLights[s].intensity * weight;
     }
 
-    // ── Composite ─────────────────────────────────────────────────────────────
+    // Sky pixels must not receive local light scatter — that would halo streetlights into the skybox.
+    // Sun scatter is fine at reduced strength (already handled by the isSky ? 0.3 : 1.0 above).
+    if (isSky) lightScatter = vec3(0.0);
+
     vec3 finalFogColor = baseFogColor + sunContrib + lightScatter;
     outColor = vec4(mix(sceneColor, finalFogColor, fogFactor), 1.0);
 }

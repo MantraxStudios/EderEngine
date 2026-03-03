@@ -283,8 +283,10 @@ void main()
     vec3 V         = normalize(lights.cameraPos - fragWorldPos);
 
     float hemi  = N.y * 0.5 + 0.5;
-    // Use sky-driven ambient set each frame from the procedural skybox sun direction.
-    vec3 result = baseColor * mix(lights.groundAmbient.rgb, lights.skyAmbient.rgb, hemi);
+    // Neutral fill ambient — skybox does not tint world objects.
+    // skyAmbient/groundAmbient are kept as a small constant set from CPU.
+    vec3 ambient = mix(lights.groundAmbient.rgb, lights.skyAmbient.rgb, hemi);
+    vec3 result  = baseColor * ambient;
 
     for (int i = 0; i < lights.numDirLights; i++)
     {

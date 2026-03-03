@@ -14,6 +14,7 @@ public:
     vk::raii::PipelineLayout&      GetLayout()                    { return pipelineLayout; }
     vk::raii::DescriptorSetLayout& GetDescriptorSetLayout()      { return descriptorSetLayout; }
     vk::raii::DescriptorSetLayout& GetLightDescriptorSetLayout() { return lightDescriptorSetLayout; }
+    vk::raii::DescriptorSetLayout& GetBoneDescriptorSetLayout()  { return boneDescriptorSetLayout; }
 
 private:
     std::vector<uint32_t>  LoadSpv(const std::string& path);
@@ -21,7 +22,9 @@ private:
 
     vk::raii::DescriptorSetLayout descriptorSetLayout      = nullptr;
     vk::raii::DescriptorSetLayout lightDescriptorSetLayout = nullptr;
+    vk::raii::DescriptorSetLayout boneDescriptorSetLayout  = nullptr;  // set 2 — bone SSBO
     vk::raii::PipelineLayout      pipelineLayout           = nullptr;
     vk::raii::Pipeline            pipeline                 = nullptr;  // opaque
     vk::raii::Pipeline            pipelineTransparent      = nullptr;  // alpha-blend
 };
+

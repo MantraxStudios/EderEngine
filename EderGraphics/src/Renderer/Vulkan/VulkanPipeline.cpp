@@ -58,7 +58,7 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
     for (uint32_t i = 0; i < 4; i++)
     {
         instanceAttrs[i].binding  = 1;
-        instanceAttrs[i].location = 6 + i;
+        instanceAttrs[i].location = 8 + i;  // vertex uses 0-7 (6=boneIdx, 7=boneWeights)
         instanceAttrs[i].format   = vk::Format::eR32G32B32A32Sfloat;
         instanceAttrs[i].offset   = sizeof(glm::vec4) * i;
     }
@@ -161,12 +161,25 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
 
     lightDescriptorSetLayout = vk::raii::DescriptorSetLayout(device, lightDslInfo);
 
+    // ── Set 2: bone SSBO (read-only storage buffer in vertex stage) ─────────
+    vk::DescriptorSetLayoutBinding boneBinding{};
+    boneBinding.binding         = 0;
+    boneBinding.descriptorType  = vk::DescriptorType::eStorageBuffer;
+    boneBinding.descriptorCount = 1;
+    boneBinding.stageFlags      = vk::ShaderStageFlagBits::eVertex;
+
+    vk::DescriptorSetLayoutCreateInfo boneDslInfo{};
+    boneDslInfo.bindingCount = 1;
+    boneDslInfo.pBindings    = &boneBinding;
+
+    boneDescriptorSetLayout = vk::raii::DescriptorSetLayout(device, boneDslInfo);
+
     vk::PushConstantRange pushConstant{};
     pushConstant.stageFlags = vk::ShaderStageFlagBits::eVertex;
     pushConstant.offset     = 0;
     pushConstant.size       = sizeof(glm::mat4);
 
-    std::array<vk::DescriptorSetLayout, 2> dsls = { *descriptorSetLayout, *lightDescriptorSetLayout };
+    std::array<vk::DescriptorSetLayout, 3> dsls = { *descriptorSetLayout, *lightDescriptorSetLayout, *boneDescriptorSetLayout };
 
     vk::PipelineLayoutCreateInfo layoutInfo{};
     layoutInfo.setLayoutCount         = static_cast<uint32_t>(dsls.size());
@@ -255,6 +268,7 @@ void VulkanPipeline::Destroy()
     pipelineTransparent      = nullptr;
     pipeline                 = nullptr;
     pipelineLayout           = nullptr;
+    boneDescriptorSetLayout  = nullptr;
     lightDescriptorSetLayout = nullptr;
     descriptorSetLayout      = nullptr;
 }

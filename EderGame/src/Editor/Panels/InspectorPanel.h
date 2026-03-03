@@ -20,6 +20,7 @@ private:
     void DrawSunShaftsComponent();
     void DrawVolumetricLightComponent();
     void DrawVolumetricFogComponent();
+    void DrawAnimationComponent();
     void DrawAddComponent();
 
     Registry* registry = nullptr;

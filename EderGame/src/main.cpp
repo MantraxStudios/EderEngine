@@ -20,6 +20,7 @@
 #include "Renderer/Vulkan/VulkanPointShadowPipeline.h"
 #include "Renderer/VulkanRenderer.h"
 #include "Core/MaterialManager.h"
+#include "Core/MeshManager.h"
 #include "Core/Material.h"
 #include "Core/MaterialLayout.h"
 #include "Core/Camera.h"
@@ -31,8 +32,10 @@
 #include "VulkanOcclusionPass.h"
 #include "VulkanVolumetricLight.h"
 #include "VulkanVolumetricFog.h"
+#include "Renderer/Vulkan/BoneSSBO.h"
 #include "ECS/Components/VolumetricLightComponent.h"
 #include "ECS/Components/VolumetricFogComponent.h"
+#include "ECS/Components/AnimationComponent.h"
 #include <glm/gtc/constants.hpp>
 
 int main()
@@ -52,7 +55,6 @@ int main()
     Editor editor;
 
     VulkanPipeline       pipeline;
-    VulkanMesh           mesh;
     VulkanTexture        albedoTex;
     Material             floorMat;
     Material             glassMat;
@@ -66,6 +68,7 @@ int main()
     VulkanOcclusionPass     occlusionPass;
     VulkanVolumetricLight   volumetricLight;
     VulkanVolumetricFog     volumetricFog;
+    BoneSSBO                boneSSBO;
     VulkanShadowMap          shadowMap;
     VulkanShadowPipeline     shadowPipeline;
     VulkanSpotShadowMap       spotShadowMap;
@@ -148,10 +151,6 @@ int main()
         glassMat2.BindTexture(0, albedoTex);
         glassMat3.BindTexture(0, albedoTex);
 
-        mesh.Load("assets/box.fbx");
-        if (mesh.GetIndexCount() == 0)
-            throw std::runtime_error("Mesh empty");
-
         // Scene starts empty — add entities at runtime via the editor
 
         // Shadow map must be created before lights.Build so the sampler is available
@@ -184,6 +183,7 @@ int main()
                                 *pipeline.GetLightDescriptorSetLayout());
         volumetricFog.Create(debugFb.GetColorFormat(), sc.GetExtent().width / 2, sc.GetExtent().height / 2,
                               *pipeline.GetLightDescriptorSetLayout());
+        boneSSBO.Create(pipeline);
         editor.SetSceneViewFramebuffer(&debugFb);
     }
     catch (const std::exception& e)
@@ -411,20 +411,9 @@ int main()
         lights.SetCameraForward(camForward);
         lights.Update(camera.GetPosition());
 
-        // Compute sky-driven ambient from the directional light (sun) direction.
-        // sunDirUp = how high the sun is. 1 = noon, 0 = horizon, <0 = below.
-        {
-            glm::vec3 sunDirUp = glm::normalize(-activeDirDir);
-            float sunY     = sunDirUp.y;
-            float sunAbove = glm::clamp(sunY * 5.0f + 1.0f, 0.0f, 1.0f);
-            // Interpolate sky colour: clear-blue at noon → warm orange near sunset
-            float t          = glm::clamp(1.0f - sunY * 4.0f, 0.0f, 1.0f);
-            glm::vec3 highSky    = glm::vec3(0.08f, 0.15f, 0.30f);
-            glm::vec3 sunsetSky  = glm::vec3(0.25f, 0.12f, 0.05f);
-            glm::vec3 skyAmb     = glm::mix(highSky, sunsetSky, t) * sunAbove;
-            glm::vec3 groundAmb  = glm::vec3(0.05f, 0.04f, 0.025f) * sunAbove;
-            lights.SetSkyAmbient(skyAmb, groundAmb);
-        }
+        // Neutral constant ambient — skybox colours do NOT affect world objects.
+        // Ambient is just a small fill light to prevent pure-black shadows.
+        lights.SetSkyAmbient(glm::vec3(0.04f), glm::vec3(0.04f));
 
         VulkanRenderer::Get().BeginFrame();
 
@@ -464,8 +453,9 @@ int main()
                 if (o.entityId == e) { exists = true; break; }
             if (!exists)
             {
-                Material& mat = MaterialManager::Get().Get(mr.materialName);
-                SceneObject& obj = scene.Add(mesh, mat);
+                Material& mat  = MaterialManager::Get().Get(mr.materialName);
+                VulkanMesh& m  = MeshManager::Get().Load(mr.meshPath);
+                SceneObject& obj = scene.Add(m, mat);
                 obj.entityId = e;
                 if (registry.Has<TransformComponent>(e))
                 {
@@ -531,12 +521,44 @@ int main()
         }
         pointShadowMap.TransitionToShaderRead(cmd, 0);
 
+        // ── Animation update ──────────────────────────────────────────────────────
+        {
+            std::vector<glm::mat4> boneMatrices(MAX_BONES, glm::mat4(1.0f));
+            registry.Each<AnimationComponent>([&](Entity e, AnimationComponent& anim) {
+                if (!anim.playing) return;
+                if (!registry.Has<MeshRendererComponent>(e)) return;
+                const auto& mr = registry.Get<MeshRendererComponent>(e);
+                if (!MeshManager::Get().Has(mr.meshPath)) return;
+                VulkanMesh& m = MeshManager::Get().Load(mr.meshPath);
+                if (m.GetBoneCount() == 0 || m.GetAnimationCount() == 0) return;
+
+                int clipIdx = glm::clamp(anim.animIndex, 0,
+                    static_cast<int>(m.GetAnimationCount()) - 1);
+                float duration = m.GetAnimationDuration(static_cast<uint32_t>(clipIdx));
+
+                anim.currentTime += dt * anim.speed;
+                if (!anim.loop && anim.currentTime >= duration)
+                {
+                    anim.currentTime = duration;  // clamp at last frame
+                    anim.playing     = false;
+                }
+
+                std::vector<glm::mat4> boneMats;
+                m.ComputeBoneTransforms(static_cast<uint32_t>(clipIdx), anim.currentTime, boneMats);
+                for (uint32_t i = 0; i < static_cast<uint32_t>(boneMats.size()) && i < MAX_BONES; i++)
+                    boneMatrices[i] = boneMats[i];
+            });
+            boneSSBO.Upload(boneMatrices);
+        }
+        // ─────────────────────────────────────────────────────────────────────
+
         // --- SceneView framebuffer pass (mismo contenido que el main pass) ---
         float dbAspect = static_cast<float>(debugFb.GetExtent().width) /
                          static_cast<float>(debugFb.GetExtent().height);
 
         debugFb.BeginRendering(cmd);
         pipeline.Bind(cmd);
+        boneSSBO.Bind(cmd, *pipeline.GetLayout());  // set 2 — bone matrices
         scene.Draw(cmd, pipeline, camera, dbAspect, lights);
         skybox.Draw(cmd, camera.GetView(), camera.GetProjection(dbAspect), -activeDirDir);
         pipeline.BindTransparent(cmd);
@@ -682,6 +704,7 @@ int main()
         // --- Main pass ---
         VulkanRenderer::Get().BeginMainPass();
         pipeline.Bind(cmd);
+        boneSSBO.Bind(cmd, *pipeline.GetLayout());  // re-bind for main pass
         scene.Draw(cmd, pipeline, camera, aspect, lights);
 
         // Skybox — drawn after opaques so depth test skips covered pixels
@@ -689,6 +712,7 @@ int main()
 
         // Transparents drawn after skybox so skybox doesn't overwrite them
         pipeline.Bind(cmd);
+        boneSSBO.Bind(cmd, *pipeline.GetLayout());  // re-bind for transparent pass
         scene.DrawTransparent(cmd, pipeline, camera, aspect, lights);
 
         debugOverlay.Draw(cmd, debugFb, shadowMap);
@@ -702,6 +726,7 @@ int main()
     VulkanInstance::Get().GetDevice().waitIdle();
     editor.Shutdown();
     gizmo.Destroy();
+    boneSSBO.Destroy();
     occlusionPass.Destroy();
     volumetricLight.Destroy();
     volumetricFog.Destroy();
@@ -717,9 +742,9 @@ int main()
     lights.Destroy();
     scene.Destroy();
     MaterialManager::Get().Destroy();
+    MeshManager::Get().Destroy();
     floorMat.Destroy();
     albedoTex.Destroy();
-    mesh.Destroy();
     pipeline.Destroy();
     SDL_DestroyWindow(window);
     SDL_Quit();

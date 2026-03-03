@@ -6,6 +6,7 @@
 #include "ECS/Components/SunShaftsComponent.h"
 #include "ECS/Components/VolumetricLightComponent.h"
 #include "ECS/Components/VolumetricFogComponent.h"
+#include "ECS/Components/AnimationComponent.h"
 #include "Core/MaterialManager.h"
 #include "Core/Material.h"
 #include <imgui/imgui.h>
@@ -92,6 +93,7 @@ void InspectorPanel::OnDraw()
     DrawSunShaftsComponent();
     DrawVolumetricLightComponent();
     DrawVolumetricFogComponent();
+    DrawAnimationComponent();
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -294,6 +296,28 @@ void InspectorPanel::DrawVolumetricFogComponent()
     ImGui::PopID();
 }
 
+void InspectorPanel::DrawAnimationComponent()
+{
+    if (!registry->Has<AnimationComponent>(selected)) return;
+    ImGui::PushID("Animation");
+    if (ComponentHeader<AnimationComponent>("Animation", registry, selected, ImVec4(0.8f, 0.5f, 1.0f, 1.0f)))
+    {
+        auto& a = registry->Get<AnimationComponent>(selected);
+        ImGui::Checkbox("Playing", &a.playing);
+        ImGui::SameLine(120);
+        ImGui::Checkbox("Loop",    &a.loop);
+        ImGui::DragInt  ("Clip Index", &a.animIndex, 1, 0, 255);
+        ImGui::DragFloat("Speed",      &a.speed,     0.01f, 0.0f, 10.0f);
+
+        ImGui::Separator();
+        ImGui::TextDisabled("-- Playback --");
+        ImGui::Text("Time: %.2f s", a.currentTime);
+        if (ImGui::Button("Reset"))
+            a.currentTime = 0.0f;
+    }
+    ImGui::PopID();
+}
+
 void InspectorPanel::DrawAddComponent()
 {
     const bool canAddTransform    = !registry->Has<TransformComponent>(selected);
@@ -302,7 +326,9 @@ void InspectorPanel::DrawAddComponent()
     const bool canAddSunShafts    = !registry->Has<SunShaftsComponent>(selected);
     const bool canAddVolumetric   = !registry->Has<VolumetricLightComponent>(selected);
     const bool canAddFog          = !registry->Has<VolumetricFogComponent>(selected);
-    const bool anyAvailable       = canAddTransform || canAddMeshRenderer || canAddLight || canAddSunShafts || canAddVolumetric || canAddFog;
+    const bool canAddAnim         = !registry->Has<AnimationComponent>(selected);
+    const bool anyAvailable       = canAddTransform || canAddMeshRenderer || canAddLight
+                                 || canAddSunShafts || canAddVolumetric || canAddFog || canAddAnim;
 
     float btnW = ImGui::GetContentRegionAvail().x;
     ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
@@ -318,12 +344,13 @@ void InspectorPanel::DrawAddComponent()
     {
         ImGui::TextDisabled("COMPONENTS");
         ImGui::Separator();
-        if (canAddTransform    && ImGui::MenuItem("   Transform"))     registry->Add<TransformComponent>(selected);
-        if (canAddMeshRenderer && ImGui::MenuItem("   Mesh Renderer")) registry->Add<MeshRendererComponent>(selected);
-        if (canAddLight        && ImGui::MenuItem("   Light"))         registry->Add<LightComponent>(selected);
-        if (canAddSunShafts    && ImGui::MenuItem("   Sun Shafts"))    registry->Add<SunShaftsComponent>(selected);
-        if (canAddVolumetric  && ImGui::MenuItem("   Volumetric Light")) registry->Add<VolumetricLightComponent>(selected);
-        if (canAddFog         && ImGui::MenuItem("   Volumetric Fog"))   registry->Add<VolumetricFogComponent>(selected);
+        if (canAddTransform    && ImGui::MenuItem("   Transform"))        registry->Add<TransformComponent>(selected);
+        if (canAddMeshRenderer && ImGui::MenuItem("   Mesh Renderer"))    registry->Add<MeshRendererComponent>(selected);
+        if (canAddLight        && ImGui::MenuItem("   Light"))            registry->Add<LightComponent>(selected);
+        if (canAddSunShafts    && ImGui::MenuItem("   Sun Shafts"))       registry->Add<SunShaftsComponent>(selected);
+        if (canAddVolumetric   && ImGui::MenuItem("   Volumetric Light")) registry->Add<VolumetricLightComponent>(selected);
+        if (canAddFog          && ImGui::MenuItem("   Volumetric Fog"))   registry->Add<VolumetricFogComponent>(selected);
+        if (canAddAnim         && ImGui::MenuItem("   Animation"))        registry->Add<AnimationComponent>(selected);
         ImGui::EndPopup();
     }
 }
