@@ -104,7 +104,8 @@ float SampleCascade(vec3 worldPos, vec3 N, vec3 L, int cascade)
     float recvZ = proj.z - bias;
 
     vec2  texelSize = 1.0 / vec2(textureSize(shadowMap, 0).xy);
-    float phi       = IGN(gl_FragCoord.xy) * 6.28318530;
+    // World-space hash: stable across frames regardless of camera movement
+    float phi       = fract(dot(worldPos.xz, vec2(127.1, 311.7))) * 6.28318530;
 
     // Blocker search — skip samples outside shadow map to avoid false "no blocker"
     const int   BLOCKER_N = 8;
@@ -183,7 +184,8 @@ float ShadowSpot(int slot, vec3 worldPos, vec3 N, vec3 L)
     float bias      = max(0.002 * (1.0 - NdotL), 0.0005);
     float recvZ     = proj.z - bias;
     vec2  texelSize = 1.0 / vec2(textureSize(spotShadowMap, 0).xy);
-    float phi       = IGN(gl_FragCoord.xy) * 6.28318530;
+    // World-space hash: stable across frames regardless of camera movement
+    float phi       = fract(dot(worldPos.xz, vec2(127.1, 311.7))) * 6.28318530;
 
     // Blocker search
     const int   BLOCKER_N = 8;
@@ -238,7 +240,8 @@ float ShadowPoint(int slot, vec3 worldPos, vec3 lightPos, vec3 N)
     vec3 tangent = normalize(cross(up, dirN));
     vec3 bitan   = cross(dirN, tangent);
 
-    float phi = IGN(gl_FragCoord.xy) * 6.28318530;
+    // World-space hash: stable across frames regardless of camera movement
+    float phi = fract(dot(worldPos.xz, vec2(127.1, 311.7))) * 6.28318530;
 
     // Blocker search (en world-space)
     const int   BLOCKER_N  = 8;
