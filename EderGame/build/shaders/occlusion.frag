@@ -25,7 +25,9 @@ void main()
     // el cielo visible sigue aportando energia para los rayos de interior.
     float sunDisk = smoothstep(sunRadius, sunRadius * 0.5, dist);
 
-    // El cielo es la fuente de los rayos (isSky = mascara binaria).
-    // El sunDisk solo agrega brillo extra en el centro del sol.
-    outOcclusion = isSky;
+    // Gaussian glow centrado en el sol: solo el area cercana al sol aporta
+    // energia a los rayos. Evita que todo el cielo blanco sea fuente uniforme.
+    float sunGlow = exp(-dist * dist * 20.0);
+
+    outOcclusion = isSky * max(sunDisk, sunGlow);
 }

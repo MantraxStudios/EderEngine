@@ -9,7 +9,11 @@
       "Bash(cmd.exe /c \"compile_shaders.bat\")",
       "Bash(cmake --build . --target EderGame)",
       "Bash(cmd.exe /c \"taskkill /F /IM EderGame.exe\")",
-      "Bash(ninja -t clean)"
+      "Bash(ninja -t clean)",
+      "Bash(glslc shaders/occlusion.frag -o shaders/occlusion.frag.spv)",
+      "Bash(glslc shaders/skybox.frag -o shaders/skybox.frag.spv)",
+      "Bash(glslc shaders/skybox.vert -o shaders/skybox.vert.spv)",
+      "Bash(ninja)"
     ]
   }
 }

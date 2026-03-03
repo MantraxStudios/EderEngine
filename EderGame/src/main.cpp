@@ -522,10 +522,7 @@ int main()
         debugFb.BeginRendering(cmd);
         pipeline.Bind(cmd);
         scene.Draw(cmd, pipeline, camera, dbAspect, lights);
-        {
-            auto invVP = glm::inverse(camera.GetProjection(dbAspect) * camera.GetView());
-            skybox.Draw(cmd, invVP, -activeDirDir);
-        }
+        skybox.Draw(cmd, camera.GetView(), camera.GetProjection(dbAspect), -activeDirDir);
         pipeline.BindTransparent(cmd);
         scene.DrawTransparent(cmd, pipeline, camera, dbAspect, lights);
         // Light gizmos drawn on top in the scene-view framebuffer
@@ -590,10 +587,7 @@ int main()
         scene.Draw(cmd, pipeline, camera, aspect, lights);
 
         // Skybox — drawn after opaques so depth test skips covered pixels
-        {
-            auto invVP = glm::inverse(camera.GetProjection(aspect) * camera.GetView());
-            skybox.Draw(cmd, invVP, -activeDirDir);
-        }
+        skybox.Draw(cmd, camera.GetView(), camera.GetProjection(aspect), -activeDirDir);
 
         // Transparents drawn after skybox so skybox doesn't overwrite them
         pipeline.Bind(cmd);

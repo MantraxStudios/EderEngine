@@ -1,12 +1,11 @@
 #include "VulkanSkybox.h"
 #include "VulkanInstance.h"
 #include <SDL3/SDL.h>
+#include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 std::vector<uint32_t> VulkanSkybox::LoadSpv(const std::string& path)
 {
-    // SDL_IOFromFile works on both desktop (regular filesystem) and Android
-    // (APK AAssetManager), so a single implementation covers all platforms.
     SDL_IOStream* io = SDL_IOFromFile(path.c_str(), "rb");
     if (!io)
         throw std::runtime_error("VulkanSkybox: cannot open shader: " + path +
@@ -29,17 +28,74 @@ void VulkanSkybox::Create(vk::Format swapchainFormat, vk::Format depthFormat)
 {
     auto& device = VulkanInstance::Get().GetDevice();
 
-    // Push constant: mat4 invViewProj (64 bytes) + vec4 sunDir (16 bytes) = 80 bytes
+    // ── Camera UBO ───────────────────────────────────────────────────────────
+    cameraBuffer.Create(sizeof(CameraUBO),
+                        vk::BufferUsageFlagBits::eUniformBuffer,
+                        vk::MemoryPropertyFlagBits::eHostVisible |
+                        vk::MemoryPropertyFlagBits::eHostCoherent);
+
+    // ── Descriptor set layout  (set=0, binding=0 = uniform buffer) ───────────
+    vk::DescriptorSetLayoutBinding camBinding{};
+    camBinding.binding         = 0;
+    camBinding.descriptorType  = vk::DescriptorType::eUniformBuffer;
+    camBinding.descriptorCount = 1;
+    camBinding.stageFlags      = vk::ShaderStageFlagBits::eFragment;
+
+    vk::DescriptorSetLayoutCreateInfo dslCI{};
+    dslCI.bindingCount = 1;
+    dslCI.pBindings    = &camBinding;
+    setLayout = vk::raii::DescriptorSetLayout(device, dslCI);
+
+    // ── Descriptor pool ───────────────────────────────────────────────────────
+    vk::DescriptorPoolSize poolSize{};
+    poolSize.type            = vk::DescriptorType::eUniformBuffer;
+    poolSize.descriptorCount = 1;
+
+    vk::DescriptorPoolCreateInfo poolCI{};
+    poolCI.flags         = vk::DescriptorPoolCreateFlagBits::eFreeDescriptorSet;
+    poolCI.maxSets       = 1;
+    poolCI.poolSizeCount = 1;
+    poolCI.pPoolSizes    = &poolSize;
+    descPool = vk::raii::DescriptorPool(device, poolCI);
+
+    // ── Descriptor set ────────────────────────────────────────────────────────
+    vk::DescriptorSetLayout dsl = *setLayout;
+    vk::DescriptorSetAllocateInfo allocCI{};
+    allocCI.descriptorPool     = *descPool;
+    allocCI.descriptorSetCount = 1;
+    allocCI.pSetLayouts        = &dsl;
+    auto sets = device.allocateDescriptorSets(allocCI);
+    descSet   = std::move(sets[0]);
+
+    vk::DescriptorBufferInfo bufInfo{};
+    bufInfo.buffer = cameraBuffer.GetBuffer();
+    bufInfo.offset = 0;
+    bufInfo.range  = sizeof(CameraUBO);
+
+    vk::WriteDescriptorSet write{};
+    write.dstSet          = *descSet;
+    write.dstBinding      = 0;
+    write.descriptorCount = 1;
+    write.descriptorType  = vk::DescriptorType::eUniformBuffer;
+    write.pBufferInfo     = &bufInfo;
+    device.updateDescriptorSets(write, nullptr);
+
+    // ── Pipeline layout ───────────────────────────────────────────────────────
+    // set=0: camera UBO | push_constant: vec4 sunDir (16 bytes, fragment only)
     vk::PushConstantRange pc{};
-    pc.stageFlags = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
+    pc.stageFlags = vk::ShaderStageFlagBits::eFragment;
     pc.offset     = 0;
-    pc.size       = 80;
+    pc.size       = sizeof(glm::vec4);
 
-    vk::PipelineLayoutCreateInfo layoutInfo{};
-    layoutInfo.pushConstantRangeCount = 1;
-    layoutInfo.pPushConstantRanges    = &pc;
-    pipelineLayout = vk::raii::PipelineLayout(device, layoutInfo);
+    vk::DescriptorSetLayout layouts[1] = { *setLayout };
+    vk::PipelineLayoutCreateInfo layoutCI{};
+    layoutCI.setLayoutCount         = 1;
+    layoutCI.pSetLayouts            = layouts;
+    layoutCI.pushConstantRangeCount = 1;
+    layoutCI.pPushConstantRanges    = &pc;
+    pipelineLayout = vk::raii::PipelineLayout(device, layoutCI);
 
+    // ── Shaders ───────────────────────────────────────────────────────────────
     auto mkModule = [&](const std::vector<uint32_t>& code)
     {
         vk::ShaderModuleCreateInfo ci{};
@@ -59,6 +115,7 @@ void VulkanSkybox::Create(vk::Format swapchainFormat, vk::Format depthFormat)
     stages[1].module = *fragMod;
     stages[1].pName  = "main";
 
+    // ── Pipeline state ────────────────────────────────────────────────────────
     vk::PipelineVertexInputStateCreateInfo   vertexInput{};
     vk::PipelineInputAssemblyStateCreateInfo inputAssembly{};
     inputAssembly.topology = vk::PrimitiveTopology::eTriangleList;
@@ -75,8 +132,8 @@ void VulkanSkybox::Create(vk::Format swapchainFormat, vk::Format depthFormat)
     vk::PipelineMultisampleStateCreateInfo multisampling{};
     multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
 
-    // Depth test eLessOrEqual (skybox sets depth = 1.0 via gl_Position.z = gl_Position.w)
-    // No depth write so it doesn't overwrite scene geometry
+    // Depth test: eLessOrEqual so skybox only draws where depth = 1.0 (far plane)
+    // No writes so it doesn't overwrite scene geometry depth
     vk::PipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.depthTestEnable  = vk::True;
     depthStencil.depthWriteEnable = vk::False;
@@ -91,7 +148,8 @@ void VulkanSkybox::Create(vk::Format swapchainFormat, vk::Format depthFormat)
     colorBlending.attachmentCount = 1;
     colorBlending.pAttachments    = &colorBlendAtt;
 
-    std::array<vk::DynamicState, 2> dynStates = { vk::DynamicState::eViewport, vk::DynamicState::eScissor };
+    std::array<vk::DynamicState, 2> dynStates = {
+        vk::DynamicState::eViewport, vk::DynamicState::eScissor };
     vk::PipelineDynamicStateCreateInfo dynamicState{};
     dynamicState.dynamicStateCount = static_cast<uint32_t>(dynStates.size());
     dynamicState.pDynamicStates    = dynStates.data();
@@ -101,45 +159,46 @@ void VulkanSkybox::Create(vk::Format swapchainFormat, vk::Format depthFormat)
     renderingInfo.pColorAttachmentFormats = &swapchainFormat;
     renderingInfo.depthAttachmentFormat   = depthFormat;
 
-    vk::GraphicsPipelineCreateInfo pipelineInfo{};
-    pipelineInfo.pNext               = &renderingInfo;
-    pipelineInfo.stageCount          = 2;
-    pipelineInfo.pStages             = stages;
-    pipelineInfo.pVertexInputState   = &vertexInput;
-    pipelineInfo.pInputAssemblyState = &inputAssembly;
-    pipelineInfo.pViewportState      = &viewportState;
-    pipelineInfo.pRasterizationState = &rasterizer;
-    pipelineInfo.pMultisampleState   = &multisampling;
-    pipelineInfo.pDepthStencilState  = &depthStencil;
-    pipelineInfo.pColorBlendState    = &colorBlending;
-    pipelineInfo.pDynamicState       = &dynamicState;
-    pipelineInfo.layout              = *pipelineLayout;
+    vk::GraphicsPipelineCreateInfo pipelineCI{};
+    pipelineCI.pNext               = &renderingInfo;
+    pipelineCI.stageCount          = 2;
+    pipelineCI.pStages             = stages;
+    pipelineCI.pVertexInputState   = &vertexInput;
+    pipelineCI.pInputAssemblyState = &inputAssembly;
+    pipelineCI.pViewportState      = &viewportState;
+    pipelineCI.pRasterizationState = &rasterizer;
+    pipelineCI.pMultisampleState   = &multisampling;
+    pipelineCI.pDepthStencilState  = &depthStencil;
+    pipelineCI.pColorBlendState    = &colorBlending;
+    pipelineCI.pDynamicState       = &dynamicState;
+    pipelineCI.layout              = *pipelineLayout;
 
-    pipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
+    pipeline = vk::raii::Pipeline(device, nullptr, pipelineCI);
 
     std::cout << "[Vulkan] Skybox OK" << std::endl;
 }
 
 void VulkanSkybox::Draw(vk::CommandBuffer cmd,
-                        const glm::mat4& invViewProj,
-                        glm::vec3        sunDir,
-                        float            sunIntensity)
+                        const glm::mat4&  view,
+                        const glm::mat4&  proj,
+                        glm::vec3         sunDir,
+                        float             sunIntensity)
 {
-    struct PushData
-    {
-        glm::mat4 invViewProj;  // 64 bytes
-        glm::vec4 sunDir;       // 16 bytes: xyz=direction, w=intensity
-    } push;
+    // Upload camera UBO
+    CameraUBO ubo{};
+    ubo.inverseView = glm::inverse(view);
+    ubo.inverseProj = glm::inverse(proj);
+    ubo.cameraPos   = glm::vec4(glm::vec3(ubo.inverseView[3]), 0.0f);
+    cameraBuffer.Upload(&ubo, sizeof(ubo));
 
-    push.invViewProj = invViewProj;
-    push.sunDir      = glm::vec4(glm::normalize(sunDir), sunIntensity);
+    glm::vec4 sunData = glm::vec4(glm::normalize(sunDir), sunIntensity);
 
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
-    cmd.pushConstants(
-        *pipelineLayout,
-        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
-        0u, static_cast<uint32_t>(sizeof(PushData)),
-        &push);
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *pipelineLayout,
+                           0, *descSet, nullptr);
+    cmd.pushConstants(*pipelineLayout,
+                      vk::ShaderStageFlagBits::eFragment,
+                      0, sizeof(glm::vec4), &sunData);
     cmd.draw(3, 1, 0, 0);
 }
 
@@ -147,4 +206,8 @@ void VulkanSkybox::Destroy()
 {
     pipeline       = nullptr;
     pipelineLayout = nullptr;
+    descSet        = nullptr;
+    descPool       = nullptr;
+    setLayout      = nullptr;
+    cameraBuffer.Destroy();
 }
