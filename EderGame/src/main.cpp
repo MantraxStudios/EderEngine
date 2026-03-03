@@ -29,6 +29,10 @@
 #include "VulkanGizmo.h"
 #include "VulkanSunShafts.h"
 #include "VulkanOcclusionPass.h"
+#include "VulkanVolumetricLight.h"
+#include "VulkanVolumetricFog.h"
+#include "ECS/Components/VolumetricLightComponent.h"
+#include "ECS/Components/VolumetricFogComponent.h"
 #include <glm/gtc/constants.hpp>
 
 int main()
@@ -58,8 +62,10 @@ int main()
     VulkanDebugOverlay   debugOverlay;
     VulkanSkybox         skybox;
     VulkanGizmo          gizmo;
-    VulkanSunShafts      sunShafts;
-    VulkanOcclusionPass  occlusionPass;
+    VulkanSunShafts         sunShafts;
+    VulkanOcclusionPass     occlusionPass;
+    VulkanVolumetricLight   volumetricLight;
+    VulkanVolumetricFog     volumetricFog;
     VulkanShadowMap          shadowMap;
     VulkanShadowPipeline     shadowPipeline;
     VulkanSpotShadowMap       spotShadowMap;
@@ -174,6 +180,10 @@ int main()
         gizmo.Create(debugFb.GetColorFormat(), VulkanRenderer::Get().GetDepthFormat());
         sunShafts.Create(debugFb.GetColorFormat(), sc.GetExtent().width / 2, sc.GetExtent().height / 2);
         occlusionPass.Create(sc.GetExtent().width / 2, sc.GetExtent().height / 2);
+        volumetricLight.Create(debugFb.GetColorFormat(), sc.GetExtent().width / 2, sc.GetExtent().height / 2,
+                                *pipeline.GetLightDescriptorSetLayout());
+        volumetricFog.Create(debugFb.GetColorFormat(), sc.GetExtent().width / 2, sc.GetExtent().height / 2,
+                              *pipeline.GetLightDescriptorSetLayout());
         editor.SetSceneViewFramebuffer(&debugFb);
     }
     catch (const std::exception& e)
@@ -259,6 +269,8 @@ int main()
                 debugFb.Recreate(svW, svH);
                 sunShafts.Resize(svW, svH);
                 occlusionPass.Resize(svW, svH);
+                volumetricLight.Resize(svW, svH);
+                volumetricFog.Resize(svW, svH);
                 // The render loop (below) always calls SetSceneViewFramebuffer with the
                 // correct active framebuffer — no need to set it here and cause a double-set.
             }
@@ -305,6 +317,8 @@ int main()
         // ── ECS → LightBuffer sync ───────────────────────────────────────────
         // Collect shadow-caster data first (needed for shadow passes below)
         glm::vec3 activeDirDir       = glm::normalize(glm::vec3(-1,-1,-0.4f)); // fallback
+        glm::vec3 activeDirColor     = glm::vec3(1.0f, 0.9f, 0.7f);
+        float     activeDirIntensity = 1.0f;
         bool      hasDir             = false;
         bool      hasSpotShadow      = false;
         glm::vec3 activeSpotPos      = glm::vec3(0);
@@ -329,7 +343,7 @@ int main()
                 {
                     glm::mat4 m  = tr.GetMatrix();
                     glm::vec3 dir = glm::normalize(glm::vec3(m * glm::vec4(0,-1,0,0)));
-                    if (!hasDir) { activeDirDir = dir; hasDir = true; }
+                    if (!hasDir) { activeDirDir = dir; activeDirColor = l.color; activeDirIntensity = l.intensity; hasDir = true; }
                     // Fade directional light to 0 as sun goes below horizon
                     // (dir.y > 0 means light points upward = sun is below; -dir.y is sun altitude)
                     float sunHorizon = glm::clamp(-dir.y * 5.0f + 1.0f, 0.0f, 1.0f);
@@ -424,6 +438,8 @@ int main()
                 debugFb.Recreate(fw, fh);
                 sunShafts.Resize(fw, fh);
                 occlusionPass.Resize(fw, fh);
+                volumetricLight.Resize(fw, fh);
+                volumetricFog.Resize(fw, fh);
             }
             continue;
         }
@@ -533,6 +549,87 @@ int main()
         debugFb.EndRendering(cmd);
         debugFb.TransitionToShaderRead(cmd);
 
+        // --- Volumetric Lighting post-process ---
+        // postFb tracks the latest composited framebuffer (starts on debugFb, advances with each pass)
+        VulkanFramebuffer* postFb = &debugFb;
+        {
+            VolumetricLightComponent* volComp = nullptr;
+            registry.Each<VolumetricLightComponent>([&](Entity e, VolumetricLightComponent& v) {
+                if (v.enabled && !volComp) volComp = &v;
+            });
+
+            if (volComp && hasDir)
+            {
+                glm::vec3 sunWorldDir = glm::normalize(-activeDirDir);
+                // Fade out below horizon
+                float sunAbove = glm::clamp(sunWorldDir.y * 5.0f + 1.0f, 0.0f, 1.0f);
+
+                glm::mat4 view  = camera.GetView();
+                glm::mat4 proj  = camera.GetProjection(dbAspect);
+                glm::mat4 invVP = glm::inverse(proj * view);
+
+                volumetricLight.Draw(cmd,
+                    debugFb.GetColorView(), debugFb.GetSampler(),
+                    debugFb.GetDepthView(), debugFb.GetSampler(),
+                    shadowMap.GetArrayView(), shadowMap.GetSampler(),
+                    invVP,
+                    cascadeMatrices,
+                    cascadeSplits,
+                    sunWorldDir,
+                    activeDirColor,
+                    activeDirIntensity,
+                    camera.GetPosition(),
+                    lights.GetDescriptorSet(),
+                    volComp->numSteps,
+                    volComp->density,
+                    volComp->absorption,
+                    volComp->g,
+                    volComp->intensity * sunAbove,
+                    volComp->maxDistance,
+                    volComp->jitter,
+                    volComp->tint);
+
+                volumetricLight.GetOutput().TransitionToShaderRead(cmd);
+                postFb = &volumetricLight.GetOutput();
+            }
+        }
+
+        // --- Volumetric Fog post-process ---
+        {
+            VolumetricFogComponent* fogComp = nullptr;
+            registry.Each<VolumetricFogComponent>([&](Entity e, VolumetricFogComponent& f) {
+                if (f.enabled && !fogComp) fogComp = &f;
+            });
+
+            if (fogComp)
+            {
+                glm::mat4 view  = camera.GetView();
+                glm::mat4 proj  = camera.GetProjection(dbAspect);
+                glm::mat4 invVP = glm::inverse(proj * view);
+
+                glm::vec3 sunTowardDir = hasDir ? glm::normalize(-activeDirDir) : glm::vec3(0.0f, 1.0f, 0.0f);
+                float     sunIntensity = hasDir ? activeDirIntensity : 0.0f;
+
+                volumetricFog.Draw(cmd,
+                    postFb->GetColorView(), postFb->GetSampler(),
+                    debugFb.GetDepthView(), debugFb.GetSampler(),
+                    invVP,
+                    camera.GetPosition(),
+                    fogComp->fogColor,       fogComp->density,
+                    fogComp->horizonColor,   fogComp->heightFalloff,
+                    fogComp->sunScatterColor,fogComp->scatterStrength,
+                    sunTowardDir,            sunIntensity,
+                    fogComp->heightOffset,
+                    fogComp->maxFogAmount,
+                    fogComp->fogStart,
+                    fogComp->fogEnd,
+                    lights.GetDescriptorSet());
+
+                volumetricFog.GetOutput().TransitionToShaderRead(cmd);
+                postFb = &volumetricFog.GetOutput();
+            }
+        }
+
         // --- Sun Shafts post-process ---
         {
             SunShaftsComponent* shaftsComp = nullptr;
@@ -562,8 +659,9 @@ int main()
                     debugFb.GetDepthView(), debugFb.GetSampler(),
                     sunUV, shaftsComp->sunRadius);
 
+                // Sun shafts reads from postFb so volumetric + god-rays stack correctly
                 sunShafts.Draw(cmd,
-                    debugFb.GetColorView(), debugFb.GetSampler(),
+                    postFb->GetColorView(), postFb->GetSampler(),
                     occlusionPass.GetView(),
                     debugFb.GetDepthView(),
                     sunUV,
@@ -577,7 +675,7 @@ int main()
             }
             else
             {
-                editor.SetSceneViewFramebuffer(&debugFb);
+                editor.SetSceneViewFramebuffer(postFb);
             }
         }
 
@@ -605,6 +703,8 @@ int main()
     editor.Shutdown();
     gizmo.Destroy();
     occlusionPass.Destroy();
+    volumetricLight.Destroy();
+    volumetricFog.Destroy();
     sunShafts.Destroy();
     debugOverlay.Destroy();
     skybox.Destroy();

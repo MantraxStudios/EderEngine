@@ -213,8 +213,11 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
     blendAtt.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
     blendAtt.dstColorBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
     blendAtt.colorBlendOp        = vk::BlendOp::eAdd;
-    blendAtt.srcAlphaBlendFactor = vk::BlendFactor::eOne;
-    blendAtt.dstAlphaBlendFactor = vk::BlendFactor::eZero;
+    // Alpha channel: accumulate coverage   outA = dstA * (1 - srcA)
+    // → starts at 1.0 (opaque), decays as transparent layers stack.
+    // The volumetric shader reads this to attenuate scatter behind glass.
+    blendAtt.srcAlphaBlendFactor = vk::BlendFactor::eZero;
+    blendAtt.dstAlphaBlendFactor = vk::BlendFactor::eOneMinusSrcAlpha;
     blendAtt.alphaBlendOp        = vk::BlendOp::eAdd;
     blendAtt.colorWriteMask      =
         vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |

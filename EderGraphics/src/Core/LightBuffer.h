@@ -29,6 +29,8 @@ public:
     void AddSpot       (const SpotLight&        light);
     void ClearLights   ();
 
+    vk::DescriptorSet GetDescriptorSet() const { return *descriptorSet; }
+
 private:
     LightUBO             ubo{};
     VulkanBuffer         buffer;

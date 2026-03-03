@@ -18,6 +18,8 @@ private:
     void DrawMeshRendererComponent();
     void DrawLightComponent();
     void DrawSunShaftsComponent();
+    void DrawVolumetricLightComponent();
+    void DrawVolumetricFogComponent();
     void DrawAddComponent();
 
     Registry* registry = nullptr;

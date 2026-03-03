@@ -157,6 +157,30 @@ build CMakeFiles/EderGame.dir/src/VulkanSunShafts.cpp.obj: CXX_COMPILER__EderGam
   TARGET_PDB = EderGame.pdb
   TARGET_SUPPORT_DIR = CMakeFiles\EderGame.dir
 
+build CMakeFiles/EderGame.dir/src/VulkanVolumetricFog.cpp.obj: CXX_COMPILER__EderGame_unscanned_Debug C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src/VulkanVolumetricFog.cpp || cmake_object_order_depends_target_EderGame
+  CONFIG = Debug
+  DEFINES = -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
+  DEP_FILE = CMakeFiles\EderGame.dir\src\VulkanVolumetricFog.cpp.obj.d
+  FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderCore/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include
+  OBJECT_DIR = CMakeFiles\EderGame.dir
+  OBJECT_FILE_DIR = CMakeFiles\EderGame.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\EderGame.dir\
+  TARGET_PDB = EderGame.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\EderGame.dir
+
+build CMakeFiles/EderGame.dir/src/VulkanVolumetricLight.cpp.obj: CXX_COMPILER__EderGame_unscanned_Debug C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src/VulkanVolumetricLight.cpp || cmake_object_order_depends_target_EderGame
+  CONFIG = Debug
+  DEFINES = -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
+  DEP_FILE = CMakeFiles\EderGame.dir\src\VulkanVolumetricLight.cpp.obj.d
+  FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderCore/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include
+  OBJECT_DIR = CMakeFiles\EderGame.dir
+  OBJECT_FILE_DIR = CMakeFiles\EderGame.dir\src
+  TARGET_COMPILE_PDB = CMakeFiles\EderGame.dir\
+  TARGET_PDB = EderGame.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\EderGame.dir
+
 build CMakeFiles/EderGame.dir/src/main.cpp.obj: CXX_COMPILER__EderGame_unscanned_Debug C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src/main.cpp || cmake_object_order_depends_target_EderGame
   CONFIG = Debug
   DEFINES = -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR
@@ -261,7 +285,7 @@ build CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_impl_vulkan.cpp.obj: CX
 #############################################
 # Link the executable EderGame.exe
 
-build EderGame.exe: CXX_EXECUTABLE_LINKER__EderGame_Debug CMakeFiles/EderGame.dir/src/Editor/Editor.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/CameraPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/HierarchyPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/InspectorPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/SceneViewPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/StatsPanel.cpp.obj CMakeFiles/EderGame.dir/src/VulkanGizmo.cpp.obj CMakeFiles/EderGame.dir/src/VulkanOcclusionPass.cpp.obj CMakeFiles/EderGame.dir/src/VulkanSunShafts.cpp.obj CMakeFiles/EderGame.dir/src/main.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_demo.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_draw.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_tables.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_widgets.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_impl_sdl3.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_impl_vulkan.cpp.obj | C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/build/EderGraphics.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/SDL3.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/vulkan-1.lib
+build EderGame.exe: CXX_EXECUTABLE_LINKER__EderGame_Debug CMakeFiles/EderGame.dir/src/Editor/Editor.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/CameraPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/HierarchyPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/InspectorPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/SceneViewPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/StatsPanel.cpp.obj CMakeFiles/EderGame.dir/src/VulkanGizmo.cpp.obj CMakeFiles/EderGame.dir/src/VulkanOcclusionPass.cpp.obj CMakeFiles/EderGame.dir/src/VulkanSunShafts.cpp.obj CMakeFiles/EderGame.dir/src/VulkanVolumetricFog.cpp.obj CMakeFiles/EderGame.dir/src/VulkanVolumetricLight.cpp.obj CMakeFiles/EderGame.dir/src/main.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_demo.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_draw.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_tables.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_widgets.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_impl_sdl3.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_impl_vulkan.cpp.obj | C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/build/EderGraphics.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/SDL3.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/vulkan-1.lib
   CONFIG = Debug
   FLAGS = -O0 -g -Xclang -gcodeview -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd
   LINK_FLAGS = -Xlinker /subsystem:console -fuse-ld=lld-link

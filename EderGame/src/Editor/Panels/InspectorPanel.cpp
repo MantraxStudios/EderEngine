@@ -4,6 +4,8 @@
 #include "ECS/Components/MeshRendererComponent.h"
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/SunShaftsComponent.h"
+#include "ECS/Components/VolumetricLightComponent.h"
+#include "ECS/Components/VolumetricFogComponent.h"
 #include "Core/MaterialManager.h"
 #include "Core/Material.h"
 #include <imgui/imgui.h>
@@ -88,6 +90,8 @@ void InspectorPanel::OnDraw()
     DrawMeshRendererComponent();
     DrawLightComponent();
     DrawSunShaftsComponent();
+    DrawVolumetricLightComponent();
+    DrawVolumetricFogComponent();
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -234,13 +238,71 @@ void InspectorPanel::DrawSunShaftsComponent()
     ImGui::PopID();
 }
 
+void InspectorPanel::DrawVolumetricLightComponent()
+{
+    if (!registry->Has<VolumetricLightComponent>(selected)) return;
+    ImGui::PushID("VolumetricLight");
+    if (ComponentHeader<VolumetricLightComponent>("Volumetric Light", registry, selected, ImVec4(0.4f, 0.8f, 1.0f, 1.0f)))
+    {
+        auto& v = registry->Get<VolumetricLightComponent>(selected);
+        ImGui::Checkbox("Enabled",      &v.enabled);
+        ImGui::Separator();
+        ImGui::TextDisabled("-- Ray March --");
+        ImGui::DragInt  ("Steps",       &v.numSteps,    1,     8,    256);
+        ImGui::DragFloat("Max Distance",&v.maxDistance, 1.0f,  1.0f, 500.0f);
+        ImGui::DragFloat("Jitter",      &v.jitter,      0.05f, 0.0f, 2.0f);
+        ImGui::Separator();
+        ImGui::TextDisabled("-- Participating Medium --");
+        ImGui::DragFloat("Density",     &v.density,     0.001f, 0.0f, 1.0f, "%.4f");
+        ImGui::DragFloat("Absorption",  &v.absorption,  0.001f, 0.0f, 1.0f, "%.4f");
+        ImGui::DragFloat("Anisotropy g",&v.g,           0.01f, -0.99f, 0.99f);
+        ImGui::Separator();
+        ImGui::TextDisabled("-- Output --");
+        ImGui::DragFloat("Intensity",   &v.intensity,   0.01f, 0.0f, 5.0f);
+        ImGui::ColorEdit3("Tint",       &v.tint.x);
+    }
+    ImGui::PopID();
+}
+
+void InspectorPanel::DrawVolumetricFogComponent()
+{
+    if (!registry->Has<VolumetricFogComponent>(selected)) return;
+    ImGui::PushID("VolumetricFog");
+    if (ComponentHeader<VolumetricFogComponent>("Volumetric Fog", registry, selected, ImVec4(0.6f, 0.85f, 0.6f, 1.0f)))
+    {
+        auto& f = registry->Get<VolumetricFogComponent>(selected);
+        ImGui::Checkbox("Enabled",          &f.enabled);
+        ImGui::Separator();
+        ImGui::TextDisabled("-- Colour --");
+        ImGui::ColorEdit3("Fog Color",       &f.fogColor.x);
+        ImGui::ColorEdit3("Horizon Color",   &f.horizonColor.x);
+        ImGui::ColorEdit3("Sun Scatter",     &f.sunScatterColor.x);
+        ImGui::Separator();
+        ImGui::TextDisabled("-- Density --");
+        ImGui::DragFloat("Density",          &f.density,       0.001f, 0.0f, 1.0f, "%.4f");
+        ImGui::DragFloat("Height Falloff",   &f.heightFalloff, 0.005f, 0.0f, 2.0f, "%.4f");
+        ImGui::DragFloat("Height Offset",    &f.heightOffset,  0.5f,  -100.0f, 100.0f);
+        ImGui::Separator();
+        ImGui::TextDisabled("-- Distance --");
+        ImGui::DragFloat("Fog Start",        &f.fogStart,      0.5f,   0.0f, 500.0f);
+        ImGui::DragFloat("Fog End",          &f.fogEnd,        1.0f,   1.0f, 2000.0f);
+        ImGui::Separator();
+        ImGui::TextDisabled("-- Scatter --");
+        ImGui::DragFloat("Scatter Strength", &f.scatterStrength,0.01f, 0.0f, 3.0f);
+        ImGui::DragFloat("Max Opacity",      &f.maxFogAmount,  0.01f,  0.0f, 1.0f);
+    }
+    ImGui::PopID();
+}
+
 void InspectorPanel::DrawAddComponent()
 {
     const bool canAddTransform    = !registry->Has<TransformComponent>(selected);
     const bool canAddMeshRenderer = !registry->Has<MeshRendererComponent>(selected);
     const bool canAddLight        = !registry->Has<LightComponent>(selected);
     const bool canAddSunShafts    = !registry->Has<SunShaftsComponent>(selected);
-    const bool anyAvailable       = canAddTransform || canAddMeshRenderer || canAddLight || canAddSunShafts;
+    const bool canAddVolumetric   = !registry->Has<VolumetricLightComponent>(selected);
+    const bool canAddFog          = !registry->Has<VolumetricFogComponent>(selected);
+    const bool anyAvailable       = canAddTransform || canAddMeshRenderer || canAddLight || canAddSunShafts || canAddVolumetric || canAddFog;
 
     float btnW = ImGui::GetContentRegionAvail().x;
     ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
@@ -260,6 +322,8 @@ void InspectorPanel::DrawAddComponent()
         if (canAddMeshRenderer && ImGui::MenuItem("   Mesh Renderer")) registry->Add<MeshRendererComponent>(selected);
         if (canAddLight        && ImGui::MenuItem("   Light"))         registry->Add<LightComponent>(selected);
         if (canAddSunShafts    && ImGui::MenuItem("   Sun Shafts"))    registry->Add<SunShaftsComponent>(selected);
+        if (canAddVolumetric  && ImGui::MenuItem("   Volumetric Light")) registry->Add<VolumetricLightComponent>(selected);
+        if (canAddFog         && ImGui::MenuItem("   Volumetric Fog"))   registry->Add<VolumetricFogComponent>(selected);
         ImGui::EndPopup();
     }
 }
