@@ -4,7 +4,6 @@
 layout(location = 0) in  vec2 inUVs;
 layout(location = 0) out vec4 finalImage;
 
-// Camera matrices — updated every frame via UBO
 layout(set = 0, binding = 0) uniform SkyboxCamera {
     mat4 inverseView;
     mat4 inverseProj;
@@ -16,13 +15,14 @@ layout(push_constant) uniform Push
     vec4 sunDir;
 };
 
-const float EARTH_R = 6371e3;
-const float ATMOS_R = 6471e3;
-const float H_R     = 8000.0;
-const float H_M     = 1200.0;
-const vec3  BETA_R  = vec3(5.5e-6, 13.0e-6, 22.4e-6);
-const float BETA_M  = 21.0e-6;
-const float G       = 0.76;
+const float EARTH_R    = 6371e3;
+const float ATMOS_R    = 6471e3;
+const float H_R        = 8000.0;
+const float H_M        = 1200.0;
+const vec3  BETA_R     = vec3(5.5e-6, 13.0e-6, 22.4e-6);
+const float BETA_M     = 2.0e-6;
+const float BETA_M_EXT = 2.22e-6;
+const float G          = 0.76;
 
 vec2 sphereIntersect(vec3 ro, vec3 rd, float r)
 {
@@ -78,8 +78,8 @@ vec3 ComputeSky(vec3 rd, vec3 sun, float intensity)
         float densR = exp(-h / H_R);
         float densM = exp(-h / H_M);
 
-        accumOptR += BETA_R * densR * segLen;
-        accumOptM += BETA_M * densM * segLen;
+        accumOptR += BETA_R     * densR * segLen;
+        accumOptM += BETA_M_EXT * densM * segLen;
 
         vec2  ls = sphereIntersect(p, sun, ATMOS_R);
         if (ls.y < 0.0) continue;
@@ -94,8 +94,8 @@ vec3 ComputeSky(vec3 rd, vec3 sun, float intensity)
             vec3  lp = p + sun * ((float(j) + 0.5) * lSeg);
             float lh = length(lp) - EARTH_R;
             if (lh < 0.0) { blocked = true; break; }
-            lOptR += BETA_R * exp(-lh / H_R) * lSeg;
-            lOptM += BETA_M * exp(-lh / H_M) * lSeg;
+            lOptR += BETA_R     * exp(-lh / H_R) * lSeg;
+            lOptM += BETA_M_EXT * exp(-lh / H_M) * lSeg;
         }
         if (blocked) continue;
 
@@ -151,8 +151,6 @@ float StarField(vec3 rd, float density)
 
 void main()
 {
-    // Depth discard removed — the pipeline's eLessOrEqual depth test already
-    // rejects any fragment where scene geometry was drawn (depth < 1.0).
     vec4 clipPos  = vec4(inUVs.x * 2.0 - 1.0, inUVs.y * 2.0 - 1.0, 1.0, 1.0);
     vec4 viewPos  = camData.inverseProj * clipPos;
     viewPos      /= viewPos.w;
@@ -164,7 +162,7 @@ void main()
     float itn  = sunDir.w;
     float sunY = sun.y;
 
-    float sunH = smoothstep(-0.12, 0.04, sunY);
+    float sunH = smoothstep(-0.04, 0.15, sunY);
     float effI = itn * sunH;
 
     vec3 skyRd = rd;
@@ -173,16 +171,15 @@ void main()
 
     vec3 hdr = ComputeSky(skyRd, sun, effI);
 
-    float cosR   = dot(rd, sun);
-    float sunVis = smoothstep(-0.04, 0.08, sunY);
-    float above  = smoothstep(-0.005, 0.02, rd.y);
-    float disk   = smoothstep(0.99975, 1.00000, cosR) * sunVis * above;
+    float cosR  = dot(rd, sun);
+    float above = smoothstep(-0.005, 0.02, rd.y);
+    float disk  = smoothstep(0.99975, 1.00000, cosR) * sunH * above;
 
     float hTint = clamp(1.0 - sunY * 3.0, 0.0, 1.0);
     vec3  dcol  = mix(vec3(1.5, 1.3, 1.1), vec3(1.8, 0.95, 0.45), hTint);
-    hdr += dcol * disk * itn;
+    hdr += dcol * disk * effI;
 
-    float snh = clamp(1.0 - abs(sunY) * 6.0, 0.0, 1.0) * sunH;
+    float snh = clamp(1.0 - abs(sunY) * 6.0, 0.0, 1.0) * sunH * sunH;
     vec2  saz = normalize(sun.xz   + vec2(1e-5));
     vec2  raz = normalize(skyRd.xz + vec2(1e-5));
     float az  = clamp(dot(raz, saz) * 0.5 + 0.5, 0.0, 1.0);
@@ -190,7 +187,7 @@ void main()
     float vb  = clamp(1.0 - skyRd.y * 8.0, 0.0, 1.0);
     hdr += vec3(2.2, 0.65, 0.06) * snh * az * vb * 0.04 * effI;
 
-    float twi  = clamp(1.0 - abs(sunY) * 6.0, 0.0, 1.0) * sunH;
+    float twi  = clamp(1.0 - abs(sunY) * 6.0, 0.0, 1.0) * sunH * sunH;
     float uzon = clamp(skyRd.y * 1.5, 0.0, 1.0);
     hdr += vec3(0.08, 0.03, 0.20) * twi * uzon * itn * 0.08;
 

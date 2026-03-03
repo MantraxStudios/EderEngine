@@ -27,7 +27,12 @@ void main()
 
     // Gaussian glow centrado en el sol: solo el area cercana al sol aporta
     // energia a los rayos. Evita que todo el cielo blanco sea fuente uniforme.
-    float sunGlow = exp(-dist * dist * 20.0);
+    // Tighter falloff (40 instead of 20) + gated when sun is near/below horizon.
+    float sunGlow = exp(-dist * dist * 40.0);
 
-    outOcclusion = isSky * max(sunDisk, sunGlow);
+    // When sunUV is near the bottom edge (sun near horizon) reduce the glow
+    // so it doesn't amplify the bright horizon band into runaway bloom.
+    float horizonFade = clamp((0.85 - sunUV.y) * 10.0, 0.0, 1.0);
+
+    outOcclusion = isSky * max(sunDisk, sunGlow * horizonFade);
 }

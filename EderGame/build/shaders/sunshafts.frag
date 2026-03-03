@@ -25,7 +25,8 @@ void main()
 {
     vec3  scene    = texture(sceneTex, fragUV).rgb;
 
-    float sunAbove = clamp(sunHeight * 10.0, 0.0, 1.0);
+    // Ramp down bloom as sun descends: full at sunHeight>=0.3, zero at horizon.
+    float sunAbove = smoothstep(0.0, 0.30, sunHeight);
 
     if (sunAbove < 0.001)
     {
