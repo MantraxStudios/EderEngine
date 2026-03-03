@@ -23,7 +23,7 @@ void HierarchyPanel::DrawEntityNode(Entity e)
     else                                               icon = "[A] ";
 
     char label[256];
-    snprintf(label, sizeof(label), "%s%s###e%u", icon, name, e);
+    snprintf(label, sizeof(label), "%s%s", icon, name);
 
     bool hasChildren = registry->Has<HierarchyComponent>(e)
                     && !registry->Get<HierarchyComponent>(e).children.empty();
