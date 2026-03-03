@@ -49,7 +49,7 @@ void VulkanPointShadowPipeline::Create(vk::Format depthFormat)
     for (uint32_t i = 0; i < 4; i++)
     {
         instanceAttrs[i].binding  = 1;
-        instanceAttrs[i].location = 6 + i;
+        instanceAttrs[i].location = 8 + i;  // 0-7 = vertex (6=boneIdx, 7=boneWeights)
         instanceAttrs[i].format   = vk::Format::eR32G32B32A32Sfloat;
         instanceAttrs[i].offset   = sizeof(glm::vec4) * i;
     }
@@ -102,7 +102,22 @@ void VulkanPointShadowPipeline::Create(vk::Format depthFormat)
     pc.offset     = 0;
     pc.size       = 80;
 
+    // Set 0: bone SSBO
+    vk::DescriptorSetLayoutBinding boneBinding{};
+    boneBinding.binding         = 0;
+    boneBinding.descriptorType  = vk::DescriptorType::eStorageBuffer;
+    boneBinding.descriptorCount = 1;
+    boneBinding.stageFlags      = vk::ShaderStageFlagBits::eVertex;
+
+    vk::DescriptorSetLayoutCreateInfo boneDslInfo{};
+    boneDslInfo.bindingCount = 1;
+    boneDslInfo.pBindings    = &boneBinding;
+    boneDescriptorSetLayout = vk::raii::DescriptorSetLayout(device, boneDslInfo);
+
+    vk::DescriptorSetLayout dsl = *boneDescriptorSetLayout;
     vk::PipelineLayoutCreateInfo layoutInfo{};
+    layoutInfo.setLayoutCount         = 1;
+    layoutInfo.pSetLayouts            = &dsl;
     layoutInfo.pushConstantRangeCount = 1;
     layoutInfo.pPushConstantRanges    = &pc;
     pipelineLayout = vk::raii::PipelineLayout(device, layoutInfo);
@@ -136,6 +151,7 @@ void VulkanPointShadowPipeline::Bind(vk::CommandBuffer cmd)
 
 void VulkanPointShadowPipeline::Destroy()
 {
-    pipeline       = nullptr;
-    pipelineLayout = nullptr;
+    pipeline                = nullptr;
+    pipelineLayout          = nullptr;
+    boneDescriptorSetLayout = nullptr;
 }

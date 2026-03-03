@@ -29,3 +29,9 @@
 14	4863	7942105861511566	CMakeFiles/EderGraphics.dir/src/Core/MeshManager.cpp.obj	3fdd99335c7e6ccf
 4864	5080	7942105911017503	EderGraphics.dll	3f156466b0b3c1f8
 4864	5080	7942105911017503	EderGraphics.lib	3f156466b0b3c1f8
+22	5092	7942112215122624	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanShadowPipeline.cpp.obj	ffc9dbce4913ccc1
+16	5111	7942112215071507	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPointShadowPipeline.cpp.obj	e702127c92c9c70a
+7	5168	7942112214970711	CMakeFiles/EderGraphics.dir/src/Core/Scene.cpp.obj	a18055bdb0123621
+12	5177	7942112215031510	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/BoneSSBO.cpp.obj	9b2463b53724b66a
+5178	5405	7942112267787399	EderGraphics.dll	3f156466b0b3c1f8
+5178	5405	7942112267787399	EderGraphics.lib	3f156466b0b3c1f8

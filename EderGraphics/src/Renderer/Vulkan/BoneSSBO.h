@@ -15,7 +15,8 @@ class EDERGRAPHICS_API BoneSSBO
 public:
     void Create (VulkanPipeline& pipeline);
     void Upload (const std::vector<glm::mat4>& boneMatrices);
-    void Bind   (vk::CommandBuffer cmd, vk::PipelineLayout layout); // binds to set 2
+    void Bind        (vk::CommandBuffer cmd, vk::PipelineLayout layout);           // set 2 (main pipeline)
+    void BindToSet   (vk::CommandBuffer cmd, vk::PipelineLayout layout, uint32_t set); // shadow pipelines (set 0)
     void Destroy();
 
     vk::DescriptorSet GetDescriptorSet() const { return *descriptorSet; }

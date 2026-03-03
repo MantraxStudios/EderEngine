@@ -64,8 +64,12 @@ void BoneSSBO::Upload(const std::vector<glm::mat4>& boneMatrices)
 
 void BoneSSBO::Bind(vk::CommandBuffer cmd, vk::PipelineLayout layout)
 {
-    // Bind as set 2
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, 2, *descriptorSet, nullptr);
+}
+
+void BoneSSBO::BindToSet(vk::CommandBuffer cmd, vk::PipelineLayout layout, uint32_t set)
+{
+    cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, layout, set, *descriptorSet, nullptr);
 }
 
 void BoneSSBO::Destroy()

@@ -306,14 +306,29 @@ void InspectorPanel::DrawAnimationComponent()
         ImGui::Checkbox("Playing", &a.playing);
         ImGui::SameLine(120);
         ImGui::Checkbox("Loop",    &a.loop);
-        ImGui::DragInt  ("Clip Index", &a.animIndex, 1, 0, 255);
-        ImGui::DragFloat("Speed",      &a.speed,     0.01f, 0.0f, 10.0f);
+        ImGui::DragInt  ("Clip Index",       &a.animIndex,      1,     0,    255);
+        ImGui::DragFloat("Speed",            &a.speed,          0.01f, 0.0f, 10.0f);
+        ImGui::DragFloat("Blend Duration",   &a.blendDuration,  0.01f, 0.0f, 2.0f, "%.2f s");
 
         ImGui::Separator();
         ImGui::TextDisabled("-- Playback --");
         ImGui::Text("Time: %.2f s", a.currentTime);
+
+        // Show blend progress bar while a crossfade is active
+        if (a.prevIndex >= 0 && a.blendDuration > 0.0f)
+        {
+            float progress = glm::clamp(a.blendTime / a.blendDuration, 0.0f, 1.0f);
+            char overlay[32];
+            snprintf(overlay, sizeof(overlay), "Blend %.0f%%", progress * 100.0f);
+            ImGui::ProgressBar(progress, ImVec2(-1, 0), overlay);
+        }
+
         if (ImGui::Button("Reset"))
+        {
             a.currentTime = 0.0f;
+            a.prevIndex   = -1;
+            a.blendTime   = 0.0f;
+        }
     }
     ImGui::PopID();
 }

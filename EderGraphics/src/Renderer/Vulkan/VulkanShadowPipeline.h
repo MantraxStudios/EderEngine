@@ -10,11 +10,13 @@ public:
     void Bind   (vk::CommandBuffer cmd);
     void Destroy();
 
-    vk::raii::PipelineLayout& GetLayout() { return pipelineLayout; }
+    vk::raii::PipelineLayout&      GetLayout()               { return pipelineLayout; }
+    vk::raii::DescriptorSetLayout& GetBoneDescriptorSetLayout() { return boneDescriptorSetLayout; }
 
 private:
     std::vector<uint32_t> LoadSpv(const std::string& path);
 
-    vk::raii::PipelineLayout pipelineLayout = nullptr;
-    vk::raii::Pipeline       pipeline       = nullptr;
+    vk::raii::DescriptorSetLayout boneDescriptorSetLayout = nullptr;
+    vk::raii::PipelineLayout      pipelineLayout          = nullptr;
+    vk::raii::Pipeline            pipeline                = nullptr;
 };

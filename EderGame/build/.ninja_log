@@ -24,3 +24,9 @@
 20	4812	7942087707221790	CMakeFiles/EderGame.dir/src/VulkanVolumetricFog.cpp.obj	1caac682ecba36c9
 27	5319	7942105334746225	CMakeFiles/EderGame.dir/src/main.cpp.obj	e5dc51c9278c82aa
 5320	5527	7942105387675197	EderGame.exe	fd3961f78a2f924f
+7	5316	7942106073967352	CMakeFiles/EderGame.dir/src/main.cpp.obj	e5dc51c9278c82aa
+5317	5533	7942106127067251	EderGame.exe	fd3961f78a2f924f
+20	5137	7942108034285089	CMakeFiles/EderGame.dir/src/Editor/Panels/InspectorPanel.cpp.obj	b7139ab4b0cd612f
+26	5428	7942108034350179	CMakeFiles/EderGame.dir/src/main.cpp.obj	e5dc51c9278c82aa
+18	5158	7942112443496276	CMakeFiles/EderGame.dir/src/main.cpp.obj	e5dc51c9278c82aa
+5159	5397	7942112494902908	EderGame.exe	fd3961f78a2f924f

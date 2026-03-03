@@ -42,7 +42,7 @@ void VulkanShadowPipeline::Create(vk::Format depthFormat)
     for (uint32_t i = 0; i < 4; i++)
     {
         instanceAttrs[i].binding  = 1;
-        instanceAttrs[i].location = 6 + i;
+        instanceAttrs[i].location = 8 + i;  // 0-7 = vertex (6=boneIdx, 7=boneWeights)
         instanceAttrs[i].format   = vk::Format::eR32G32B32A32Sfloat;
         instanceAttrs[i].offset   = sizeof(glm::vec4) * i;
     }
@@ -94,7 +94,22 @@ void VulkanShadowPipeline::Create(vk::Format depthFormat)
     pushConstant.offset     = 0;
     pushConstant.size       = sizeof(glm::mat4);
 
+    // Set 0: bone SSBO (same binding as main pipeline set 2, re-mapped to set 0 here)
+    vk::DescriptorSetLayoutBinding boneBinding{};
+    boneBinding.binding         = 0;
+    boneBinding.descriptorType  = vk::DescriptorType::eStorageBuffer;
+    boneBinding.descriptorCount = 1;
+    boneBinding.stageFlags      = vk::ShaderStageFlagBits::eVertex;
+
+    vk::DescriptorSetLayoutCreateInfo boneDslInfo{};
+    boneDslInfo.bindingCount = 1;
+    boneDslInfo.pBindings    = &boneBinding;
+    boneDescriptorSetLayout = vk::raii::DescriptorSetLayout(device, boneDslInfo);
+
+    vk::DescriptorSetLayout dsl = *boneDescriptorSetLayout;
     vk::PipelineLayoutCreateInfo layoutInfo{};
+    layoutInfo.setLayoutCount         = 1;
+    layoutInfo.pSetLayouts            = &dsl;
     layoutInfo.pushConstantRangeCount = 1;
     layoutInfo.pPushConstantRanges    = &pushConstant;
     pipelineLayout = vk::raii::PipelineLayout(device, layoutInfo);
@@ -127,6 +142,7 @@ void VulkanShadowPipeline::Bind(vk::CommandBuffer cmd)
 
 void VulkanShadowPipeline::Destroy()
 {
-    pipeline       = nullptr;
-    pipelineLayout = nullptr;
+    pipeline                = nullptr;
+    pipelineLayout          = nullptr;
+    boneDescriptorSetLayout = nullptr;
 }

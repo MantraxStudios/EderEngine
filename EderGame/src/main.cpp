@@ -1,4 +1,4 @@
-#include <SDL3/SDL.h>
+﻿#include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
 #include <algorithm>
 #include <iostream>
@@ -487,11 +487,98 @@ int main()
         }
         // ─────────────────────────────────────────────────────────────────────
 
+        // ── Animation update ──────────────────────────────────────────────────────
+        // Must run BEFORE shadow passes so bone matrices are current
+        // ─────────────────────────────────────────────────────────────────────────
+        {
+            std::vector<glm::mat4> boneMatrices(MAX_BONES, glm::mat4(1.0f));
+            registry.Each<AnimationComponent>([&](Entity e, AnimationComponent& anim) {
+                if (!registry.Has<MeshRendererComponent>(e)) return;
+                const auto& mr = registry.Get<MeshRendererComponent>(e);
+                if (!MeshManager::Get().Has(mr.meshPath)) return;
+                VulkanMesh& m = MeshManager::Get().Load(mr.meshPath);
+                if (m.GetBoneCount() == 0 || m.GetAnimationCount() == 0) return;
+
+                int maxIdx  = static_cast<int>(m.GetAnimationCount()) - 1;
+                int clipIdx = glm::clamp(anim.animIndex, 0, maxIdx);
+
+                // ── Detect index change → start crossfade ─────────────────
+                if (anim.activeIndex != clipIdx)
+                {
+                    anim.prevIndex  = (anim.activeIndex >= 0) ? anim.activeIndex : clipIdx;
+                    anim.prevTime   = anim.currentTime;
+                    anim.currentTime = 0.0f;
+                    anim.activeIndex = clipIdx;
+                    anim.blendTime   = 0.0f;
+                    anim.playing     = true;
+                }
+
+                if (!anim.playing) return;
+
+                // ── Advance times ─────────────────────────────────────────
+                float step = dt * anim.speed;
+
+                float durationActive = m.GetAnimationDuration(static_cast<uint32_t>(anim.activeIndex));
+                anim.currentTime += step;
+                if (!anim.loop && anim.currentTime >= durationActive)
+                {
+                    anim.currentTime = durationActive;
+                    anim.playing     = false;
+                }
+
+                // Also advance the source clip during blend so it doesn't freeze
+                if (anim.prevIndex >= 0 && anim.blendTime < anim.blendDuration)
+                {
+                    anim.prevTime  += step;
+                    anim.blendTime += step;
+                }
+
+                // ── Sample pose(s) ────────────────────────────────────────
+                std::vector<glm::mat4> boneMats;
+                m.ComputeBoneTransforms(static_cast<uint32_t>(anim.activeIndex),
+                                        anim.currentTime, boneMats);
+
+                float blendFactor = (anim.prevIndex >= 0 && anim.blendDuration > 0.0f)
+                    ? glm::clamp(anim.blendTime / anim.blendDuration, 0.0f, 1.0f)
+                    : 1.0f;
+
+                if (blendFactor < 1.0f)
+                {
+                    // Blend source pose with destination pose
+                    std::vector<glm::mat4> prevMats;
+                    m.ComputeBoneTransforms(static_cast<uint32_t>(anim.prevIndex),
+                                            anim.prevTime, prevMats);
+
+                    uint32_t boneCount = static_cast<uint32_t>(
+                        std::min(boneMats.size(), prevMats.size()));
+                    for (uint32_t i = 0; i < boneCount; i++)
+                    {
+                        // Per-bone matrix lerp: decompose to TRS for correctness
+                        // Simple component lerp is good enough for smooth blends
+                        const glm::mat4& src = prevMats[i];
+                        const glm::mat4& dst = boneMats[i];
+                        boneMats[i] = src + blendFactor * (dst - src);
+                    }
+                }
+                else
+                {
+                    // Blend complete — clear source
+                    anim.prevIndex = -1;
+                    anim.prevTime  = 0.0f;
+                }
+
+                for (uint32_t i = 0; i < static_cast<uint32_t>(boneMats.size()) && i < MAX_BONES; i++)
+                    boneMatrices[i] = boneMats[i];
+            });
+            boneSSBO.Upload(boneMatrices);
+        }
+
         // --- Shadow pass (4 cascades) ---
         for (uint32_t c = 0; c < VulkanShadowMap::NUM_CASCADES; c++)
         {
             shadowMap.BeginRendering(cmd, c);
             shadowPipeline.Bind(cmd);
+            boneSSBO.BindToSet(cmd, *shadowPipeline.GetLayout(), 0);
             scene.DrawShadow(cmd, shadowPipeline, cascadeMatrices[c]);
             shadowMap.EndRendering(cmd);
         }
@@ -502,6 +589,7 @@ int main()
         {
             spotShadowMap.BeginRendering(cmd, 0);
             shadowPipeline.Bind(cmd);
+            boneSSBO.BindToSet(cmd, *shadowPipeline.GetLayout(), 0);
             scene.DrawShadow(cmd, shadowPipeline, activeSpotMatrix);
             spotShadowMap.EndRendering(cmd);
         }
@@ -515,42 +603,13 @@ int main()
             {
                 pointShadowMap.BeginRendering(cmd, 0, face);
                 pointShadowPipeline.Bind(cmd);
+                boneSSBO.BindToSet(cmd, pointShadowPipeline.GetLayout(), 0);
                 scene.DrawShadowPoint(cmd, pointShadowPipeline, faceMats[face], activePointPos, activePointFar);
                 pointShadowMap.EndRendering(cmd);
             }
         }
         pointShadowMap.TransitionToShaderRead(cmd, 0);
 
-        // ── Animation update ──────────────────────────────────────────────────────
-        {
-            std::vector<glm::mat4> boneMatrices(MAX_BONES, glm::mat4(1.0f));
-            registry.Each<AnimationComponent>([&](Entity e, AnimationComponent& anim) {
-                if (!anim.playing) return;
-                if (!registry.Has<MeshRendererComponent>(e)) return;
-                const auto& mr = registry.Get<MeshRendererComponent>(e);
-                if (!MeshManager::Get().Has(mr.meshPath)) return;
-                VulkanMesh& m = MeshManager::Get().Load(mr.meshPath);
-                if (m.GetBoneCount() == 0 || m.GetAnimationCount() == 0) return;
-
-                int clipIdx = glm::clamp(anim.animIndex, 0,
-                    static_cast<int>(m.GetAnimationCount()) - 1);
-                float duration = m.GetAnimationDuration(static_cast<uint32_t>(clipIdx));
-
-                anim.currentTime += dt * anim.speed;
-                if (!anim.loop && anim.currentTime >= duration)
-                {
-                    anim.currentTime = duration;  // clamp at last frame
-                    anim.playing     = false;
-                }
-
-                std::vector<glm::mat4> boneMats;
-                m.ComputeBoneTransforms(static_cast<uint32_t>(clipIdx), anim.currentTime, boneMats);
-                for (uint32_t i = 0; i < static_cast<uint32_t>(boneMats.size()) && i < MAX_BONES; i++)
-                    boneMatrices[i] = boneMats[i];
-            });
-            boneSSBO.Upload(boneMatrices);
-        }
-        // ─────────────────────────────────────────────────────────────────────
 
         // --- SceneView framebuffer pass (mismo contenido que el main pass) ---
         float dbAspect = static_cast<float>(debugFb.GetExtent().width) /
