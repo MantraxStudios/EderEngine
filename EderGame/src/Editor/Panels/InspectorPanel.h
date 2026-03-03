@@ -14,6 +14,7 @@ public:
 
 private:
     void DrawTagComponent();
+    void DrawHierarchyComponent();
     void DrawTransformComponent();
     void DrawMeshRendererComponent();
     void DrawLightComponent();

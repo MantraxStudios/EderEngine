@@ -3,6 +3,7 @@
 #include <imgui/imgui_internal.h>
 #include <imgui/imgui_impl_sdl3.h>
 #include <imgui/imgui_impl_vulkan.h>
+#include <imgui/ImGuizmo.h>
 #include "Renderer/Vulkan/VulkanInstance.h"
 #include "Renderer/Vulkan/VulkanSwapchain.h"
 
@@ -197,6 +198,7 @@ void Editor::BeginFrame()
     ImGui_ImplVulkan_NewFrame();
     ImGui_ImplSDL3_NewFrame();
     ImGui::NewFrame();
+    ImGuizmo::BeginFrame();
 }
 
 void Editor::EndFrame()
@@ -220,7 +222,14 @@ void Editor::Draw(Camera& cam, Registry& registry, float dt)
     if (cameraPanel.open) cameraPanel.OnDraw();
     if (hierarchy  .open) hierarchy  .OnDraw();
     if (inspector  .open) inspector  .OnDraw();
-    if (sceneView  .open) sceneView  .OnDraw(gizmoMode, snapEnabled, snapValue);
+    if (sceneView  .open)
+    {
+        ImVec2 svSize   = sceneView.GetDesiredSize();
+        float  svAspect = (svSize.y > 0.0f) ? svSize.x / svSize.y : 1.0f;
+        sceneView.OnDraw(gizmoMode, snapEnabled, snapValue,
+                         cam.GetView(), cam.GetProjection(svAspect),
+                         &registry, hierarchy.GetSelected());
+    }
     if (showDemo)         ImGui::ShowDemoWindow(&showDemo);
 }
 

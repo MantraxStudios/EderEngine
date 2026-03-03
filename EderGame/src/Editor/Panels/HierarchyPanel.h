@@ -10,11 +10,19 @@ public:
     void        OnDraw()      override;
 
     void   SetRegistry(Registry* r) { registry = r; }
-    Entity GetSelected() const      { return selected; }
+    Entity GetSelected()  const     { return selected; }
 
 private:
+    void DrawEntityNode(Entity e);
+
     Registry* registry       = nullptr;
     Entity    selected       = NULL_ENTITY;
     Entity    pendingDestroy = NULL_ENTITY;
-    char      searchBuf[128] = {};
+
+    // Deferred hierarchy ops — executed after the draw loop finishes
+    struct PendingAttach { Entity child = NULL_ENTITY; Entity parent = NULL_ENTITY; };
+    PendingAttach pendingAttach;
+    Entity        pendingDetach = NULL_ENTITY;
+
+    char searchBuf[128] = {};
 };

@@ -7,12 +7,14 @@
 // ── Components ───────────────────────────────────────────────────────────────
 #include "ECS/Components/TagComponent.h"
 #include "ECS/Components/TransformComponent.h"
+#include "ECS/Components/HierarchyComponent.h"
 #include "ECS/Components/MeshRendererComponent.h"
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/AnimationComponent.h"
 
 // ── Systems ──────────────────────────────────────────────────────────────────
 #include "ECS/Systems/System.h"
+#include "ECS/Systems/TransformSystem.h"
 
 // ── Scene ─────────────────────────────────────────────────────────────────────
 #include "Scene/Scene.h"

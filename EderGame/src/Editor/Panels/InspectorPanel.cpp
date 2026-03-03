@@ -1,10 +1,12 @@
 #include "InspectorPanel.h"
 #include "ECS/Components/TagComponent.h"
 #include "ECS/Components/TransformComponent.h"
+#include "ECS/Components/HierarchyComponent.h"
 #include "ECS/Components/MeshRendererComponent.h"
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/VolumetricFogComponent.h"
 #include "ECS/Components/AnimationComponent.h"
+#include "ECS/Systems/TransformSystem.h"
 #include "Core/MaterialManager.h"
 #include "Core/Material.h"
 #include <imgui/imgui.h>
@@ -85,6 +87,7 @@ void InspectorPanel::OnDraw()
     ImGui::Spacing();
 
     DrawTagComponent();
+    DrawHierarchyComponent();
     DrawTransformComponent();
     DrawMeshRendererComponent();
     DrawLightComponent();
@@ -98,6 +101,58 @@ void InspectorPanel::OnDraw()
 
     ImGui::End();
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+
+void InspectorPanel::DrawHierarchyComponent()
+{
+    bool hasHier   = registry->Has<HierarchyComponent>(selected);
+    bool hasParent = hasHier && registry->Get<HierarchyComponent>(selected).parent != NULL_ENTITY;
+
+    if (!hasParent) return;   // Only show section when actually parented
+
+    ImGui::PushID("Hierarchy");
+    if (ImGui::CollapsingHeader("Hierarchy", ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ComponentStripe(ImVec4(0.85f, 0.60f, 0.10f, 1.0f));
+
+        Entity parent = registry->Get<HierarchyComponent>(selected).parent;
+        const char* parentName = "Unknown";
+        if (registry->Has<TagComponent>(parent))
+            parentName = registry->Get<TagComponent>(parent).name.c_str();
+
+        // Parent row
+        if (ImGui::BeginTable("##hierTable", 2, ImGuiTableFlags_None))
+        {
+            ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthFixed, 80.0f);
+            ImGui::TableSetupColumn("", ImGuiTableColumnFlags_WidthStretch);
+
+            ImGui::TableNextRow();
+            ImGui::TableSetColumnIndex(0);
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextDisabled("Parent");
+            ImGui::TableSetColumnIndex(1);
+            ImGui::Text("%s  (#%u)", parentName, parent);
+
+            ImGui::EndTable();
+        }
+
+        // Detach button
+        ImGui::Spacing();
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.55f, 0.20f, 0.05f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.75f, 0.28f, 0.08f, 1.0f));
+        if (ImGui::Button("Detach from Parent", ImVec2(-1, 0)))
+            TransformSystem::Detach(selected, *registry);
+        ImGui::PopStyleColor(2);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Removes parent link while preserving world position");
+
+        ImGui::Spacing();
+    }
+    ImGui::PopID();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 void InspectorPanel::DrawTagComponent()
 {

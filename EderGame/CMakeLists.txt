@@ -37,6 +37,7 @@ set(IMGUI_SOURCES
     ${IMGUI_DIR}/imgui_widgets.cpp
     ${IMGUI_DIR}/imgui_impl_sdl3.cpp
     ${IMGUI_DIR}/imgui_impl_vulkan.cpp
+    ${IMGUI_DIR}/ImGuizmo.cpp
 )
 
 # --------------------------------------------------

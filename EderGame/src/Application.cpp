@@ -4,6 +4,8 @@
 #include <SDL3/SDL_vulkan.h>
 #include <imgui/imgui.h>
 #include <glm/gtc/constants.hpp>
+#define GLM_ENABLE_EXPERIMENTAL
+#include <glm/gtx/euler_angles.hpp>
 #include <algorithm>
 #include <iostream>
 
@@ -12,6 +14,7 @@
 #include "Core/MeshManager.h"
 #include "ECS/Components/VolumetricFogComponent.h"
 #include "ECS/Components/AnimationComponent.h"
+#include "ECS/Systems/TransformSystem.h"
 #include "Renderer/VulkanRenderer.h"
 #include "Renderer/Vulkan/VulkanInstance.h"
 #include "Renderer/Vulkan/VulkanSwapchain.h"
@@ -384,7 +387,7 @@ void Application::UpdateLightBuffer()
 
         if (l.type == LightType::Directional)
         {
-            glm::mat4 mat = tr.GetMatrix();
+glm::mat4 mat = TransformSystem::GetWorldMatrix(e, m_registry);
             glm::vec3 dir = glm::normalize(glm::vec3(mat * glm::vec4(0, -1, 0, 0)));
 
             if (!m_hasDir)
@@ -406,7 +409,7 @@ void Application::UpdateLightBuffer()
         else if (l.type == LightType::Point)
         {
             PointLight pl{};
-            pl.position  = tr.position;
+            pl.position  = glm::vec3(TransformSystem::GetWorldMatrix(e, m_registry)[3]);
             pl.color     = l.color;
             pl.intensity = l.intensity;
             pl.radius    = l.range;
@@ -415,7 +418,7 @@ void Application::UpdateLightBuffer()
             {
                 pl.shadowIdx       = 0;
                 m_hasPointShadow   = true;
-                m_activePointPos   = tr.position;
+                m_activePointPos   = pl.position;
                 m_activePointFar   = l.range;
                 m_lights.SetPointFarPlane(0, l.range);
                 ++pointSlot;
@@ -426,11 +429,11 @@ void Application::UpdateLightBuffer()
         }
         else if (l.type == LightType::Spot)
         {
-            glm::mat4 mat = tr.GetMatrix();
+            glm::mat4 mat = TransformSystem::GetWorldMatrix(e, m_registry);
             glm::vec3 dir = glm::normalize(glm::vec3(mat * glm::vec4(0, -1, 0, 0)));
 
             SpotLight sl{};
-            sl.position  = tr.position;
+            sl.position  = glm::vec3(mat[3]);
             sl.direction = dir;
             sl.innerCos  = std::cos(glm::radians(l.innerConeAngle));
             sl.outerCos  = std::cos(glm::radians(l.outerConeAngle));
@@ -442,7 +445,7 @@ void Application::UpdateLightBuffer()
             {
                 sl.shadowIdx          = 0;
                 m_hasSpotShadow       = true;
-                m_activeSpotPos       = tr.position;
+                m_activeSpotPos       = sl.position;
                 m_activeSpotDir       = dir;
                 m_activeSpotOuterCos  = sl.outerCos;
                 m_activeSpotFar       = l.range;
@@ -498,14 +501,27 @@ void Application::SyncECSToScene()
         }
     });
 
-    // 3. Mirror TransformComponent → SceneObject every frame
+    // 3. Mirror world transform → SceneObject::transform every frame
+    //    (TransformComponent values are LOCAL; SceneObject needs world space)
     for (auto& obj : objs)
     {
         if (obj.entityId == 0 || !m_registry.Has<TransformComponent>(obj.entityId)) continue;
-        const auto& t    = m_registry.Get<TransformComponent>(obj.entityId);
-        obj.transform.position = t.position;
-        obj.transform.rotation = t.rotation;
-        obj.transform.scale    = t.scale;
+
+        glm::mat4 world = TransformSystem::GetWorldMatrix(obj.entityId, m_registry);
+
+        // Decompose world matrix into T / R(YXZ deg) / S
+        obj.transform.position = glm::vec3(world[3]);
+        obj.transform.scale.x  = glm::length(glm::vec3(world[0]));
+        obj.transform.scale.y  = glm::length(glm::vec3(world[1]));
+        obj.transform.scale.z  = glm::length(glm::vec3(world[2]));
+        glm::mat4 rot = world;
+        rot[0] = glm::vec4(glm::vec3(world[0]) / obj.transform.scale.x, 0.0f);
+        rot[1] = glm::vec4(glm::vec3(world[1]) / obj.transform.scale.y, 0.0f);
+        rot[2] = glm::vec4(glm::vec3(world[2]) / obj.transform.scale.z, 0.0f);
+        rot[3] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
+        float yRad, xRad, zRad;
+        glm::extractEulerAngleYXZ(rot, yRad, xRad, zRad);
+        obj.transform.rotation = glm::degrees(glm::vec3(xRad, yRad, zRad));
     }
 
     // 4. Sync alphaMode → alphaThreshold UBO field

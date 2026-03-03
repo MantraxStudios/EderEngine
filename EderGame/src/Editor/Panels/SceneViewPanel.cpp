@@ -1,6 +1,11 @@
 #include "SceneViewPanel.h"
 #include <imgui/imgui_impl_vulkan.h>
 #include <imgui/imgui_internal.h>
+#include <imgui/ImGuizmo.h>
+#include <glm/gtc/type_ptr.hpp>
+#include "ECS/Components/TransformComponent.h"
+#include "ECS/Components/HierarchyComponent.h"
+#include "ECS/Systems/TransformSystem.h"
 
 void SceneViewPanel::SetFramebuffer(VulkanFramebuffer* fb)
 {
@@ -31,9 +36,11 @@ void SceneViewPanel::ReleaseTexture()
     lastView    = VK_NULL_HANDLE;
 }
 
-void SceneViewPanel::OnDraw() { OnDraw(GizmoMode::Translate, false, 1.0f); }
+void SceneViewPanel::OnDraw() { OnDraw(GizmoMode::Translate, false, 1.0f, glm::mat4(1), glm::mat4(1), nullptr, 0); }
 
-void SceneViewPanel::OnDraw(GizmoMode gizmoMode, bool snap, float snapValue)
+void SceneViewPanel::OnDraw(GizmoMode gizmoMode, bool snap, float snapValue,
+                             const glm::mat4& view, const glm::mat4& proj,
+                             Registry* registry, Entity selected)
 {
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
 
@@ -61,14 +68,74 @@ void SceneViewPanel::OnDraw(GizmoMode gizmoMode, bool snap, float snapValue)
         ImGui::TextDisabled("Scene not available");
     }
 
-    // ---- Gizmo overlay (top-left corner of the viewport) ----
+    // ── ImGuizmo — transform manipulator ────────────────────────────────────
+    if (registry && selected != NULL_ENTITY && registry->Has<TransformComponent>(selected))
+    {
+        auto& tr = registry->Get<TransformComponent>(selected);
+
+        // ImGuizmo expects an OpenGL-style projection (Y up, depth -1..1).
+        // GetProjection() already flips Y for Vulkan, so we un-flip it here.
+        glm::mat4 imguizmoProj  = proj;
+        imguizmoProj[1][1] *= -1.0f;
+
+        ImGuizmo::SetOrthographic(false);
+        ImGuizmo::SetDrawlist(ImGui::GetWindowDrawList());
+
+        // Rect = the image area inside the window
+        ImVec2 imageMin  = ImGui::GetItemRectMin();
+        ImVec2 imageSize = ImGui::GetItemRectSize();
+        ImGuizmo::SetRect(imageMin.x, imageMin.y, imageSize.x, imageSize.y);
+
+        // Map GizmoMode → ImGuizmo operation
+        ImGuizmo::OPERATION op;
+        switch (gizmoMode)
+        {
+        case GizmoMode::Rotate: op = ImGuizmo::ROTATE; break;
+        case GizmoMode::Scale:  op = ImGuizmo::SCALE;  break;
+        default:                op = ImGuizmo::TRANSLATE; break;
+        }
+
+        // Scale is only meaningful in local space
+        ImGuizmo::MODE coordMode = (gizmoMode == GizmoMode::Scale)
+            ? ImGuizmo::LOCAL : ImGuizmo::WORLD;
+
+        float snapVals[3] = { snapValue, snapValue, snapValue };
+        float* pSnap      = snap ? snapVals : nullptr;
+
+        float viewF[16], projF[16], worldF[16];
+        memcpy(viewF,  glm::value_ptr(view),         sizeof(float) * 16);
+        memcpy(projF,  glm::value_ptr(imguizmoProj), sizeof(float) * 16);
+
+        // Use WORLD matrix so the gizmo positions correctly for nested entities
+        glm::mat4 worldMat = TransformSystem::GetWorldMatrix(selected, *registry);
+        memcpy(worldF, glm::value_ptr(worldMat), sizeof(float) * 16);
+
+        if (ImGuizmo::Manipulate(viewF, projF, op, coordMode, worldF, nullptr, pSnap))
+        {
+            // Convert manipulated world matrix back to LOCAL space
+            Entity parent = registry->Has<HierarchyComponent>(selected)
+                ? registry->Get<HierarchyComponent>(selected).parent
+                : NULL_ENTITY;
+
+            glm::mat4 newWorld(1.0f);
+            memcpy(glm::value_ptr(newWorld), worldF, sizeof(float) * 16);
+
+            glm::mat4 parentWorld = (parent != NULL_ENTITY)
+                ? TransformSystem::GetWorldMatrix(parent, *registry)
+                : glm::mat4(1.0f);
+
+            glm::mat4 newLocal = glm::inverse(parentWorld) * newWorld;
+            TransformSystem::DecomposeInto(newLocal, tr);
+        }
+    }
+
+    // ── Gizmo mode overlay (top-left corner) ─────────────────────────────────
     const ImVec2 vpMin  = ImGui::GetWindowPos();
     const float  pad    = 8.0f;
     const float  btnSz  = 26.0f;
     ImVec2       cursor = ImVec2(vpMin.x + pad, vpMin.y + pad);
 
     ImDrawList* dl = ImGui::GetWindowDrawList();
-    // semi-transparent background pill
     dl->AddRectFilled(
         ImVec2(cursor.x - 4, cursor.y - 3),
         ImVec2(cursor.x + btnSz * 4 + 4 + (snap ? btnSz + 2 : 0), cursor.y + btnSz + 3),
