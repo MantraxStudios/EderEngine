@@ -126,13 +126,15 @@ float PointVisibility(vec3 worldPos, vec3 lightPos, int slot, float farPlane)
     return (stored >= dist - 0.15) ? 1.0 : 0.0;
 }
 
-// ── Smooth distance attenuation — quadratic polynomial, bounded, no singularity
-// Returns 1.0 at light center, 0.0 at radius. No 1/d² divergence.
+// ── Karis/Epic (2013) windowed inverse-square.
+// Range-precise: physically bright near source, exactly 0 at radius boundary.
 float DistAtten(float dist, float radius)
 {
-    float x = clamp(dist / max(radius, 0.0001), 0.0, 1.0);
-    float f = 1.0 - x * x;   // 1 at center → 0 at edge
-    return f * f;             // squared for smooth falloff
+    float r2     = radius * radius;
+    float minDSq = r2 * 0.0001;  // prevent singularity (clamp to 1% of range)
+    float x      = clamp(dist / max(radius, 0.0001), 0.0, 1.0);
+    float window = max(0.0, 1.0 - x * x * x * x);
+    return (r2 / max(dist * dist, minDSq)) * (window * window);
 }
 
 // ── Reconstruct world position from depth ────────────────────────────────────

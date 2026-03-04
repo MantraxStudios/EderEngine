@@ -2,6 +2,13 @@
 
 #include <iostream>
 #include <string>
+#include <fstream>
+#include <sstream>
+#include <filesystem>
+#include <cstdlib>
+#include <ctime>
+
+namespace fs = std::filesystem;
 
 #include "ECS/Components/TagComponent.h"
 #include "ECS/Components/TransformComponent.h"
@@ -863,5 +870,168 @@ void LuaScriptSystem::BindAPI()
     Script["has"] = [this](int e) -> bool
     {
         return m_envs.count((Entity)e) > 0;
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // System — OS / filesystem utilities
+    // ─────────────────────────────────────────────────────────────────────────
+    auto Sys = m_lua.create_named_table("System");
+
+    // ── Time ────────────────────────────────────────────────────────────────
+    // Returns seconds since epoch (same as os.time())
+    Sys["getTime"] = []() -> double {
+        return static_cast<double>(std::time(nullptr));
+    };
+
+    // Returns formatted date string. format uses strftime codes.
+    // Default: "%Y-%m-%d %H:%M:%S"  → "2026-03-04 14:30:00"
+    Sys["getDate"] = [](sol::optional<std::string> fmt) -> std::string {
+        std::time_t t = std::time(nullptr);
+        struct tm tm_info;
+#ifdef _WIN32
+        localtime_s(&tm_info, &t);
+#else
+        localtime_r(&t, &tm_info);
+#endif
+        char buf[128];
+        const char* f = fmt.has_value() ? fmt->c_str() : "%Y-%m-%d %H:%M:%S";
+        std::strftime(buf, sizeof(buf), f, &tm_info);
+        return std::string(buf);
+    };
+
+    // Returns seconds since program start (high-resolution, good for profiling)
+    Sys["getClock"] = []() -> double {
+        return static_cast<double>(std::clock()) / CLOCKS_PER_SEC;
+    };
+
+    // ── Environment / machine ────────────────────────────────────────────────
+    // Returns an environment variable value, or "" if not found.
+    Sys["getEnv"] = [](const std::string& name) -> std::string {
+        const char* v = std::getenv(name.c_str());
+        return v ? std::string(v) : std::string{};
+    };
+
+    // Returns the machine name (COMPUTERNAME on Windows, HOSTNAME elsewhere)
+    Sys["getComputerName"] = []() -> std::string {
+#ifdef _WIN32
+        const char* v = std::getenv("COMPUTERNAME");
+#else
+        const char* v = std::getenv("HOSTNAME");
+#endif
+        return v ? std::string(v) : std::string{};
+    };
+
+    // Returns the username of the current session
+    Sys["getUserName"] = []() -> std::string {
+#ifdef _WIN32
+        const char* v = std::getenv("USERNAME");
+#else
+        const char* v = std::getenv("USER");
+#endif
+        return v ? std::string(v) : std::string{};
+    };
+
+    // ── Working directory ────────────────────────────────────────────────────
+    Sys["getCwd"] = []() -> std::string {
+        std::error_code ec;
+        auto p = fs::current_path(ec);
+        return ec ? std::string{} : p.string();
+    };
+
+    // ── Files ────────────────────────────────────────────────────────────────
+    // Read entire file as a string. Returns nil if the file cannot be opened.
+    Sys["readFile"] = [this](const std::string& path) -> sol::object {
+        std::ifstream f(path, std::ios::binary);
+        if (!f) return sol::nil;
+        std::ostringstream ss;
+        ss << f.rdbuf();
+        return sol::make_object(m_lua, ss.str());
+    };
+
+    // Write (overwrite) a file with a string. Returns true on success.
+    Sys["writeFile"] = [](const std::string& path, const std::string& content) -> bool {
+        std::ofstream f(path, std::ios::binary | std::ios::trunc);
+        if (!f) return false;
+        f << content;
+        return f.good();
+    };
+
+    // Append a string to a file. Returns true on success.
+    Sys["appendFile"] = [](const std::string& path, const std::string& content) -> bool {
+        std::ofstream f(path, std::ios::binary | std::ios::app);
+        if (!f) return false;
+        f << content;
+        return f.good();
+    };
+
+    // Delete a file. Returns true if deleted.
+    Sys["deleteFile"] = [](const std::string& path) -> bool {
+        std::error_code ec;
+        return fs::remove(path, ec);
+    };
+
+    // Returns true if path exists (file or directory)
+    Sys["exists"] = [](const std::string& path) -> bool {
+        std::error_code ec;
+        return fs::exists(path, ec);
+    };
+
+    // Returns true if path is a regular file
+    Sys["isFile"] = [](const std::string& path) -> bool {
+        std::error_code ec;
+        return fs::is_regular_file(path, ec);
+    };
+
+    // Returns true if path is a directory
+    Sys["isDir"] = [](const std::string& path) -> bool {
+        std::error_code ec;
+        return fs::is_directory(path, ec);
+    };
+
+    // ── Directories ──────────────────────────────────────────────────────────
+    // Create directory (including all parents). Returns true on success.
+    Sys["createDir"] = [](const std::string& path) -> bool {
+        std::error_code ec;
+        return fs::create_directories(path, ec);
+    };
+
+    // List files in a directory. Returns a Lua array of file-name strings.
+    // If recursive=true it walks subdirectories too.
+    Sys["listFiles"] = [this](const std::string& path, sol::optional<bool> recursive) -> sol::table {
+        sol::table t = m_lua.create_table();
+        std::error_code ec;
+        if (!fs::exists(path, ec)) return t;
+        int idx = 1;
+        auto push = [&](const fs::path& p) {
+            if (fs::is_regular_file(p, ec))
+                t[idx++] = p.filename().string();
+        };
+        if (recursive.value_or(false)) {
+            for (auto& entry : fs::recursive_directory_iterator(path, ec))
+                push(entry.path());
+        } else {
+            for (auto& entry : fs::directory_iterator(path, ec))
+                push(entry.path());
+        }
+        return t;
+    };
+
+    // List subdirectory names in a directory. Returns a Lua array of strings.
+    Sys["listDirs"] = [this](const std::string& path) -> sol::table {
+        sol::table t = m_lua.create_table();
+        std::error_code ec;
+        if (!fs::exists(path, ec)) return t;
+        int idx = 1;
+        for (auto& entry : fs::directory_iterator(path, ec))
+            if (fs::is_directory(entry.path(), ec))
+                t[idx++] = entry.path().filename().string();
+        return t;
+    };
+
+    // Returns file size in bytes, or -1 on error.
+    Sys["fileSize"] = [](const std::string& path) -> long long {
+        std::error_code ec;
+        auto sz = fs::file_size(path, ec);
+        return ec ? -1LL : static_cast<long long>(sz);
     };
 }

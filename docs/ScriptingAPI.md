@@ -272,7 +272,81 @@ Entity.isValid(e)                   --> bool
 
 ---
 
-## Script — comunicación entre scripts
+## System — utilidades del sistema operativo
+
+### Tiempo
+
+```lua
+System.getTime()            --> float  segundos desde epoch (unix timestamp)
+System.getDate()            --> string "2026-03-04 14:30:00"
+System.getDate("%d/%m/%Y")  --> string con formato strftime personalizado
+System.getClock()           --> float  segundos de CPU desde que inició el programa
+```
+
+Códigos de formato comunes para `getDate`:
+
+| Código | Resultado |
+|--------|-----------|
+| `%Y` | Año 4 dígitos |
+| `%m` | Mes 01-12 |
+| `%d` | Día 01-31 |
+| `%H` | Hora 00-23 |
+| `%M` | Minuto 00-59 |
+| `%S` | Segundo 00-59 |
+
+### Máquina / entorno
+
+```lua
+System.getComputerName()    --> string  nombre del PC
+System.getUserName()        --> string  usuario de sesión
+System.getEnv("USERPROFILE")-> string  variable de entorno (vacío si no existe)
+System.getCwd()             --> string  directorio de trabajo actual
+```
+
+### Archivos
+
+```lua
+-- Leer un archivo completo como string (nil si no existe)
+local texto = System.readFile("saves/save1.json")
+
+-- Escribir (sobreescribe el archivo)
+System.writeFile("logs/log.txt", "hola mundo\n")   --> bool
+
+-- Añadir al final sin borrar el contenido anterior
+System.appendFile("logs/log.txt", "otra linea\n")  --> bool
+
+-- Borrar un archivo
+System.deleteFile("tmp/temp.dat")                  --> bool
+
+-- Tamaño en bytes (-1 si error)
+System.fileSize("saves/save1.json")                --> int
+```
+
+### Directorios y consultas
+
+```lua
+-- Comprobar existencia
+System.exists("saves/save1.json")   --> bool
+System.isFile("saves/save1.json")   --> bool
+System.isDir("saves/")              --> bool
+
+-- Crear directorio (crea padres si es necesario)
+System.createDir("saves/slot1")     --> bool
+
+-- Listar archivos en un directorio (solo nombres, no rutas completas)
+local files = System.listFiles("saves/")
+for i = 1, #files do print(files[i]) end
+
+-- Listar recursivamente
+local all = System.listFiles("Content/", true)
+
+-- Listar subdirectorios
+local dirs = System.listDirs("Content/")
+```
+
+---
+
+
 
 Permite llamar funciones y leer/escribir variables del entorno Lua de **otro** entity.
 
@@ -358,6 +432,33 @@ function OnStart()
     for i = 0, count - 1 do
         local child = Hierarchy.getChild(this_entity, i)
         print("child: " .. child)
+    end
+end
+```
+
+### Sistema: guardar un archivo de log
+```lua
+function OnStart()
+    local pc   = System.getComputerName()
+    local user = System.getUserName()
+    local date = System.getDate()
+    System.createDir("logs")
+    System.appendFile("logs/session.log",
+        date .. " | " .. user .. "@" .. pc .. " | session started\n")
+end
+```
+
+### Sistema: cargar config JSON sencillo
+```lua
+function OnStart()
+    local raw = System.readFile("saves/config.json")
+    if raw then
+        -- parsear con un mínimo splitter artesanal o una librería JSON Lua
+        print("Config loaded: " .. #raw .. " bytes")
+    else
+        -- primera vez — crear config por defecto
+        System.createDir("saves")
+        System.writeFile("saves/config.json", '{"volume":1.0,"fullscreen":false}')
     end
 end
 ```

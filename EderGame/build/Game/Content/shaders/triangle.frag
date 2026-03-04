@@ -306,11 +306,14 @@ void main()
         float distSqr = dot(toLight, toLight);
         float dist    = sqrt(distSqr);
         float r       = lights.pointLights[i].radius;
-        if (dist >= r) continue;   // hard cutoff — no light, no shadow past range
-        // Unity-style: inverse-square × smooth window → natural falloff, 0 at range
+        if (dist >= r) continue;   // hard cutoff at range boundary
+        // Karis/Epic (2013) windowed inverse-square:
+        //   (r² / d²) × window²  — physically accurate falloff, zero at range.
+        // minDistSq prevents singularity (clamps effective dist to 1% of range).
+        float minDSq   = r * r * 0.0001;
         float normDist = dist / r;
-        float window   = max(1.0 - normDist * normDist * normDist * normDist, 0.0);
-        float atten    = (window * window) / (distSqr + 1.0);
+        float window   = max(0.0, 1.0 - normDist * normDist * normDist * normDist);
+        float atten    = (r * r / max(distSqr, minDSq)) * (window * window);
         float shadow  = (lights.pointLights[i].shadowIdx >= 0)
                         ? ShadowPoint(lights.pointLights[i].shadowIdx, fragWorldPos,
                                       lights.pointLights[i].position, N)
@@ -327,11 +330,12 @@ void main()
         float dist    = sqrt(distSqr);
         vec3  L       = toLight / dist;
         float r       = lights.spotLights[i].radius;
-        if (dist >= r) continue;   // hard cutoff
-        // Unity-style distance attenuation
+        if (dist >= r) continue;   // hard cutoff at range boundary
+        // Karis/Epic (2013) windowed inverse-square
+        float minDSq   = r * r * 0.0001;
         float normDist = dist / r;
-        float window   = max(1.0 - normDist * normDist * normDist * normDist, 0.0);
-        float atten    = (window * window) / (distSqr + 1.0);
+        float window   = max(0.0, 1.0 - normDist * normDist * normDist * normDist);
+        float atten    = (r * r / max(distSqr, minDSq)) * (window * window);
         // Spot cone
         float theta   = dot(L, normalize(-lights.spotLights[i].direction));
         float eps     = lights.spotLights[i].innerCos - lights.spotLights[i].outerCos;

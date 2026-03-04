@@ -266,13 +266,13 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
 
         if (l.type == LightType::Point)
         {
-            // Ring radius proportional to light range, cross fixed
+            // Small cross at the pivot + 3 circles at the ACTUAL range radius
             constexpr float cross = 0.35f;
-            float ringR = std::clamp(l.range * 0.12f, 0.4f, 20.0f) * selScale;
+            float ringR = l.range * selScale;   // exact range — no scaling/clamping
             AddCross (verts, pos, cross * selScale);
-            AddCircle(verts, pos, {1,0,0}, {0,1,0}, ringR, 24);   // XY
-            AddCircle(verts, pos, {1,0,0}, {0,0,1}, ringR, 24);   // XZ
-            AddCircle(verts, pos, {0,1,0}, {0,0,1}, ringR, 24);   // YZ
+            AddCircle(verts, pos, {1,0,0}, {0,1,0}, ringR, 32);   // XY plane
+            AddCircle(verts, pos, {1,0,0}, {0,0,1}, ringR, 32);   // XZ plane
+            AddCircle(verts, pos, {0,1,0}, {0,0,1}, ringR, 32);   // YZ plane
         }
         else if (l.type == LightType::Directional)
         {
@@ -293,7 +293,7 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
             glm::mat4 m   = t.GetMatrix();
             glm::vec3 dir = glm::normalize(glm::vec3(m * glm::vec4(0.0f, -1.0f, 0.0f, 0.0f)));
 
-            float coneRange = std::clamp(l.range * 0.6f, 1.0f, 30.0f) * selScale;
+            float coneRange = l.range * selScale;   // exact range — no scaling/clamping
             AddCone(verts, pos, dir, coneRange, l.outerConeAngle, 20);
         }
 

@@ -15,7 +15,7 @@ int main()
     std::filesystem::current_path(std::filesystem::path(exePath).parent_path());
 #endif
 
-    // exe and EderGraphics.dll each have their own static singleton.
+    // exe and EderGraphics.dll each have their own static singleton 
     // Both must be initialised separately.
     //   • exe singleton  → used by Editor panels (AssetBrowserPanel, etc.)
     //   • dll singleton  → used by VulkanTexture, VulkanMesh, LoadSpv, etc.
