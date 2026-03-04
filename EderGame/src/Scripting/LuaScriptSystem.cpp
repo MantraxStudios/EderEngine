@@ -805,4 +805,63 @@ void LuaScriptSystem::BindAPI()
 
     // Global log alias
     m_lua["log"] = [](const std::string& s) { std::cout << "[Lua] " << s << "\n"; };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Script — cross-entity script communication
+    // ─────────────────────────────────────────────────────────────────────────
+    auto Script = m_lua.create_named_table("Script");
+
+    // Script.call(entity, "FunctionName", arg1, arg2, ...)
+    // Calls a Lua function defined in another entity's script environment.
+    // Returns up to 8 values from the callee, or nothing on error.
+    Script["call"] = [this](int e, const std::string& fn, sol::variadic_args va) -> sol::object
+    {
+        auto it = m_envs.find((Entity)e);
+        if (it == m_envs.end()) {
+            std::cerr << "[Script.call] entity " << e << " has no script environment\n";
+            return sol::nil;
+        }
+        sol::environment& env = it->second;
+        sol::protected_function func = env[fn];
+        if (!func.valid()) {
+            std::cerr << "[Script.call] function '" << fn << "' not found on entity " << e << "\n";
+            return sol::nil;
+        }
+        std::vector<sol::object> args(va.begin(), va.end());
+        sol::protected_function_result res = func(sol::as_args(args));
+        if (!res.valid()) {
+            sol::error err = res;
+            std::cerr << "[Script.call] error calling '" << fn << "' on entity " << e << ": " << err.what() << "\n";
+            return sol::nil;
+        }
+        // Return first result (or nil)
+        if (res.return_count() > 0)
+            return res.get<sol::object>(0);
+        return sol::nil;
+    };
+
+    // Script.get(entity, "varName")
+    // Reads a global variable from another entity's script environment.
+    Script["get"] = [this](int e, const std::string& key) -> sol::object
+    {
+        auto it = m_envs.find((Entity)e);
+        if (it == m_envs.end()) return sol::nil;
+        return it->second[key];
+    };
+
+    // Script.set(entity, "varName", value)
+    // Writes a value into another entity's script environment.
+    Script["set"] = [this](int e, const std::string& key, sol::object value)
+    {
+        auto it = m_envs.find((Entity)e);
+        if (it == m_envs.end()) return;
+        it->second[key] = value;
+    };
+
+    // Script.has(entity)
+    // Returns true if the entity has an active (loaded) script environment.
+    Script["has"] = [this](int e) -> bool
+    {
+        return m_envs.count((Entity)e) > 0;
+    };
 }
