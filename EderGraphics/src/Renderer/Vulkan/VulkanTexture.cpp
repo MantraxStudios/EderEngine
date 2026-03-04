@@ -1,6 +1,7 @@
 #include "VulkanTexture.h"
 #include "VulkanInstance.h"
 #include "VulkanBuffer.h"
+#include <IO/AssetManager.h>
 
 #define STB_IMAGE_IMPLEMENTATION
 #include <stb_image.h>
@@ -181,8 +182,37 @@ void VulkanTexture::UploadPixels(const uint8_t* pixels, uint32_t width, uint32_t
     created = true;
 }
 
+void VulkanTexture::LoadFromMemory(const uint8_t* data, size_t size)
+{
+    int w, h, channels;
+    stbi_uc* pixels = stbi_load_from_memory(
+        data, static_cast<int>(size), &w, &h, &channels, STBI_rgb_alpha);
+    if (!pixels)
+        throw std::runtime_error(
+            std::string("VulkanTexture: stbi_load_from_memory failed: ") + stbi_failure_reason());
+
+    UploadPixels(pixels, static_cast<uint32_t>(w), static_cast<uint32_t>(h));
+    stbi_image_free(pixels);
+
+    std::cout << "[Texture] LoadedFromMemory " << w << "x" << h << std::endl;
+}
+
 void VulkanTexture::Load(const std::string& path)
 {
+    // Route through AssetManager when available.
+    auto& am = Krayon::AssetManager::Get();
+    if (!am.GetWorkDir().empty() || am.IsCompiled())
+    {
+        std::vector<uint8_t> bytes = am.GetBytes(path);
+        if (!bytes.empty())
+        {
+            LoadFromMemory(bytes.data(), bytes.size());
+            std::cout << "[Texture] Loaded via AssetManager: " << path << std::endl;
+            return;
+        }
+    }
+
+    // Direct disk fallback.
     int w, h, channels;
     stbi_uc* pixels = stbi_load(path.c_str(), &w, &h, &channels, STBI_rgb_alpha);
     if (!pixels)

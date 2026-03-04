@@ -1,0 +1,4 @@
+guid=88e854109fd1db89
+type=Shader
+name=point_shadow
+path=shaders/point_shadow.frag

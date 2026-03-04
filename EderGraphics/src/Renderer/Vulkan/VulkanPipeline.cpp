@@ -1,10 +1,24 @@
 #include "VulkanPipeline.h"
 #include "VulkanInstance.h"
 #include "VulkanSwapchain.h"
+#include <IO/AssetManager.h>
 #include <fstream>
+#include <cstring>
 
 std::vector<uint32_t> VulkanPipeline::LoadSpv(const std::string& path)
 {
+    auto& am = Krayon::AssetManager::Get();
+    if (!am.GetWorkDir().empty())
+    {
+        auto bytes = am.GetBytes(path);
+        if (!bytes.empty())
+        {
+            std::vector<uint32_t> buf(bytes.size() / sizeof(uint32_t));
+            std::memcpy(buf.data(), bytes.data(), bytes.size());
+            return buf;
+        }
+        throw std::runtime_error("[AssetManager] Shader not found: " + path);
+    }
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open())
         throw std::runtime_error("Failed to open shader: " + path);
@@ -243,7 +257,7 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
     vk::PipelineDepthStencilStateCreateInfo depthNoWrite{};
     depthNoWrite.depthTestEnable  = vk::True;   // sigue testeando (opacos delante)
     depthNoWrite.depthWriteEnable = vk::False;  // NO escribe depth (orden manual)
-    depthNoWrite.depthCompareOp   = vk::CompareOp::eLess;
+    depthNoWrite.depthCompareOp   = vk::CompareOp::eLessOrEqual;  // evita flickering en el far plane
 
     vk::GraphicsPipelineCreateInfo transpInfo = pipelineInfo;
     transpInfo.pColorBlendState  = &blendInfo;

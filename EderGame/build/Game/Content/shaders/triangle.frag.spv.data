@@ -1,0 +1,4 @@
+guid=1a419198c3718385
+type=Shader
+name=triangle.frag
+path=shaders/triangle.frag.spv

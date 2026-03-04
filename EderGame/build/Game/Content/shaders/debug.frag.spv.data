@@ -1,0 +1,4 @@
+guid=6cbaa27fac1f2fc0
+type=Shader
+name=debug.frag
+path=shaders/debug.frag.spv

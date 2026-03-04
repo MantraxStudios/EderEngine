@@ -1,0 +1,4 @@
+guid=1961828fbdb3866f
+type=Shader
+name=fog
+path=shaders/fog.vert

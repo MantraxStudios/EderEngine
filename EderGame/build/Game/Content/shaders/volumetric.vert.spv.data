@@ -1,0 +1,4 @@
+guid=a5589695dff2d92
+type=Shader
+name=volumetric.vert
+path=shaders/volumetric.vert.spv

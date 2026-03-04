@@ -9,6 +9,8 @@
 #include "ECS/Systems/TransformSystem.h"
 #include "Core/MaterialManager.h"
 #include "Core/Material.h"
+#include <IO/AssetManager.h>
+#include <filesystem>
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>
 #include <cstring>
@@ -60,6 +62,88 @@ static bool Vec3Row(const char* label, float* v, float speed,
     ImGui::PopID();
     return changed;
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  AssetDropField
+//  Renders a Unity-style row:   [Label]  [ asset name            ↓ ]
+//  The box is a drag-drop target.  Returns true when a compatible asset
+//  is dropped and fills outPath / outGuid.
+// ─────────────────────────────────────────────────────────────────────────────
+bool InspectorPanel::AssetDropField(const char*         label,
+                                    Krayon::AssetType   expectedType,
+                                    const std::string&  currentPath,
+                                    std::string&        outPath,
+                                    uint64_t&           outGuid)
+{
+    using namespace Krayon;
+    bool changed = false;
+
+    // Derive display name from the current path (file stem)
+    std::string stem = currentPath.empty() ? "(none)"
+        : std::filesystem::path(currentPath).stem().string();
+
+    ImGui::PushID(label);
+
+    // Label column
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("%s", label);
+    ImGui::SameLine(110);
+
+    // Detect whether a compatible payload is being hovered
+    bool canDrop = false;
+    if (ImGui::GetDragDropPayload() &&
+        ImGui::GetDragDropPayload()->IsDataType("ASSET_GUID"))
+    {
+        uint64_t hoverGuid = *reinterpret_cast<const uint64_t*>(
+            ImGui::GetDragDropPayload()->Data);
+        const AssetMeta* hm = AssetManager::Get().FindByGuid(hoverGuid);
+        canDrop = hm && (expectedType == AssetType::Unknown || hm->type == expectedType);
+    }
+
+    // Draw a styled button that looks like an input field
+    const float btnW = ImGui::GetContentRegionAvail().x;
+    ImVec4 bgCol = canDrop
+        ? ImVec4(0.20f, 0.50f, 0.20f, 0.85f)   // green tint while valid payload hovered
+        : ImVec4(0.12f, 0.12f, 0.12f, 1.00f);
+
+    ImGui::PushStyleColor(ImGuiCol_Button,        bgCol);
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.20f, 0.20f, 0.25f, 1.0f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  bgCol);
+
+    // Show truncated stem + small arrow indicator
+    std::string btnLabel = stem;
+    if (btnLabel.size() > 22) btnLabel = btnLabel.substr(0, 19) + "...";
+    btnLabel += "  \xce\xb2"; // β as a small "select" hint glyph
+    ImGui::Button(btnLabel.c_str(), ImVec2(btnW, 0));
+
+    ImGui::PopStyleColor(3);
+
+    // Tooltip with full path
+    if (!currentPath.empty() && ImGui::IsItemHovered())
+        ImGui::SetTooltip("%s", currentPath.c_str());
+
+    // Drag-drop target
+    if (ImGui::BeginDragDropTarget())
+    {
+        if (const ImGuiPayload* p = ImGui::AcceptDragDropPayload("ASSET_GUID"))
+        {
+            uint64_t droppedGuid = *reinterpret_cast<const uint64_t*>(p->Data);
+            const AssetMeta* meta = AssetManager::Get().FindByGuid(droppedGuid);
+            if (meta && (expectedType == AssetType::Unknown || meta->type == expectedType))
+            {
+                outPath = meta->path;
+                outGuid = droppedGuid;
+                changed = true;
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
+
+    ImGui::PopID();
+    return changed;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 void InspectorPanel::OnDraw()
 {
@@ -204,10 +288,36 @@ void InspectorPanel::DrawMeshRendererComponent()
             "Mesh Renderer", registry, selected, ImVec4(0.30f, 0.60f, 1.0f, 1.0f)))
     {
         auto& m = registry->Get<MeshRendererComponent>(selected);
-        ImGui::PushStyleColor(ImGuiCol_FrameBg, ImVec4(0.10f, 0.10f, 0.10f, 1.0f));
-        ImGui::LabelText("Mesh##mr",  "%s", m.meshPath.empty() ? "(none)" : m.meshPath.c_str());
-        ImGui::LabelText("Material##mr", "%s", m.materialName.c_str());
-        ImGui::PopStyleColor();
+
+        // ── Mesh asset drop slot ──────────────────────────────────
+        {
+            std::string newPath; uint64_t newGuid = 0;
+            if (AssetDropField("Mesh", Krayon::AssetType::Mesh, m.meshPath, newPath, newGuid))
+            {
+                m.meshGuid = newGuid;
+                m.meshPath = newPath;
+            }
+        }
+
+        // ── Material asset drop slot ──────────────────────────────
+        {
+            // Resolve display path from materialGuid if available
+            std::string matDisplayPath = m.materialName;
+            if (m.materialGuid != 0)
+            {
+                const auto* mm = Krayon::AssetManager::Get().FindByGuid(m.materialGuid);
+                if (mm) matDisplayPath = mm->path;
+            }
+            std::string newPath; uint64_t newGuid = 0;
+            if (AssetDropField("Material", Krayon::AssetType::Material,
+                               matDisplayPath, newPath, newGuid))
+            {
+                m.materialGuid = newGuid;
+                // derive materialName from file stem for existing pipeline
+                const auto* mm = Krayon::AssetManager::Get().FindByGuid(newGuid);
+                if (mm) m.materialName = mm->name;
+            }
+        }
         ImGui::Spacing();
         ImGui::Checkbox("Visible",     &m.visible);
         ImGui::SameLine(120);
@@ -346,6 +456,36 @@ void InspectorPanel::DrawAnimationComponent()
     if (ComponentHeader<AnimationComponent>("Animation", registry, selected, ImVec4(0.8f, 0.5f, 1.0f, 1.0f)))
     {
         auto& a = registry->Get<AnimationComponent>(selected);
+
+        // ── Model/FBX drop slot ───────────────────────────────────
+        // Animations are embedded in the FBX; dropping here also sets
+        // the MeshRendererComponent's mesh on the same entity.
+        {
+            std::string currentModel;
+            uint64_t    currentGuid = 0;
+            if (registry->Has<MeshRendererComponent>(selected))
+            {
+                auto& mr2   = registry->Get<MeshRendererComponent>(selected);
+                currentModel = mr2.meshPath;
+                currentGuid  = mr2.meshGuid;
+                // If we only have a path but no GUID yet, try to resolve it
+                if (currentGuid == 0 && !currentModel.empty())
+                    currentGuid = Krayon::AssetManager::Get().GetGuid(currentModel);
+            }
+
+            std::string newPath; uint64_t newGuid = 0;
+            if (AssetDropField("Model", Krayon::AssetType::Mesh, currentModel, newPath, newGuid))
+            {
+                if (registry->Has<MeshRendererComponent>(selected))
+                {
+                    auto& mr2  = registry->Get<MeshRendererComponent>(selected);
+                    mr2.meshGuid = newGuid;
+                    mr2.meshPath = newPath;
+                }
+            }
+        }
+
+        ImGui::Spacing();
         ImGui::Checkbox("Playing", &a.playing);
         ImGui::SameLine(120);
         ImGui::Checkbox("Loop",    &a.loop);

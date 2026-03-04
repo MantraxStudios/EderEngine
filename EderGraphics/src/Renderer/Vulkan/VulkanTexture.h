@@ -4,7 +4,12 @@
 class EDERGRAPHICS_API VulkanTexture
 {
 public:
-    void Load   (const std::string& path);
+    // Load from a file path.  Internally routes through AssetManager when available.
+    void Load           (const std::string& path);
+
+    // Load from raw bytes already in memory (e.g. from PAK / AssetManager).
+    void LoadFromMemory (const uint8_t* data, size_t size);
+
     void CreateDefault();
     void Destroy();
 

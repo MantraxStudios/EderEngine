@@ -1,0 +1,4 @@
+guid=65175f122fdcba02
+type=Shader
+name=gizmo
+path=shaders/gizmo.frag

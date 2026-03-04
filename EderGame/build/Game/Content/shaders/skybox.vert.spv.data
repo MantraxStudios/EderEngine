@@ -1,0 +1,4 @@
+guid=d31cb6b8f74fe7b0
+type=Shader
+name=skybox.vert
+path=shaders/skybox.vert.spv

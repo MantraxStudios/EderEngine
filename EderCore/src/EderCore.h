@@ -19,3 +19,13 @@
 // ── Scene ─────────────────────────────────────────────────────────────────────
 #include "Scene/Scene.h"
 #include "Scene/SceneManager.h"
+
+// ── IO / Asset system ────────────────────────────────────────────────────────
+#include "IO/KRCommon.h"
+#include "IO/KRCompiler.h"
+#include "IO/PakFile.h"
+#include "IO/AssetManager.h"
+#include "IO/SceneSerializer.h"
+
+// ── Extra components ─────────────────────────────────────────────────────
+#include "ECS/Components/VolumetricFogComponent.h"

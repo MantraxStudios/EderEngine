@@ -1,0 +1,4 @@
+guid=f019048e3d5656bd
+type=Shader
+name=gizmo
+path=shaders/gizmo.vert

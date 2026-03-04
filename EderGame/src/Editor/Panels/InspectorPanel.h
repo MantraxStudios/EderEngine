@@ -2,6 +2,8 @@
 #include "Panel.h"
 #include "ECS/Registry.h"
 #include "ECS/Entity.h"
+#include <IO/AssetManager.h>
+#include <cstdint>
 
 class InspectorPanel : public Panel
 {
@@ -21,6 +23,14 @@ private:
     void DrawVolumetricFogComponent();
     void DrawAnimationComponent();
     void DrawAddComponent();
+
+    // Returns true (and fills outPath/outGuid) when an asset is dropped.
+    // Renders a Unity-style labelled slot that acts as a drag-drop target.
+    bool AssetDropField(const char* label,
+                        Krayon::AssetType   expectedType,
+                        const std::string&  currentPath,
+                        std::string&        outPath,
+                        uint64_t&           outGuid);
 
     Registry* registry = nullptr;
     Entity    selected = NULL_ENTITY;

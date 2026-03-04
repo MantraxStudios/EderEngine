@@ -1,0 +1,4 @@
+guid=7aa3efd7af31e7c7
+type=Shader
+name=point_shadow.vert
+path=shaders/point_shadow.vert.spv

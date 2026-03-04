@@ -6,6 +6,8 @@
 #include <imgui/ImGuizmo.h>
 #include "Renderer/Vulkan/VulkanInstance.h"
 #include "Renderer/Vulkan/VulkanSwapchain.h"
+#include <IO/AssetManager.h>
+#include <cstring>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Theme
@@ -174,6 +176,28 @@ void Editor::Init(SDL_Window* window)
     info.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount    = 1;
     info.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &colorFmt;
     ImGui_ImplVulkan_Init(&info);
+
+    // Wire AssetBrowser double-click callbacks
+    assetBrowser.SetSelectCallback(
+        [this](uint64_t guid, const Krayon::AssetMeta& meta)
+        {
+            if (meta.type == Krayon::AssetType::Material)
+            {
+                materialEditor.Open(guid);
+                materialEditor.open = true;
+            }
+            else if (meta.type == Krayon::AssetType::Scene)
+            {
+                // Open scene — forward to Application via the registered callback
+                if (m_onOpenScene)
+                {
+                    const std::string absPath =
+                        Krayon::AssetManager::Get().GetWorkDir() + "/" + meta.path;
+                    m_onOpenScene(absPath);
+                    m_currentSceneName = meta.name;
+                }
+            }
+        });
 }
 
 void Editor::Shutdown()
@@ -214,14 +238,17 @@ void Editor::Draw(Camera& cam, Registry& registry, float dt)
     inspector  .SetRegistry(&registry);
     inspector  .SetSelected(hierarchy.GetSelected());
 
+    HandleSceneShortcuts();
     DrawMenuBar();
     DrawToolbar();
     DrawDockspace();
 
-    if (stats      .open) stats      .OnDraw();
-    if (cameraPanel.open) cameraPanel.OnDraw();
-    if (hierarchy  .open) hierarchy  .OnDraw();
-    if (inspector  .open) inspector  .OnDraw();
+    if (stats       .open) stats       .OnDraw();
+    if (cameraPanel .open) cameraPanel .OnDraw();
+    if (hierarchy   .open) hierarchy   .OnDraw();
+    if (inspector   .open) inspector   .OnDraw();
+    if (assetBrowser.open) assetBrowser.OnDraw();
+    if (materialEditor.open) materialEditor.OnDraw();
     if (sceneView  .open)
     {
         ImVec2 svSize   = sceneView.GetDesiredSize();
@@ -267,17 +294,157 @@ void Editor::GetSceneViewSize(uint32_t& w, uint32_t& h) const
 bool Editor::WantCaptureMouse()    const { return ImGui::GetIO().WantCaptureMouse; }
 bool Editor::WantCaptureKeyboard() const { return ImGui::GetIO().WantCaptureKeyboard; }
 
+// ──────────────────────────────────────────────────────────────────────────────
+void Editor::HandleSceneShortcuts()
+{
+    const ImGuiIO& io = ImGui::GetIO();
+    if (!io.WantCaptureKeyboard) return;
+
+    const bool ctrl  = io.KeyCtrl;
+    const bool shift = io.KeyShift;
+
+    if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_N, false))
+    {
+        if (m_onNewScene) m_onNewScene();
+    }
+    if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_S, false))
+    {
+        if (m_onSaveScene) m_onSaveScene();
+    }
+    if (ctrl && shift && ImGui::IsKeyPressed(ImGuiKey_S, false))
+    {
+        m_saveSceneAsOpen = true;
+        std::strncpy(m_saveSceneAsName, m_currentSceneName.c_str(), sizeof(m_saveSceneAsName) - 1);
+        ImGui::OpenPopup("Save Scene As##dlg");
+    }
+    if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_O, false))
+    {
+        m_openScenePickerOpen = true;
+        ImGui::OpenPopup("##openScene");
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+void Editor::DrawSaveSceneAsModal()
+{
+    ImGui::SetNextWindowSize(ImVec2(360, 110), ImGuiCond_Always);
+    if (!ImGui::BeginPopupModal("Save Scene As##dlg",
+                                &m_saveSceneAsOpen,
+                                ImGuiWindowFlags_NoResize))
+        return;
+
+    ImGui::Text("Scene name:");
+    ImGui::SetNextItemWidth(-1);
+    bool confirm = ImGui::InputText("##sasname", m_saveSceneAsName,
+                                    sizeof(m_saveSceneAsName),
+                                    ImGuiInputTextFlags_EnterReturnsTrue);
+    ImGui::Spacing();
+    if (ImGui::Button("Save", ImVec2(120, 0)) || confirm)
+    {
+        const std::string name = m_saveSceneAsName;
+        if (!name.empty())
+        {
+            if (m_onSaveAs) m_onSaveAs(name);
+            m_currentSceneName = name;
+            m_saveSceneAsOpen  = false;
+            ImGui::CloseCurrentPopup();
+        }
+    }
+    ImGui::SameLine();
+    if (ImGui::Button("Cancel", ImVec2(120, 0)))
+    {
+        m_saveSceneAsOpen = false;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+// ──────────────────────────────────────────────────────────────────────────────
+void Editor::DrawOpenScenePicker()
+{
+    ImGui::SetNextWindowSize(ImVec2(440, 340), ImGuiCond_Always);
+    if (!ImGui::BeginPopupModal("##openScene",
+                                &m_openScenePickerOpen,
+                                ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoTitleBar))
+        return;
+
+    ImGui::TextColored(ImVec4(0.65f, 0.85f, 1.0f, 1.0f), "Open Scene");
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    const auto& all = Krayon::AssetManager::Get().GetAll();
+    bool closePicker = false;
+
+    if (all.empty())
+    {
+        ImGui::TextDisabled("No scenes found in asset registry.");
+    }
+    else
+    {
+        ImGui::BeginChild("##scenelist", ImVec2(0, 260), false);
+        for (const auto& [guid, meta] : all)
+        {
+            if (meta.type != Krayon::AssetType::Scene) continue;
+
+            std::string label = "[Scene]  " + meta.name;
+            if (ImGui::Selectable(label.c_str(), false,
+                                  ImGuiSelectableFlags_AllowDoubleClick))
+            {
+                if (ImGui::IsMouseDoubleClicked(0))
+                {
+                    const std::string absPath =
+                        Krayon::AssetManager::Get().GetWorkDir() + "/" + meta.path;
+                    if (m_onOpenScene) m_onOpenScene(absPath);
+                    m_currentSceneName = meta.name;
+                    m_openScenePickerOpen = false;
+                    closePicker = true;
+                }
+            }
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("%s", meta.path.c_str());
+        }
+        ImGui::EndChild();
+    }
+
+    ImGui::Spacing();
+    if (ImGui::Button("Cancel", ImVec2(120, 0)) || closePicker)
+    {
+        m_openScenePickerOpen = false;
+        ImGui::CloseCurrentPopup();
+    }
+    ImGui::EndPopup();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  DrawMenuBar
+// ─────────────────────────────────────────────────────────────────────────────
+
 void Editor::DrawMenuBar()
 {
     if (!ImGui::BeginMainMenuBar()) return;
 
     if (ImGui::BeginMenu("File"))
     {
-        if (ImGui::MenuItem("New Level",   "Ctrl+N")) {}
-        if (ImGui::MenuItem("Open Level",  "Ctrl+O")) {}
+        if (ImGui::MenuItem("New Scene",   "Ctrl+N"))
+        {
+            if (m_onNewScene) m_onNewScene();
+        }
+        if (ImGui::MenuItem("Open Scene...",  "Ctrl+O"))
+        {
+            m_openScenePickerOpen = true;
+            ImGui::OpenPopup("##openScene");
+        }
         ImGui::Separator();
-        if (ImGui::MenuItem("Save",        "Ctrl+S")) {}
-        if (ImGui::MenuItem("Save As...",  "Ctrl+Shift+S")) {}
+        if (ImGui::MenuItem("Save",        "Ctrl+S"))
+        {
+            if (m_onSaveScene) m_onSaveScene();
+        }
+        if (ImGui::MenuItem("Save As...",  "Ctrl+Shift+S"))
+        {
+            m_saveSceneAsOpen = true;
+            std::strncpy(m_saveSceneAsName, m_currentSceneName.c_str(), sizeof(m_saveSceneAsName) - 1);
+            ImGui::OpenPopup("Save Scene As##dlg");
+        }
         ImGui::Separator();
         if (ImGui::MenuItem("Exit",        "Alt+F4")) {}
         ImGui::EndMenu();
@@ -308,11 +475,13 @@ void Editor::DrawMenuBar()
 
     if (ImGui::BeginMenu("Window"))
     {
-        ImGui::MenuItem("World Outliner", nullptr, &hierarchy  .open);
-        ImGui::MenuItem("Details",        nullptr, &inspector  .open);
-        ImGui::MenuItem("Viewport",       nullptr, &sceneView  .open);
-        ImGui::MenuItem("Camera",         nullptr, &cameraPanel.open);
-        ImGui::MenuItem("Stats",          nullptr, &stats      .open);
+        ImGui::MenuItem("World Outliner", nullptr, &hierarchy   .open);
+        ImGui::MenuItem("Details",        nullptr, &inspector   .open);
+        ImGui::MenuItem("Viewport",       nullptr, &sceneView   .open);
+        ImGui::MenuItem("Camera",         nullptr, &cameraPanel .open);
+        ImGui::MenuItem("Stats",          nullptr, &stats       .open);
+        ImGui::MenuItem("Asset Browser",    nullptr, &assetBrowser  .open);
+        ImGui::MenuItem("Material Editor",  nullptr, &materialEditor.open);
         ImGui::Separator();
         ImGui::MenuItem("ImGui Demo",     nullptr, &showDemo);
         ImGui::EndMenu();
@@ -334,6 +503,10 @@ void Editor::DrawMenuBar()
         ImGui::EndMenu();
     }
 
+    // Scene name centred in menu bar
+    ImGui::SetCursorPosX((ImGui::GetContentRegionMax().x - ImGui::CalcTextSize(m_currentSceneName.c_str()).x) * 0.5f);
+    ImGui::TextDisabled("%s", m_currentSceneName.c_str());
+
     // Framerate on the right
     float fps = ImGui::GetIO().Framerate;
     char frStr[32];
@@ -342,6 +515,12 @@ void Editor::DrawMenuBar()
     ImGui::TextDisabled("%s", frStr);
 
     ImGui::EndMainMenuBar();
+
+    // ── Save Scene As modal ─────────────────────────────────────────────────────
+    DrawSaveSceneAsModal();
+
+    // ── Open Scene picker modal ───────────────────────────────────────────────────
+    DrawOpenScenePicker();
 }
 
 void Editor::DrawToolbar()
@@ -489,15 +668,20 @@ void Editor::DrawDockspace()
         ImGui::DockBuilderSplitNode(dockId,  ImGuiDir_Left,  0.18f, &left,   &center);
         ImGui::DockBuilderSplitNode(center,  ImGuiDir_Right, 0.22f, &right,  &center);
 
+        // Split center bottom for Asset Browser
+        ImGuiID centerTop, bottom;
+        ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.25f, &bottom, &centerTop);
+
         // Split left panel vertically: Outliner top | Camera bottom
         ImGuiID leftTop, leftBot;
         ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.35f, &leftBot, &leftTop);
 
         ImGui::DockBuilderDockWindow("World Outliner", leftTop);
         ImGui::DockBuilderDockWindow("Camera",         leftBot);
-        ImGui::DockBuilderDockWindow("Viewport",       center);
+        ImGui::DockBuilderDockWindow("Viewport",       centerTop);
         ImGui::DockBuilderDockWindow("Details",        right);
-        ImGui::DockBuilderDockWindow("Stats",          right); // stacked with Details
+        ImGui::DockBuilderDockWindow("Stats",          right);  // stacked with Details
+        ImGui::DockBuilderDockWindow("Asset Browser",  bottom);
 
         ImGui::DockBuilderFinish(dockId);
     }

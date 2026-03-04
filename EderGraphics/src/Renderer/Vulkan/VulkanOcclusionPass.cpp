@@ -1,7 +1,9 @@
 #include "VulkanOcclusionPass.h"
 #include "Renderer/Vulkan/VulkanInstance.h"
+#include <IO/AssetManager.h>
 #include <fstream>
 #include <stdexcept>
+#include <cstring>
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -9,6 +11,18 @@
 
 std::vector<uint32_t> VulkanOcclusionPass::LoadSpv(const std::string& path)
 {
+    auto& am = Krayon::AssetManager::Get();
+    if (!am.GetWorkDir().empty())
+    {
+        auto bytes = am.GetBytes(path);
+        if (!bytes.empty())
+        {
+            std::vector<uint32_t> buf(bytes.size() / sizeof(uint32_t));
+            std::memcpy(buf.data(), bytes.data(), bytes.size());
+            return buf;
+        }
+        throw std::runtime_error("[AssetManager] Shader not found: " + path);
+    }
     std::ifstream f(path, std::ios::binary | std::ios::ate);
     if (!f.is_open())
         throw std::runtime_error("VulkanOcclusionPass: cannot open shader: " + path);

@@ -25,6 +25,8 @@
 #include "Renderer/Vulkan/VulkanVolumetricFog.h"
 #include "Renderer/Vulkan/BoneSSBO.h"
 #include "EderCore.h"
+#include <unordered_map>
+#include <string>
 
 // ────────────────────────────────────────────────────────────────────────────
 // Application
@@ -61,8 +63,13 @@ private:
 
     // ── Init helpers ─────────────────────────────────────────────────────────
     void InitMaterials();
-    void InitPostProcess();
+    void InitPostProcess();    void WireEditorCallbacks();
 
+    // ── Scene operations ─────────────────────────────────────────────────
+    void NewScene();
+    void SaveScene();
+    void SaveSceneAs(const std::string& name);
+    void LoadScene (const std::string& absPath);
     // ── Utility ──────────────────────────────────────────────────────────────
     float SceneViewAspect() const;
 
@@ -135,4 +142,15 @@ private:
 
     // ── Post-process running output (advances each active pass) ──────────────
     VulkanFramebuffer* m_postFb = nullptr;
+
+    // ── Mesh hot-reload tracking (keyed by entity id, value = last loaded GUID) ─
+    std::unordered_map<uint32_t, uint64_t> m_lastMeshGuid;
+    std::unordered_map<uint32_t, uint64_t> m_lastAnimMeshGuid;
+    std::unordered_map<uint32_t, std::string> m_lastMaterialName;
+    // Texture hot-swap tracking: matName → last-loaded albedoTexGuid
+    std::unordered_map<std::string, uint64_t>  m_lastMatTexGuid;
+
+    // ── Scene persistence state ───────────────────────────────────────────────
+    std::string m_currentScenePath;
+    std::string m_currentSceneName = "Untitled";
 };

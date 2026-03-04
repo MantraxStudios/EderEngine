@@ -1,0 +1,4 @@
+guid=7f11a693b905617e
+type=Shader
+name=point_shadow
+path=shaders/point_shadow.vert

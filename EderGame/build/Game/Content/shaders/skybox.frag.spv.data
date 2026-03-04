@@ -1,0 +1,4 @@
+guid=98041e5cad4ec31f
+type=Shader
+name=skybox.frag
+path=shaders/skybox.frag.spv

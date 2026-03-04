@@ -130,6 +130,17 @@ public:
         }
     }
 
+    // ── Bulk operations ──────────────────────────────────────────────────────
+
+    /// Destroy all entities and wipe every component pool.
+    /// After Clear() the registry is in the same state as a freshly constructed one.
+    void Clear()
+    {
+        _pools.clear();
+        _alive.clear();
+        _next = NULL_ENTITY;
+    }
+
 private:
     Entity _next = NULL_ENTITY;
     std::vector<Entity> _alive;

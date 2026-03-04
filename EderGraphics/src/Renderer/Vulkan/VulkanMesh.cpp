@@ -4,6 +4,7 @@
 #include <glm/gtx/quaternion.hpp>
 #include <cmath>
 #include <algorithm>
+#include <IO/AssetManager.h>
 
 // ── Helper: convert aiMatrix4x4 (row-major) to glm::mat4 (column-major) ──────
 static glm::mat4 AiToGlm(const aiMatrix4x4& m)
@@ -34,6 +35,28 @@ static uint32_t FindKeyQ(float t, const std::vector<AnimKeyQuat>& k)
 // ─────────────────────────────────────────────────────────────────────────────
 void VulkanMesh::Load(const std::string& path)
 {
+    // If AssetManager is initialised, route through it so both loose-file and
+    // PAK modes are handled transparently.
+    auto& am = Krayon::AssetManager::Get();
+    if (!am.GetWorkDir().empty() || am.IsCompiled())
+    {
+        std::vector<uint8_t> bytes = am.GetBytes(path);
+        if (!bytes.empty())
+        {
+            // Use the original path as the Assimp file hint (preserves extension).
+            LoadFromMemory(bytes.data(), bytes.size(), path);
+            return;
+        }
+        // Fall through to direct disk read if AssetManager returned nothing
+        // (e.g. path is absolute and outside the workDir).
+    }
+
+    // Direct disk fallback (original behaviour)
+    _LoadFromPath(path);
+}
+
+void VulkanMesh::LoadFromMemory(const uint8_t* data, size_t size, const std::string& hint)
+{
     // Clear any previous load
     vertices.clear(); indices.clear();
     boneNameToIndex.clear(); boneInfos.clear();
@@ -41,9 +64,65 @@ void VulkanMesh::Load(const std::string& path)
     rootNodeIndex = 0;
 
     Assimp::Importer importer;
+    importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, 0.01f);
 
-    // FBX files are typically authored in centimetres (1 unit = 1 cm).
-    // Apply a 0.01 global scale so the imported geometry is in metres.
+    const aiScene* scene = importer.ReadFileFromMemory(
+        data, size,
+        aiProcess_Triangulate           |
+        aiProcess_GenSmoothNormals      |
+        aiProcess_CalcTangentSpace      |
+        aiProcess_FlipUVs               |
+        aiProcess_JoinIdenticalVertices |
+        aiProcess_LimitBoneWeights      |
+        aiProcess_GlobalScale,
+        hint.empty() ? nullptr : hint.c_str());
+
+    if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
+        throw std::runtime_error("Assimp (memory): " + std::string(importer.GetErrorString()));
+
+    aiMatrix4x4 gi = scene->mRootNode->mTransformation;
+    gi.Inverse();
+    globalInverseTransform = AiToGlm(gi);
+
+    ProcessNode(scene->mRootNode, scene);
+    BuildNodeTree(scene->mRootNode, UINT32_MAX);
+    LoadAnimations(scene);
+
+    vertexCount = static_cast<uint32_t>(vertices.size());
+    indexCount  = static_cast<uint32_t>(indices.size());
+
+    vertexBuffer.Create(
+        sizeof(Vertex) * vertices.size(),
+        vk::BufferUsageFlagBits::eVertexBuffer,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    vertexBuffer.Upload(vertices.data(), sizeof(Vertex) * vertices.size());
+
+    indexBuffer.Create(
+        sizeof(uint32_t) * indices.size(),
+        vk::BufferUsageFlagBits::eIndexBuffer,
+        vk::MemoryPropertyFlagBits::eHostVisible | vk::MemoryPropertyFlagBits::eHostCoherent);
+    indexBuffer.Upload(indices.data(), sizeof(uint32_t) * indices.size());
+
+    std::cout << "[Mesh] LoadedFromMemory: " << (hint.empty() ? "(no hint)" : hint)
+              << " | V:" << vertexCount
+              << " I:" << indexCount
+              << " | Bones:" << boneInfos.size()
+              << " Anims:" << animations.size()
+              << std::endl;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// _LoadFromPath — direct disk load (original behaviour, used as fallback)
+// ─────────────────────────────────────────────────────────────────────────────
+void VulkanMesh::_LoadFromPath(const std::string& path)
+{
+    // Clear any previous load
+    vertices.clear(); indices.clear();
+    boneNameToIndex.clear(); boneInfos.clear();
+    animations.clear(); nodes.clear(); nodeNameToIndex.clear();
+    rootNodeIndex = 0;
+
+    Assimp::Importer importer;
     importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, 0.01f);
 
     const aiScene* scene = importer.ReadFile(path,
@@ -52,24 +131,18 @@ void VulkanMesh::Load(const std::string& path)
         aiProcess_CalcTangentSpace      |
         aiProcess_FlipUVs               |
         aiProcess_JoinIdenticalVertices |
-        aiProcess_LimitBoneWeights      |   // max 4 influences per vertex
-        aiProcess_GlobalScale);             // apply the 0.01 factor above
+        aiProcess_LimitBoneWeights      |
+        aiProcess_GlobalScale);
 
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
         throw std::runtime_error("Assimp: " + std::string(importer.GetErrorString()));
 
-    // Global inverse transform of the root node — needed to keep skinned mesh in local space
     aiMatrix4x4 gi = scene->mRootNode->mTransformation;
     gi.Inverse();
     globalInverseTransform = AiToGlm(gi);
 
-    // 1. Load geometry + collect bone info
     ProcessNode(scene->mRootNode, scene);
-
-    // 2. Build a lightweight copy of the node hierarchy for run-time traversal
     BuildNodeTree(scene->mRootNode, UINT32_MAX);
-
-    // 3. Store animation clips
     LoadAnimations(scene);
 
     vertexCount = static_cast<uint32_t>(vertices.size());

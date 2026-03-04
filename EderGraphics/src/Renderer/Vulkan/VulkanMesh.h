@@ -48,9 +48,16 @@ struct SceneNode
 class EDERGRAPHICS_API VulkanMesh
 {
 public:
-    void Load          (const std::string& path);
-    void DrawInstanced (vk::CommandBuffer cmd, uint32_t firstInstance, uint32_t instanceCount);
-    void Destroy       ();
+    // Load from a file path.  Internally routes through AssetManager when available.
+    void Load           (const std::string& path);
+
+    // Load from raw bytes already in memory (e.g. from PAK / AssetManager).
+    // `hint` is a virtual filename with extension so Assimp can pick the right parser
+    // (e.g. "model.fbx", "scene.glb"). Leave empty to let Assimp auto-detect.
+    void LoadFromMemory (const uint8_t* data, size_t size, const std::string& hint = "");
+
+    void DrawInstanced  (vk::CommandBuffer cmd, uint32_t firstInstance, uint32_t instanceCount);
+    void Destroy        ();
 
     uint32_t GetIndexCount()  const { return indexCount; }
     uint32_t GetVertexCount() const { return vertexCount; }
@@ -69,6 +76,7 @@ public:
     void ComputeBoneTransforms(uint32_t clipIndex, float timeSecs, std::vector<glm::mat4>& out);
 
 private:
+    void _LoadFromPath       (const std::string& path);
     void ProcessNode (aiNode* node, const aiScene* scene);
     void ProcessMesh (aiMesh* mesh, const aiScene* scene);
     void BuildNodeTree       (aiNode* node, uint32_t parentIdx);

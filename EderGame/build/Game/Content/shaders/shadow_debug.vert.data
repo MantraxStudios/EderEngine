@@ -1,0 +1,4 @@
+guid=5ce0f4123e9732fb
+type=Shader
+name=shadow_debug
+path=shaders/shadow_debug.vert

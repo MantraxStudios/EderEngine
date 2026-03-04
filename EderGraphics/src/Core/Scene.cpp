@@ -72,7 +72,7 @@ void Scene::DrawTransparent(vk::CommandBuffer cmd, VulkanPipeline& pipeline, con
         float     d   = glm::length(glm::vec3(m[3]) - camPos);
         entries.push_back({ obj.mesh, obj.material, m, d });
     }
-    std::sort(entries.begin(), entries.end(),
+    std::stable_sort(entries.begin(), entries.end(),
               [](const Entry& a, const Entry& b){ return a.depth > b.depth; });
     if (entries.empty()) return;
 

@@ -1,0 +1,4 @@
+guid=9f320ad780793f07
+type=Shader
+name=debug.vert
+path=shaders/debug.vert.spv

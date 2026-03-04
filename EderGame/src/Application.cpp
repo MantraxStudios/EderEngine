@@ -7,11 +7,13 @@
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/euler_angles.hpp>
 #include <algorithm>
+#include <filesystem>
 #include <iostream>
 
 #include "Core/MaterialLayout.h"
 #include "Core/MaterialManager.h"
 #include "Core/MeshManager.h"
+#include "Core/TextureManager.h"
 #include "ECS/Components/VolumetricFogComponent.h"
 #include "ECS/Components/AnimationComponent.h"
 #include "ECS/Systems/TransformSystem.h"
@@ -110,7 +112,6 @@ void Application::Init()
     m_camera.SetOrientation(0.0f, 0.0f);
     SDL_SetWindowRelativeMouseMode(m_window, false);
 
-    // Core renderer singletons
     VulkanInstance::Get().Init(m_window);
     VulkanSwapchain::Get().Init(m_window);
     VulkanRenderer::Get().Init();
@@ -142,6 +143,7 @@ void Application::Init()
 
     m_boneSSBO.Create(m_pipeline);
     m_editor.SetSceneViewFramebuffer(&m_debugFb);
+    WireEditorCallbacks();
 }
 
 void Application::InitMaterials()
@@ -228,8 +230,113 @@ void Application::InitPostProcess()
                            *m_pipeline.GetLightDescriptorSetLayout());
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Shutdown
+// ─────────────────────────────────────────────────────────────────────────────//  Scene operations
+// ──────────────────────────────────────────────────────────────────────────────
+
+void Application::WireEditorCallbacks()
+{
+    m_editor.SetNewSceneCallback([this]() { NewScene(); });
+
+    m_editor.SetSaveSceneCallback([this]()
+    {
+        if (m_currentScenePath.empty())
+        {
+            // Unsaved scene — prompt Save As
+            SaveSceneAs(m_currentSceneName);
+        }
+        else
+        {
+            SaveScene();
+        }
+    });
+
+    m_editor.SetSaveAsCallback([this](const std::string& name) { SaveSceneAs(name); });
+
+    m_editor.SetOpenSceneCallback([this](const std::string& path) { LoadScene(path); });
+
+    m_editor.SetCurrentSceneName(m_currentSceneName);
+}
+
+void Application::NewScene()
+{
+    // Clear GPU scene + ECS state
+    VulkanInstance::Get().GetDevice().waitIdle();
+    m_scene.Clear();
+    m_registry.Clear();
+    m_lastMeshGuid.clear();
+    m_lastAnimMeshGuid.clear();
+    m_lastMaterialName.clear();
+    m_lastMatTexGuid.clear();
+
+    m_currentScenePath = "";
+    m_currentSceneName = "Untitled";
+    m_editor.SetCurrentSceneName(m_currentSceneName);
+}
+
+void Application::SaveScene()
+{
+    if (m_currentScenePath.empty()) { SaveSceneAs(m_currentSceneName); return; }
+    Krayon::SceneSerializer::Save(m_currentScenePath, m_registry, m_currentSceneName);
+}
+
+void Application::SaveSceneAs(const std::string& name)
+{
+    namespace fs = std::filesystem;
+    auto& AM = Krayon::AssetManager::Get();
+    if (AM.GetWorkDir().empty()) return;
+
+    // Store under <workDir>/scenes/<name>.scene
+    const fs::path scenesDir = fs::path(AM.GetWorkDir()) / "scenes";
+    std::error_code ec;
+    fs::create_directories(scenesDir, ec);
+
+    // Deduplicate filename
+    std::string stem = name;
+    fs::path    absFile;
+    int         suffix = 0;
+    do {
+        absFile = scenesDir / (stem + ".scene");
+        if (!fs::exists(absFile)) break;
+        // If it's the same file we're overwriting, just use it
+        if (absFile.string() == m_currentScenePath) break;
+        stem = name + "_" + std::to_string(++suffix);
+    } while (true);
+
+    if (Krayon::SceneSerializer::Save(absFile.string(), m_registry, stem))
+    {
+        m_currentScenePath = absFile.string();
+        m_currentSceneName = stem;
+        AM.RegisterSceneFile(m_currentScenePath, stem);
+        m_editor.SetCurrentSceneName(m_currentSceneName);
+    }
+}
+
+void Application::LoadScene(const std::string& absPath)
+{
+    namespace fs = std::filesystem;
+    if (!fs::exists(absPath)) return;
+
+    // Wait for GPU idle before clearing scene objects
+    VulkanInstance::Get().GetDevice().waitIdle();
+    m_scene.Clear();
+    m_registry.Clear();
+    m_lastMeshGuid.clear();
+    m_lastAnimMeshGuid.clear();
+    m_lastMaterialName.clear();
+    m_lastMatTexGuid.clear();
+
+    std::string loadedName;
+    if (Krayon::SceneSerializer::Load(absPath, m_registry, &loadedName))
+    {
+        m_currentScenePath = absPath;
+        m_currentSceneName = loadedName.empty()
+            ? fs::path(absPath).stem().string()
+            : loadedName;
+        m_editor.SetCurrentSceneName(m_currentSceneName);
+    }
+}
+
+// ──────────────────────────────────────────────────────────────────────────────//  Shutdown
 // ─────────────────────────────────────────────────────────────────────────────
 
 void Application::Shutdown()
@@ -477,20 +584,128 @@ void Application::SyncECSToScene()
     auto& objs = m_scene.GetObjects();
     objs.erase(std::remove_if(objs.begin(), objs.end(),
         [&](const SceneObject& o) {
-            return o.entityId != 0 && !m_registry.Has<MeshRendererComponent>(o.entityId);
+            bool remove = o.entityId != 0 && !m_registry.Has<MeshRendererComponent>(o.entityId);
+            if (remove) {
+                m_lastMeshGuid    .erase(o.entityId);
+                m_lastAnimMeshGuid.erase(o.entityId);
+                m_lastMaterialName.erase(o.entityId);
+            }
+            return remove;
         }), objs.end());
 
-    // 2. Add SceneObjects for entities that gained a MeshRendererComponent
+    // 2. Add SceneObjects for entities that gained a MeshRendererComponent,
+    //    OR hot-swap the mesh when the GUID changed (drag-drop from Asset Browser).
     m_registry.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
     {
-        bool exists = std::any_of(objs.begin(), objs.end(),
-            [e](const SceneObject& o) { return o.entityId == e; });
-        if (exists) return;
+        // Resolve the load key: prefer GUID, fall back to bare path
+        std::string loadPath;
+        if (mr.meshGuid != 0)
+        {
+            const auto* meta = Krayon::AssetManager::Get().FindByGuid(mr.meshGuid);
+            if (meta) { loadPath = meta->path; mr.meshPath = loadPath; }
+        }
+        if (loadPath.empty()) loadPath = mr.meshPath;
+        if (loadPath.empty()) return;
 
-        Material&    mat = MaterialManager::Get().Get(mr.materialName);
-        VulkanMesh&  m   = MeshManager::Get().Load(mr.meshPath);
-        SceneObject& obj = m_scene.Add(m, mat);
-        obj.entityId     = e;
+        // Find existing SceneObject for this entity (if any)
+        SceneObject* existingObj = nullptr;
+        for (auto& o : objs)
+            if (o.entityId == e) { existingObj = &o; break; }
+
+        // Change detection by GUID (or path if no GUID yet)
+        const uint64_t trackGuid = mr.meshGuid ? mr.meshGuid
+            : Krayon::AssetManager::Get().GetGuid(loadPath);
+        auto it = m_lastMeshGuid.find(e);
+        const bool meshChanged = (it == m_lastMeshGuid.end() || it->second != trackGuid);
+
+        // ── .mat asset → runtime Material sync ───────────────────────────────
+        // When a materialGuid is assigned, ensure MaterialManager has a runtime
+        // Material for it and push the .mat surface params to the GPU material.
+        // This runs every frame the entity has a guid, so live edits in the
+        // Material Editor are reflected immediately.
+        if (mr.materialGuid != 0)
+        {
+            Krayon::MaterialAsset matAsset;
+            if (Krayon::AssetManager::Get().ReadMaterialAsset(mr.materialGuid, matAsset))
+            {
+                if (!matAsset.name.empty())
+                {
+                    // Create a runtime material entry if it doesn't exist yet
+                    if (!MaterialManager::Get().Has(matAsset.name))
+                    {
+                        MaterialLayout matLayout;
+                        matLayout.AddVec4 ("albedo")
+                                 .AddFloat("roughness")
+                                 .AddFloat("metallic")
+                                 .AddFloat("emissiveIntensity")
+                                 .AddFloat("alphaThreshold");
+                        MaterialManager::Get().Add(matAsset.name, matLayout, m_pipeline);
+                    }
+                    // Push surface params from the .mat file to the GPU material
+                    Material& rMat = MaterialManager::Get().Get(matAsset.name);
+                    rMat.SetVec4 ("albedo",
+                        glm::vec4(matAsset.albedo[0], matAsset.albedo[1],
+                                  matAsset.albedo[2], matAsset.albedo[3]));
+                    rMat.SetFloat("roughness", matAsset.roughness);
+                    rMat.SetFloat("metallic",  matAsset.metallic);
+                    const float ei = std::max({ matAsset.emissive[0],
+                                                matAsset.emissive[1],
+                                                matAsset.emissive[2] });
+                    rMat.SetFloat("emissiveIntensity", ei);
+                    rMat.SetFloat("alphaThreshold",    0.0f);
+
+                    // ── Albedo texture hot-swap (slot 0) ─────────────
+                    if (matAsset.albedoTexGuid != 0)
+                    {
+                        auto& lastTex = m_lastMatTexGuid[matAsset.name];
+                        if (lastTex != matAsset.albedoTexGuid)
+                        {
+                            const Krayon::AssetMeta* texMeta =
+                                Krayon::AssetManager::Get().FindByGuid(matAsset.albedoTexGuid);
+                            if (texMeta)
+                            {
+                                VulkanTexture& tex = TextureManager::Get().Load(texMeta->path);
+                                rMat.BindTexture(0, tex);
+                                lastTex = matAsset.albedoTexGuid;
+                            }
+                        }
+                    }
+
+                    mr.materialName = matAsset.name;  // keep name in sync
+                }
+            }
+        }
+
+        // ── Material hot-swap (independent of mesh change) ───────────────────
+        const std::string& curMatName = mr.materialName;
+        auto matIt = m_lastMaterialName.find(e);
+        const bool matChanged = existingObj &&
+            (matIt == m_lastMaterialName.end() || matIt->second != curMatName);
+        if (matChanged)
+        {
+            existingObj->material  = &MaterialManager::Get().Get(curMatName);
+            m_lastMaterialName[e]  = curMatName;
+        }
+
+        if (existingObj && !meshChanged) return;
+
+        // Load (or re-use cached) mesh
+        Material&   mat  = MaterialManager::Get().Get(mr.materialName);
+        VulkanMesh& mesh = MeshManager::Get().Load(loadPath);
+        m_lastMeshGuid[e]     = trackGuid;
+        m_lastMaterialName[e] = mr.materialName;
+
+        if (existingObj)
+        {
+            existingObj->mesh     = &mesh;
+            existingObj->material = &mat;
+            return;
+        }
+
+        // New entity — create SceneObject
+        SceneObject& obj = m_scene.Add(mesh, mat);
+        obj.entityId = e;
+        m_lastMaterialName[e] = mr.materialName;
 
         if (m_registry.Has<TransformComponent>(e))
         {
@@ -542,9 +757,33 @@ void Application::UpdateAnimations(float dt)
     {
         if (!m_registry.Has<MeshRendererComponent>(e)) return;
         const auto& mr = m_registry.Get<MeshRendererComponent>(e);
-        if (!MeshManager::Get().Has(mr.meshPath)) return;
 
-        VulkanMesh& mesh = MeshManager::Get().Load(mr.meshPath);
+        // Resolve load path from GUID first, fall back to stored path
+        std::string loadPath;
+        if (mr.meshGuid != 0)
+        {
+            const auto* meta = Krayon::AssetManager::Get().FindByGuid(mr.meshGuid);
+            if (meta) loadPath = meta->path;
+        }
+        if (loadPath.empty()) loadPath = mr.meshPath;
+        if (loadPath.empty() || !MeshManager::Get().Has(loadPath)) return;
+
+        // ── Detect mesh swap via GUID → reset playback state ──────────────────
+        const uint64_t trackGuid = mr.meshGuid ? mr.meshGuid
+            : Krayon::AssetManager::Get().GetGuid(loadPath);
+        auto it = m_lastAnimMeshGuid.find(e);
+        if (it == m_lastAnimMeshGuid.end() || it->second != trackGuid)
+        {
+            anim.currentTime = 0.0f;
+            anim.activeIndex = -1;
+            anim.prevIndex   = -1;
+            anim.prevTime    = 0.0f;
+            anim.blendTime   = 0.0f;
+            anim.playing     = true;
+            m_lastAnimMeshGuid[e] = trackGuid;
+        }
+
+        VulkanMesh& mesh = MeshManager::Get().Load(loadPath);
         if (mesh.GetBoneCount() == 0 || mesh.GetAnimationCount() == 0) return;
 
         int clipIdx = glm::clamp(anim.animIndex, 0,

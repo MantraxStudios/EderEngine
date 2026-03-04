@@ -1,11 +1,25 @@
 #include "VulkanSkybox.h"
 #include "VulkanInstance.h"
+#include <IO/AssetManager.h>
 #include <SDL3/SDL.h>
 #include <glm/gtc/matrix_inverse.hpp>
 #include <glm/gtc/type_ptr.hpp>
+#include <cstring>
 
 std::vector<uint32_t> VulkanSkybox::LoadSpv(const std::string& path)
 {
+    auto& am = Krayon::AssetManager::Get();
+    if (!am.GetWorkDir().empty())
+    {
+        auto bytes = am.GetBytes(path);
+        if (!bytes.empty())
+        {
+            std::vector<uint32_t> buf(bytes.size() / sizeof(uint32_t));
+            std::memcpy(buf.data(), bytes.data(), bytes.size());
+            return buf;
+        }
+        throw std::runtime_error("[AssetManager] Shader not found: " + path);
+    }
     SDL_IOStream* io = SDL_IOFromFile(path.c_str(), "rb");
     if (!io)
         throw std::runtime_error("VulkanSkybox: cannot open shader: " + path +

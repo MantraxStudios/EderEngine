@@ -1,0 +1,4 @@
+guid=2e994f841d1081a6
+type=Shader
+name=skybox
+path=shaders/skybox.frag
