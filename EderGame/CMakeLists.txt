@@ -70,6 +70,8 @@ target_compile_definitions(EderGame PRIVATE
     GLM_FORCE_RADIANS
     GLM_FORCE_DEPTH_ZERO_TO_ONE
     PX_SIMD_DISABLED
+    NOMINMAX
+    VK_USE_PLATFORM_WIN32_KHR
 )
 
 # --------------------------------------------------
@@ -105,11 +107,15 @@ if (WIN32)
         ${PHYSX_LIB_DIR}/PhysXExtensions_static_64.lib
         ${PHYSX_LIB_DIR}/PhysXPvdSDK_static_64.lib
         ${PHYSX_LIB_DIR}/PhysXCooking_64.lib
+        ${PHYSX_LIB_DIR}/lua54.lib
     )
 
-    target_compile_definitions(EderGame PRIVATE
-        VK_USE_PLATFORM_WIN32_KHR
-        NOMINMAX
+    # Copiar lua54.dll
+    add_custom_command(TARGET EderGame POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${PHYSX_DLL_DIR}/lua54.dll"
+        $<TARGET_FILE_DIR:EderGame>
+        COMMENT "Copiando lua54.dll"
     )
 
     # Copiar EderGraphics.dll
@@ -146,6 +152,7 @@ set(PLAYER_SOURCES
     src/Player/PlayerMain.cpp
     src/Player/PlayerApp.cpp
     src/Physics/PhysicsSystem.cpp
+    src/Scripting/LuaScriptSystem.cpp
 )
 
 add_executable(EderPlayer ${PLAYER_SOURCES})
@@ -194,11 +201,19 @@ if (WIN32)
         ${PHYSX_LIB_DIR}/PhysXExtensions_static_64.lib
         ${PHYSX_LIB_DIR}/PhysXPvdSDK_static_64.lib
         ${PHYSX_LIB_DIR}/PhysXCooking_64.lib
+        ${PHYSX_LIB_DIR}/lua54.lib
     )
 
     target_compile_definitions(EderPlayer PRIVATE
         VK_USE_PLATFORM_WIN32_KHR
         NOMINMAX
+    )
+
+    add_custom_command(TARGET EderPlayer POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${PHYSX_DLL_DIR}/lua54.dll"
+        $<TARGET_FILE_DIR:EderPlayer>
+        COMMENT "Copiando lua54.dll para EderPlayer"
     )
 
     add_custom_command(TARGET EderPlayer POST_BUILD

@@ -11,6 +11,8 @@
 #include "ECS/Components/MeshRendererComponent.h"
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/AnimationComponent.h"
+#include "ECS/Components/CollisionCallbackComponent.h"
+#include "ECS/Components/ScriptComponent.h"
 
 // ── Systems ──────────────────────────────────────────────────────────────────
 #include "ECS/Systems/System.h"

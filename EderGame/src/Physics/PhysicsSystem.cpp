@@ -3,6 +3,7 @@
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/ColliderComponent.h"
 #include "ECS/Components/RigidbodyComponent.h"
+#include "ECS/Components/CollisionCallbackComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 
 #include <glm/gtx/matrix_decompose.hpp>
@@ -61,7 +62,6 @@ void PhysicsSystem::ContactCallback::onContact(
         if      (cp.events & PxPairFlag::eNOTIFY_TOUCH_FOUND) type = CollisionEventType::Enter;
         else if (cp.events & PxPairFlag::eNOTIFY_TOUCH_LOST)  type = CollisionEventType::Exit;
 
-        // Extract first contact point if available
         glm::vec3 point  = {};
         glm::vec3 normal = {};
         PxContactPairPoint pts[8];
@@ -72,7 +72,36 @@ void PhysicsSystem::ContactCallback::onContact(
             normal = { pts[0].normal.x,   pts[0].normal.y,   pts[0].normal.z   };
         }
 
-        events->push_back({ type, eA, eB, point, normal });
+        events->push_back({ type, eA, eB, point, normal, false });
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ContactCallback::onTrigger
+// ─────────────────────────────────────────────────────────────────────────────
+void PhysicsSystem::ContactCallback::onTrigger(
+    PxTriggerPair* pairs, PxU32 nbPairs)
+{
+    if (!events) return;
+    for (PxU32 i = 0; i < nbPairs; ++i)
+    {
+        const PxTriggerPair& tp = pairs[i];
+        // Skip stale pairs caused by removed shapes/actors
+        if (tp.flags & (PxTriggerPairFlag::eREMOVED_SHAPE_TRIGGER |
+                        PxTriggerPairFlag::eREMOVED_SHAPE_OTHER))
+            continue;
+
+        Entity eTrigger = static_cast<Entity>(
+            reinterpret_cast<uintptr_t>(tp.triggerActor->userData));
+        Entity eOther = static_cast<Entity>(
+            reinterpret_cast<uintptr_t>(tp.otherActor->userData));
+
+        CollisionEventType type =
+            (tp.status & PxPairFlag::eNOTIFY_TOUCH_FOUND)
+            ? CollisionEventType::Enter
+            : CollisionEventType::Exit;
+
+        events->push_back({ type, eTrigger, eOther, {}, {}, true });
     }
 }
 
@@ -514,4 +543,47 @@ void PhysicsSystem::MarkDirty(Entity e)
     auto it = m_actors.find(e);
     if (it != m_actors.end())
         it->second.shapeHash = 0; // force recreation on next SyncActors
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DispatchEvents — fire CollisionCallbackComponent callbacks, then clear queue
+// Call this after WriteBack every frame.
+// ─────────────────────────────────────────────────────────────────────────────
+void PhysicsSystem::DispatchEvents(Registry& registry)
+{
+    for (const RawEvent& raw : m_events)
+    {
+        // Fire callbacks for both participants.
+        // `self` receives the event with normal pointing AWAY from `other`.
+        auto fire = [&](Entity self, Entity other, const glm::vec3& normal)
+        {
+            if (self == NULL_ENTITY) return;
+            if (!registry.Has<CollisionCallbackComponent>(self)) return;
+            auto& cb = registry.Get<CollisionCallbackComponent>(self);
+
+            CollisionEvent ev;
+            ev.type    = raw.type;
+            ev.self    = self;
+            ev.other   = other;
+            ev.point   = raw.point;
+            ev.normal  = normal;
+            ev.trigger = raw.trigger;
+
+            if (raw.trigger)
+            {
+                if (raw.type == CollisionEventType::Enter && cb.onTriggerEnter) cb.onTriggerEnter(ev);
+                if (raw.type == CollisionEventType::Exit  && cb.onTriggerExit)  cb.onTriggerExit(ev);
+            }
+            else
+            {
+                if (raw.type == CollisionEventType::Enter && cb.onCollisionEnter) cb.onCollisionEnter(ev);
+                if (raw.type == CollisionEventType::Stay  && cb.onCollisionStay)  cb.onCollisionStay(ev);
+                if (raw.type == CollisionEventType::Exit  && cb.onCollisionExit)  cb.onCollisionExit(ev);
+            }
+        };
+
+        fire(raw.entityA, raw.entityB,  raw.normal);
+        fire(raw.entityB, raw.entityA, -raw.normal);
+    }
+    m_events.clear();
 }

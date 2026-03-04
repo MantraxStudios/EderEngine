@@ -2,6 +2,7 @@
 #include <imgui/imgui.h>
 #include <iostream>
 #include <sstream>
+#include <fstream>
 #include <algorithm>
 
 namespace fs = std::filesystem;
@@ -28,6 +29,7 @@ const char* AssetBrowserPanel::IconForType(AssetType t)
         case AssetType::PAK:      return "[PAK] ";
         case AssetType::Material: return "[Mat] ";
         case AssetType::Scene:    return "[Scn] ";
+        case AssetType::Script:   return "[Lua] ";
         default:                  return "[?]   ";
     }
 }
@@ -148,6 +150,7 @@ void AssetBrowserPanel::OnDraw()
     // Popups (must be outside child windows for proper stacking)
     DrawRenamePopup();
     DrawNewFolderPopup();
+    DrawNewScriptPopup();
 
     // ── Confirm delete popup ──────────────────────────────────────
     if (m_confirmDeleteOpen)
@@ -320,7 +323,6 @@ void AssetBrowserPanel::DrawContextMenuFolder(const std::string& relDir)
     if (ImGui::MenuItem("New Folder"))      OpenNewFolder(relDir);
     if (ImGui::MenuItem("New Material"))
     {
-        // Create a .mat asset in the current folder and notify via callback
         const std::string targetDir = relDir.empty() ? "assets/materials" : relDir;
         uint64_t newGuid = AssetManager::Get().CreateMaterialAsset(targetDir, "NewMaterial");
         if (newGuid && m_onSelect)
@@ -329,6 +331,8 @@ void AssetBrowserPanel::DrawContextMenuFolder(const std::string& relDir)
             if (m) m_onSelect(newGuid, *m);
         }
     }
+    if (ImGui::MenuItem("New Lua Script"))
+        OpenNewScript(relDir);
     if (!relDir.empty())
     {
         ImGui::Separator();
@@ -379,6 +383,7 @@ void AssetBrowserPanel::DrawContent()
             else if (item.type == AssetType::Shader)  fileBg = ImVec4(0.28f, 0.22f, 0.10f, 0.85f);
             else if (item.type == AssetType::Texture)  fileBg = ImVec4(0.10f, 0.22f, 0.28f, 0.85f);
             else if (item.type == AssetType::Mesh)     fileBg = ImVec4(0.22f, 0.14f, 0.28f, 0.85f);
+            else if (item.type == AssetType::Script)   fileBg = ImVec4(0.28f, 0.18f, 0.10f, 0.85f);
         }
 
         ImGui::PushStyleColor(ImGuiCol_Button, item.isDir
@@ -415,12 +420,15 @@ void AssetBrowserPanel::DrawContent()
 
         ImGui::PopStyleColor();
 
-        // Handle double-click
-        if (clicked)
+        // Double-click to navigate into folder; single click to select file
+        if (item.isDir)
         {
-            if (item.isDir)
+            if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
                 m_selectedDir = item.relPath;
-            else if (m_onSelect)
+        }
+        else if (clicked)
+        {
+            if (m_onSelect)
             {
                 const AssetMeta* m = AssetManager::Get().FindByGuid(item.guid);
                 if (m) m_onSelect(item.guid, *m);
@@ -448,17 +456,17 @@ void AssetBrowserPanel::DrawContent()
         ++col;
     }
 
-    if (items.empty())
+    // Right-click on background (always active, even when not empty)
+    if (ImGui::BeginPopupContextWindow("##ctx_content_bg", ImGuiPopupFlags_MouseButtonRight | ImGuiPopupFlags_NoOpenOverItems))
     {
-        ImGui::TextDisabled("(empty)");
-        // Still allow right-click on empty space
-        if (ImGui::BeginPopupContextWindow("##ctx_empty"))
-        {
-            if (ImGui::MenuItem("New Folder"))  OpenNewFolder(m_selectedDir);
-            if (ImGui::MenuItem("Refresh"))     AssetManager::Get().Refresh();
-            ImGui::EndPopup();
-        }
+        if (ImGui::MenuItem("New Folder"))      OpenNewFolder(m_selectedDir);
+        if (ImGui::MenuItem("New Lua Script"))  OpenNewScript(m_selectedDir);
+        if (ImGui::MenuItem("Refresh"))         AssetManager::Get().Refresh();
+        ImGui::EndPopup();
     }
+
+    if (items.empty())
+        ImGui::TextDisabled("(empty)");
 }
 
 void AssetBrowserPanel::DrawContextMenuFile(uint64_t guid, const AssetMeta& meta)
@@ -585,6 +593,82 @@ void AssetBrowserPanel::OpenNewFolder(const std::string& parentRelDir)
     m_newFolderParent = parentRelDir;
     memset(m_newFolderBuffer, 0, sizeof(m_newFolderBuffer));
     strncpy(m_newFolderBuffer, "NewFolder", sizeof(m_newFolderBuffer) - 1);
+}
+
+void AssetBrowserPanel::OpenNewScript(const std::string& parentRelDir)
+{
+    m_newScriptOpen   = true;
+    m_newScriptParent = parentRelDir;
+    memset(m_newScriptBuffer, 0, sizeof(m_newScriptBuffer));
+    strncpy(m_newScriptBuffer, "NewScript", sizeof(m_newScriptBuffer) - 1);
+}
+
+void AssetBrowserPanel::DrawNewScriptPopup()
+{
+    if (m_newScriptOpen)
+    {
+        ImGui::OpenPopup("##new_script");
+        m_newScriptOpen = false;
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
+                                ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    }
+
+    if (ImGui::BeginPopupModal("##new_script", nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar))
+    {
+        ImGui::Text("New Lua Script");
+        ImGui::Separator();
+        ImGui::SetNextItemWidth(260);
+        bool confirm = ImGui::InputText("##ns_input", m_newScriptBuffer,
+                                        sizeof(m_newScriptBuffer),
+                                        ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::SetItemDefaultFocus();
+        ImGui::Spacing();
+
+        if (ImGui::Button("Create", ImVec2(120, 0)) || confirm)
+        {
+            const std::string name(m_newScriptBuffer);
+            if (!name.empty())
+            {
+                const std::string wd = WorkDir();
+                std::string relDir   = m_newScriptParent.empty() ? "assets/scripts" : m_newScriptParent;
+                fs::path absDir = fs::path(wd) / relDir;
+                std::error_code ec;
+                fs::create_directories(absDir, ec);
+
+                // Unique filename
+                std::string stem = name;
+                fs::path    absFile;
+                int         suffix = 0;
+                do {
+                    absFile = absDir / (stem + ".lua");
+                    if (!fs::exists(absFile)) break;
+                    stem = name + "_" + std::to_string(++suffix);
+                } while (true);
+
+                // Write template Lua script
+                std::ofstream f(absFile.string(), std::ios::trunc);
+                if (f.is_open())
+                {
+                    f << "-- " << stem << "\n";
+                    f << "\n";
+                    f << "function OnStart()\n";
+                    f << "end\n";
+                    f << "\n";
+                    f << "function OnUpdate(dt)\n";
+                    f << "end\n";
+                    f.close();
+                    AssetManager::Get().Refresh();
+                }
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
 }
 
 void AssetBrowserPanel::DrawNewFolderPopup()

@@ -21,6 +21,8 @@
 #include "Renderer/VulkanRenderer.h"
 #include "Renderer/Vulkan/VulkanInstance.h"
 #include "Renderer/Vulkan/VulkanSwapchain.h"
+#include "Physics/PhysicsSystem.h"
+#include "Scripting/LuaScriptSystem.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Public entry point
@@ -84,6 +86,8 @@ int Application::Run()
         PhysicsSystem::Get().SyncActors(m_registry);
         PhysicsSystem::Get().Step(dt);
         PhysicsSystem::Get().WriteBack(m_registry);
+        PhysicsSystem::Get().DispatchEvents(m_registry);
+        LuaScriptSystem::Get().Update(m_registry, dt);
 
         RenderShadowPasses(cmd);
         RenderSceneView(cmd);
@@ -150,6 +154,7 @@ void Application::Init()
     m_boneSSBO.Create(m_pipeline);
     m_editor.SetSceneViewFramebuffer(&m_debugFb);
     PhysicsSystem::Get().Init();
+    LuaScriptSystem::Get().Init();
     WireEditorCallbacks();
 }
 
@@ -518,6 +523,7 @@ void Application::BuildPak(const std::string& /*outPakPathHint*/,
             copyFile(bldDir / "PhysXCommon_64.dll",      "PhysXCommon_64.dll");
             copyFile(bldDir / "PhysXFoundation_64.dll",  "PhysXFoundation_64.dll");
             copyFile(bldDir / "PhysXCooking_64.dll",     "PhysXCooking_64.dll");
+            copyFile(bldDir / "lua55.dll",               "lua55.dll");
             copyFile(pakSrc,                              "Game.pak");
 
             m_editor.AppendBuildLog("[Package] Done -> " + outDir.string());
@@ -566,6 +572,7 @@ void Application::Shutdown()
     m_pipeline.Destroy();
 
     PhysicsSystem::Get().Shutdown();
+    LuaScriptSystem::Get().Shutdown();
     SDL_DestroyWindow(m_window);
     SDL_Quit();
 }

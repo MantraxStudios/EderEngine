@@ -24,6 +24,7 @@ private:
     void DrawAnimationComponent();
     void DrawRigidbodyComponent();
     void DrawColliderComponent();
+    void DrawScriptComponent();
     void DrawAddComponent();
 
     // Returns true (and fills outPath/outGuid) when an asset is dropped.

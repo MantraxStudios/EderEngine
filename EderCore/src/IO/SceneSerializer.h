@@ -30,6 +30,7 @@
 #include "ECS/Components/VolumetricFogComponent.h"
 #include "ECS/Components/ColliderComponent.h"
 #include "ECS/Components/RigidbodyComponent.h"
+#include "ECS/Components/ScriptComponent.h"
 
 #include <fstream>
 #include <sstream>
@@ -184,6 +185,16 @@ public:
                 f << "rb.useGravity="  << (rb.useGravity  ? 1 : 0)      << "\n";
                 f << "rb.linearDrag="  << rb.linearDrag                  << "\n";
                 f << "rb.angularDrag=" << rb.angularDrag                 << "\n";
+            }
+
+            // ── ScriptComponent ───────────────────────────────────────────────
+            if (reg.Has<ScriptComponent>(e))
+            {
+                const auto& sc = reg.Get<ScriptComponent>(e);
+                char buf[32];
+                snprintf(buf, sizeof(buf), "%llx", (unsigned long long)sc.scriptGuid);
+                f << "script.guid=" << buf << "\n";
+                f << "script.path=" << Escape(sc.scriptPath) << "\n";
             }
 
             // ── VolumetricFogComponent ────────────────────────────────────────
@@ -412,6 +423,15 @@ private:
                 if (kv.count("rb.useGravity"))  rb.useGravity  = kv.at("rb.useGravity")  == "1";
                 if (kv.count("rb.linearDrag"))  rb.linearDrag  = std::stof(kv.at("rb.linearDrag"));
                 if (kv.count("rb.angularDrag")) rb.angularDrag = std::stof(kv.at("rb.angularDrag"));
+            }
+
+            // ScriptComponent
+            if (kv.count("script.guid"))
+            {
+                auto& sc = reg.Add<ScriptComponent>(e);
+                try { sc.scriptGuid = std::stoull(kv.at("script.guid"), nullptr, 16); } catch (...) {}
+                if (kv.count("script.path")) sc.scriptPath = Unescape(kv.at("script.path"));
+                sc.started = false; // always re-run OnStart after load
             }
 
             // VolumetricFogComponent

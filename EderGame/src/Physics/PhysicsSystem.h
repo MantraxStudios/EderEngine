@@ -6,20 +6,7 @@
 #include <cstdint>
 #include "ECS/Registry.h"
 #include "ECS/Entity.h"
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Collision event
-// ─────────────────────────────────────────────────────────────────────────────
-enum class CollisionEventType { Enter, Exit, Stay };
-
-struct CollisionEvent
-{
-    CollisionEventType type     = CollisionEventType::Enter;
-    Entity             entityA  = NULL_ENTITY;
-    Entity             entityB  = NULL_ENTITY;
-    glm::vec3          point    = {};   // approx. first contact point in world space
-    glm::vec3          normal   = {};   // contact normal pointing from B to A
-};
+#include "ECS/Components/CollisionCallbackComponent.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PhysicsSystem
@@ -33,16 +20,14 @@ public:
     void Shutdown();
 
     // Called every game frame:
-    //   SyncActors  — creates / recreates / destroys PxActors to match current ECS state
-    //   Step        — advances simulation by dt seconds
-    //   WriteBack   — copies dynamic actor poses → TransformComponent
-    void SyncActors (Registry& registry);
-    void Step       (float dt);
-    void WriteBack  (Registry& registry);
-
-    // Drain after WriteBack; cleared at the start of the next SyncActors call
-    const std::vector<CollisionEvent>& GetCollisionEvents() const { return m_events; }
-    void ClearCollisionEvents() { m_events.clear(); }
+    //   SyncActors     — creates / recreates / destroys PxActors to match ECS
+    //   Step           — advances simulation by dt seconds
+    //   WriteBack      — copies dynamic actor poses → TransformComponent
+    //   DispatchEvents — fires CollisionCallbackComponent callbacks
+    void SyncActors     (Registry& registry);
+    void Step           (float dt);
+    void WriteBack      (Registry& registry);
+    void DispatchEvents (Registry& registry);
 
     // Call when an entity is destroyed so its actor gets cleaned up
     void RemoveEntity(Entity e);
@@ -53,13 +38,23 @@ private:
     PhysicsSystem()  = default;
     ~PhysicsSystem() = default;
 
+    // ── Internal raw event (pre-dispatch) ────────────────────────────────────
+    struct RawEvent
+    {
+        CollisionEventType type    = CollisionEventType::Enter;
+        Entity             entityA = NULL_ENTITY;
+        Entity             entityB = NULL_ENTITY;
+        glm::vec3          point   = {};
+        glm::vec3          normal  = {}; // points from B toward A
+        bool               trigger = false;
+    };
+
     // ── Per-actor state hash used to detect component changes ────────────────
     struct ActorState
     {
         physx::PxRigidActor* actor   = nullptr;
-        bool                 dynamic = false; // PxRigidDynamic?
+        bool                 dynamic = false;
 
-        // snapshot of component values used to detect dirty
         uint32_t shapeHash   = 0;
         float    mass        = 0.0f;
         bool     kinematic   = false;
@@ -69,25 +64,26 @@ private:
     // ── Simulation event callback ────────────────────────────────────────────
     struct ContactCallback : public physx::PxSimulationEventCallback
     {
-        std::vector<CollisionEvent>* events = nullptr;
+        std::vector<RawEvent>* events = nullptr;
 
         void onContact(const physx::PxContactPairHeader& header,
                        const physx::PxContactPair*       pairs,
                        physx::PxU32                      nbPairs) override;
 
-        // Unused callbacks (pure virtual — must override)
+        void onTrigger(physx::PxTriggerPair* pairs,
+                       physx::PxU32          nbPairs) override;
+
         void onConstraintBreak(physx::PxConstraintInfo*, physx::PxU32) override {}
         void onWake  (physx::PxActor**, physx::PxU32) override {}
         void onSleep (physx::PxActor**, physx::PxU32) override {}
-        void onTrigger(physx::PxTriggerPair*, physx::PxU32) override {}
         void onAdvance(const physx::PxRigidBody* const*, const physx::PxTransform*, physx::PxU32) override {}
     };
 
     // ── Helpers ──────────────────────────────────────────────────────────────
-    physx::PxShape*      CreateShape(Registry& registry, Entity e);
-    physx::PxTransform   EntityPose (Registry& registry, Entity e);
-    uint32_t             ShapeHash  (Registry& registry, Entity e) const;
-    void                 DestroyActor(Entity e);
+    physx::PxShape*    CreateShape  (Registry& registry, Entity e);
+    physx::PxTransform EntityPose   (Registry& registry, Entity e);
+    uint32_t           ShapeHash    (Registry& registry, Entity e) const;
+    void               DestroyActor (Entity e);
 
     // ── PhysX objects ────────────────────────────────────────────────────────
     physx::PxDefaultAllocator      m_allocator;
@@ -96,10 +92,10 @@ private:
     physx::PxPhysics*              m_physics     = nullptr;
     physx::PxDefaultCpuDispatcher* m_dispatcher  = nullptr;
     physx::PxScene*                m_scene       = nullptr;
-    physx::PxMaterial*             m_defaultMat  = nullptr;  // fallback
+    physx::PxMaterial*             m_defaultMat  = nullptr;
 
-    ContactCallback                m_contactCallback;
-    std::vector<CollisionEvent>    m_events;
+    ContactCallback              m_contactCallback;
+    std::vector<RawEvent>        m_events;
 
     std::unordered_map<Entity, ActorState> m_actors;
 

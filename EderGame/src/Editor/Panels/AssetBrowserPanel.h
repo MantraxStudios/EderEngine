@@ -51,6 +51,10 @@ private:
     void OpenNewFolder(const std::string& parentRelDir);
     void DrawNewFolderPopup();
 
+    // New-script modal
+    void OpenNewScript(const std::string& parentRelDir);
+    void DrawNewScriptPopup();
+
     // ── State ─────────────────────────────────────────────────────
     std::string m_selectedDir;          // relative to workDir (empty = root)
 
@@ -65,6 +69,11 @@ private:
     bool        m_newFolderOpen     = false;
     std::string m_newFolderParent;
     char        m_newFolderBuffer[128] = {};
+
+    // New-script state
+    bool        m_newScriptOpen     = false;
+    std::string m_newScriptParent;
+    char        m_newScriptBuffer[128] = {};
 
     // Drag-and-drop
     uint64_t    m_dragGuid          = 0;

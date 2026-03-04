@@ -8,8 +8,10 @@
 #include "ECS/Components/AnimationComponent.h"
 #include "ECS/Components/RigidbodyComponent.h"
 #include "ECS/Components/ColliderComponent.h"
+#include "ECS/Components/ScriptComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 #include "Physics/PhysicsSystem.h"
+#include "Scripting/LuaScriptSystem.h"
 #include "Core/MaterialManager.h"
 #include "Core/Material.h"
 #include <IO/AssetManager.h>
@@ -182,6 +184,7 @@ void InspectorPanel::OnDraw()
     DrawAnimationComponent();
     DrawRigidbodyComponent();
     DrawColliderComponent();
+    DrawScriptComponent();
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -697,6 +700,48 @@ void InspectorPanel::DrawColliderComponent()
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+void InspectorPanel::DrawScriptComponent()
+{
+    if (!registry->Has<ScriptComponent>(selected)) return;
+
+    if (ComponentHeader<ScriptComponent>("Script", registry, selected, ImVec4(0.9f, 0.75f, 0.1f, 1.0f)))
+    {
+        auto& sc = registry->Get<ScriptComponent>(selected);
+
+        // Script asset slot
+        {
+            std::string newPath; uint64_t newGuid = 0;
+            if (AssetDropField("Script", Krayon::AssetType::Script, sc.scriptPath, newPath, newGuid))
+            {
+                sc.scriptGuid = newGuid;
+                sc.scriptPath = newPath;
+                sc.started    = false; // trigger reload
+                LuaScriptSystem::Get().Reload(selected);
+            }
+        }
+
+        ImGui::Spacing();
+
+        // Reload button
+        if (ImGui::Button("Reload Script"))
+        {
+            sc.started = false;
+            LuaScriptSystem::Get().Reload(selected);
+        }
+
+        // Show path
+        if (!sc.scriptPath.empty())
+        {
+            ImGui::SameLine();
+            ImGui::TextDisabled("%s", sc.scriptPath.c_str());
+        }
+
+        ImGui::Spacing();
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 void InspectorPanel::DrawAddComponent()
 {
     const bool canAddTransform    = !registry->Has<TransformComponent>(selected);
@@ -706,8 +751,10 @@ void InspectorPanel::DrawAddComponent()
     const bool canAddAnim         = !registry->Has<AnimationComponent>(selected);
     const bool canAddRigidbody    = !registry->Has<RigidbodyComponent>(selected);
     const bool canAddCollider     = !registry->Has<ColliderComponent>(selected);
+    const bool canAddScript       = !registry->Has<ScriptComponent>(selected);
     const bool anyAvailable       = canAddTransform || canAddMeshRenderer || canAddLight
-                                 || canAddFog || canAddAnim || canAddRigidbody || canAddCollider;
+                                 || canAddFog || canAddAnim || canAddRigidbody || canAddCollider
+                                 || canAddScript;
 
     float btnW = ImGui::GetContentRegionAvail().x;
     ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
@@ -738,6 +785,8 @@ void InspectorPanel::DrawAddComponent()
             registry->Add<ColliderComponent>(selected);
             PhysicsSystem::Get().MarkDirty(selected); // rebuild shapeless->shaped if rigidbody exists
         }
+        if (canAddScript && ImGui::MenuItem("   Script"))
+            registry->Add<ScriptComponent>(selected);
         ImGui::EndPopup();
     }
 }

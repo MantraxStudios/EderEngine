@@ -23,6 +23,7 @@
 #include <IO/AssetManager.h>
 #include <IO/SceneSerializer.h>
 #include "Physics/PhysicsSystem.h"
+#include "Scripting/LuaScriptSystem.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Run
@@ -62,6 +63,8 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
         PhysicsSystem::Get().SyncActors(m_registry);
         PhysicsSystem::Get().Step(dt);
         PhysicsSystem::Get().WriteBack(m_registry);
+        PhysicsSystem::Get().DispatchEvents(m_registry);
+        LuaScriptSystem::Get().Update(m_registry, dt);
 
         RenderShadowPasses(cmd);
         RenderMainPass(cmd);
@@ -138,6 +141,7 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
     }
 
     PhysicsSystem::Get().Init();
+    LuaScriptSystem::Get().Init();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -226,6 +230,7 @@ void PlayerApp::Shutdown()
     m_pipeline.Destroy();
 
     PhysicsSystem::Get().Shutdown();
+    LuaScriptSystem::Get().Shutdown();
 
     SDL_DestroyWindow(m_window);
     SDL_Quit();

@@ -55,7 +55,8 @@ namespace Krayon
         Data,       // .bin  .json .xml   .txt
         PAK,        // .pak
         Material,   // .mat  (editor surface asset)
-        Scene       // .scene (editor serialised scene)
+        Scene,      // .scene (editor serialised scene)
+        Script      // .lua  (Lua script)
     };
 
     inline std::string AssetTypeToString(AssetType t)
@@ -70,6 +71,7 @@ namespace Krayon
             case AssetType::PAK:      return "PAK";
             case AssetType::Material: return "Material";
             case AssetType::Scene:    return "Scene";
+            case AssetType::Script:   return "Script";
             default:                  return "Unknown";
         }
     }
@@ -84,6 +86,7 @@ namespace Krayon
         if (s == "PAK")      return AssetType::PAK;
         if (s == "Material") return AssetType::Material;
         if (s == "Scene")    return AssetType::Scene;
+        if (s == "Script")   return AssetType::Script;
         return AssetType::Unknown;
     }
 
@@ -109,6 +112,8 @@ namespace Krayon
             return AssetType::Material;
         if (e == ".scene")
             return AssetType::Scene;
+        if (e == ".lua")
+            return AssetType::Script;
         return AssetType::Unknown;
     }
 
