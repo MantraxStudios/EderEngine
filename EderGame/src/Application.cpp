@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <iostream>
+#include <sstream>
 #include <cstdio>
 
 #include "Core/MaterialLayout.h"
@@ -410,7 +411,7 @@ void Application::BuildPak(const std::string& /*outPakPathHint*/,
             fileMap[meta.path] = absPath;
     }
 
-    // Build in-memory entries: game.conf
+    // Build in-memory entries: game.conf + assets.manifest
     Krayon::GameConfig config;
     config.gameName     = gameName.empty() ? "EderGame" : gameName;
     config.initialScene = initialScene;
@@ -419,12 +420,39 @@ void Application::BuildPak(const std::string& /*outPakPathHint*/,
     std::unordered_map<std::string, std::vector<uint8_t>> memMap;
     memMap["game.conf"] = std::vector<uint8_t>(cfgText.begin(), cfgText.end());
 
+    // Build GUID manifest: one asset per line — "<guid_hex>\t<type>\t<name>\t<path>"
+    {
+        std::ostringstream manifest;
+        for (const auto& [guid, meta] : all)
+        {
+            if (meta.type == Krayon::AssetType::Unknown) continue;
+            if (meta.type == Krayon::AssetType::PAK)     continue;
+            manifest << std::hex << guid << std::dec
+                     << '\t' << Krayon::AssetTypeToString(meta.type)
+                     << '\t' << meta.name
+                     << '\t' << meta.path
+                     << '\n';
+        }
+        const std::string ms = manifest.str();
+        memMap["assets.manifest"] = std::vector<uint8_t>(ms.begin(), ms.end());
+    }
+
     // Ensure output directory exists
     const fs::path outDir = fs::path(outPakPath).parent_path();
     if (!outDir.empty())
     {
         std::error_code ec;
         fs::create_directories(outDir, ec);
+    }
+
+    // Delete old pak so it is always fully regenerated
+    {
+        std::error_code ec;
+        if (fs::exists(outPakPath, ec))
+        {
+            fs::remove(outPakPath, ec);
+            m_editor.AppendBuildLog("[Build] Removed old Game.pak");
+        }
     }
 
     m_editor.AppendBuildLog("[Build] Starting — " + std::to_string(fileMap.size()) + " assets + game.conf");
@@ -523,8 +551,8 @@ void Application::BuildPak(const std::string& /*outPakPathHint*/,
             copyFile(bldDir / "PhysXCommon_64.dll",      "PhysXCommon_64.dll");
             copyFile(bldDir / "PhysXFoundation_64.dll",  "PhysXFoundation_64.dll");
             copyFile(bldDir / "PhysXCooking_64.dll",     "PhysXCooking_64.dll");
-            copyFile(bldDir / "lua55.dll",               "lua55.dll");
-            copyFile(pakSrc,                              "Game.pak");
+            copyFile(bldDir / "lua54.dll",               "lua54.dll");
+            // Game.pak is already written directly to outDir — no copy needed
 
             m_editor.AppendBuildLog("[Package] Done -> " + outDir.string());
             m_editor.SetBuildRunning(false);

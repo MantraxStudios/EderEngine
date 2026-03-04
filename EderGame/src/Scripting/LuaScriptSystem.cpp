@@ -10,6 +10,10 @@
 #include "ECS/Components/HierarchyComponent.h"
 #include "ECS/Components/ScriptComponent.h"
 #include "ECS/Components/CollisionCallbackComponent.h"
+#include "ECS/Components/MeshRendererComponent.h"
+#include "ECS/Components/LightComponent.h"
+#include "ECS/Components/AnimationComponent.h"
+#include "ECS/Components/VolumetricFogComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 #include <IO/AssetManager.h>
 
@@ -82,7 +86,11 @@ void LuaScriptSystem::Update(Registry& registry, float dt)
         // ── Load + Start ─────────────────────────────────────────────────────
         if (!sc.started)
         {
-            if (!LoadScript(e, registry)) return;
+            if (!LoadScript(e, registry))
+            {
+                sc.started = true;   // avoid spamming the error every frame
+                return;
+            }
             sc.started = true;
 
             HookCollisions(e, registry);
@@ -332,6 +340,33 @@ void LuaScriptSystem::BindAPI()
         if (s_reg && s_reg->Has<RigidbodyComponent>((Entity)e))
             s_reg->Get<RigidbodyComponent>((Entity)e).useGravity = v;
     };
+    RB["setVelocity"] = [](int e, float x, float y, float z) {
+        if (s_reg && s_reg->Has<RigidbodyComponent>((Entity)e))
+            s_reg->Get<RigidbodyComponent>((Entity)e).linearVelocity = {x, y, z};
+    };
+    RB["getAngularVelocity"] = [](int e) -> sol::table {
+        if (!s_reg || !s_reg->Has<RigidbodyComponent>((Entity)e)) return sol::nil;
+        auto& rb = s_reg->Get<RigidbodyComponent>((Entity)e);
+        sol::table r = LuaScriptSystem::Get().GetState().create_table();
+        r["x"] = rb.angularVelocity.x; r["y"] = rb.angularVelocity.y; r["z"] = rb.angularVelocity.z;
+        return r;
+    };
+    RB["getLinearDrag"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<RigidbodyComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<RigidbodyComponent>((Entity)e).linearDrag;
+    };
+    RB["setLinearDrag"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<RigidbodyComponent>((Entity)e))
+            s_reg->Get<RigidbodyComponent>((Entity)e).linearDrag = v;
+    };
+    RB["getAngularDrag"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<RigidbodyComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<RigidbodyComponent>((Entity)e).angularDrag;
+    };
+    RB["setAngularDrag"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<RigidbodyComponent>((Entity)e))
+            s_reg->Get<RigidbodyComponent>((Entity)e).angularDrag = v;
+    };
 
     // ─────────────────────────────────────────────────────────────────────────
     // Collider table
@@ -345,6 +380,85 @@ void LuaScriptSystem::BindAPI()
     Col["setTrigger"] = [](int e, bool v) {
         if (s_reg && s_reg->Has<ColliderComponent>((Entity)e))
             s_reg->Get<ColliderComponent>((Entity)e).isTrigger = v;
+    };
+    // shape: "Box", "Sphere", "Capsule"
+    Col["getShape"] = [](int e) -> std::string {
+        if (!s_reg || !s_reg->Has<ColliderComponent>((Entity)e)) return "";
+        switch (s_reg->Get<ColliderComponent>((Entity)e).shape) {
+            case ColliderShape::Box:     return "Box";
+            case ColliderShape::Sphere:  return "Sphere";
+            case ColliderShape::Capsule: return "Capsule";
+        }
+        return "";
+    };
+    Col["setShape"] = [](int e, const std::string& s) {
+        if (!s_reg || !s_reg->Has<ColliderComponent>((Entity)e)) return;
+        auto& c = s_reg->Get<ColliderComponent>((Entity)e);
+        if (s == "Box")          c.shape = ColliderShape::Box;
+        else if (s == "Sphere")  c.shape = ColliderShape::Sphere;
+        else if (s == "Capsule") c.shape = ColliderShape::Capsule;
+    };
+    Col["getRadius"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<ColliderComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<ColliderComponent>((Entity)e).radius;
+    };
+    Col["setRadius"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<ColliderComponent>((Entity)e))
+            s_reg->Get<ColliderComponent>((Entity)e).radius = v;
+    };
+    Col["getBoxHalfExtents"] = [](int e) -> sol::table {
+        if (!s_reg || !s_reg->Has<ColliderComponent>((Entity)e)) return sol::nil;
+        auto& c = s_reg->Get<ColliderComponent>((Entity)e);
+        sol::table r = LuaScriptSystem::Get().GetState().create_table();
+        r["x"] = c.boxHalfExtents.x; r["y"] = c.boxHalfExtents.y; r["z"] = c.boxHalfExtents.z;
+        return r;
+    };
+    Col["setBoxHalfExtents"] = [](int e, float x, float y, float z) {
+        if (s_reg && s_reg->Has<ColliderComponent>((Entity)e))
+            s_reg->Get<ColliderComponent>((Entity)e).boxHalfExtents = {x, y, z};
+    };
+    Col["getCapsuleHalfHeight"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<ColliderComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<ColliderComponent>((Entity)e).capsuleHalfHeight;
+    };
+    Col["setCapsuleHalfHeight"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<ColliderComponent>((Entity)e))
+            s_reg->Get<ColliderComponent>((Entity)e).capsuleHalfHeight = v;
+    };
+    Col["getCenter"] = [](int e) -> sol::table {
+        if (!s_reg || !s_reg->Has<ColliderComponent>((Entity)e)) return sol::nil;
+        auto& c = s_reg->Get<ColliderComponent>((Entity)e);
+        sol::table r = LuaScriptSystem::Get().GetState().create_table();
+        r["x"] = c.center.x; r["y"] = c.center.y; r["z"] = c.center.z;
+        return r;
+    };
+    Col["setCenter"] = [](int e, float x, float y, float z) {
+        if (s_reg && s_reg->Has<ColliderComponent>((Entity)e))
+            s_reg->Get<ColliderComponent>((Entity)e).center = {x, y, z};
+    };
+    Col["getStaticFriction"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<ColliderComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<ColliderComponent>((Entity)e).staticFriction;
+    };
+    Col["setStaticFriction"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<ColliderComponent>((Entity)e))
+            s_reg->Get<ColliderComponent>((Entity)e).staticFriction = v;
+    };
+    Col["getDynamicFriction"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<ColliderComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<ColliderComponent>((Entity)e).dynamicFriction;
+    };
+    Col["setDynamicFriction"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<ColliderComponent>((Entity)e))
+            s_reg->Get<ColliderComponent>((Entity)e).dynamicFriction = v;
+    };
+    Col["getRestitution"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<ColliderComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<ColliderComponent>((Entity)e).restitution;
+    };
+    Col["setRestitution"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<ColliderComponent>((Entity)e))
+            s_reg->Get<ColliderComponent>((Entity)e).restitution = v;
     };
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -391,6 +505,295 @@ void LuaScriptSystem::BindAPI()
         if (len > 1e-6f) { r["x"]=x/len; r["y"]=y/len; r["z"]=z/len; }
         else              { r["x"]=0.f;   r["y"]=0.f;   r["z"]=0.f;  }
         return r;
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Hierarchy table
+    // ─────────────────────────────────────────────────────────────────────────
+    sol::table Hier = m_lua.create_named_table("Hierarchy");
+    Hier["hasParent"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<HierarchyComponent>((Entity)e)
+            && s_reg->Get<HierarchyComponent>((Entity)e).parent != NULL_ENTITY;
+    };
+    Hier["getParent"] = [](int e) -> int {
+        if (!s_reg || !s_reg->Has<HierarchyComponent>((Entity)e)) return (int)NULL_ENTITY;
+        return (int)s_reg->Get<HierarchyComponent>((Entity)e).parent;
+    };
+    Hier["getChildCount"] = [](int e) -> int {
+        if (!s_reg || !s_reg->Has<HierarchyComponent>((Entity)e)) return 0;
+        return (int)s_reg->Get<HierarchyComponent>((Entity)e).children.size();
+    };
+    Hier["getChild"] = [](int e, int idx) -> int {
+        if (!s_reg || !s_reg->Has<HierarchyComponent>((Entity)e)) return (int)NULL_ENTITY;
+        const auto& ch = s_reg->Get<HierarchyComponent>((Entity)e).children;
+        if (idx < 0 || idx >= (int)ch.size()) return (int)NULL_ENTITY;
+        return (int)ch[idx];
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // MeshRenderer table
+    // ─────────────────────────────────────────────────────────────────────────
+    sol::table MR = m_lua.create_named_table("MeshRenderer");
+    MR["hasMeshRenderer"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<MeshRendererComponent>((Entity)e);
+    };
+    MR["isVisible"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<MeshRendererComponent>((Entity)e)
+            && s_reg->Get<MeshRendererComponent>((Entity)e).visible;
+    };
+    MR["setVisible"] = [](int e, bool v) {
+        if (s_reg && s_reg->Has<MeshRendererComponent>((Entity)e))
+            s_reg->Get<MeshRendererComponent>((Entity)e).visible = v;
+    };
+    MR["castsShadow"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<MeshRendererComponent>((Entity)e)
+            && s_reg->Get<MeshRendererComponent>((Entity)e).castShadow;
+    };
+    MR["setCastShadow"] = [](int e, bool v) {
+        if (s_reg && s_reg->Has<MeshRendererComponent>((Entity)e))
+            s_reg->Get<MeshRendererComponent>((Entity)e).castShadow = v;
+    };
+    MR["getMaterialName"] = [](int e) -> std::string {
+        if (!s_reg || !s_reg->Has<MeshRendererComponent>((Entity)e)) return "";
+        return s_reg->Get<MeshRendererComponent>((Entity)e).materialName;
+    };
+    MR["setMaterialName"] = [](int e, const std::string& name) {
+        if (s_reg && s_reg->Has<MeshRendererComponent>((Entity)e))
+            s_reg->Get<MeshRendererComponent>((Entity)e).materialName = name;
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Light table
+    // ─────────────────────────────────────────────────────────────────────────
+    sol::table Light = m_lua.create_named_table("Light");
+    Light["hasLight"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<LightComponent>((Entity)e);
+    };
+    Light["getColor"] = [](int e) -> sol::table {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return sol::nil;
+        auto& l = s_reg->Get<LightComponent>((Entity)e);
+        sol::table r = LuaScriptSystem::Get().GetState().create_table();
+        r["r"] = l.color.r; r["g"] = l.color.g; r["b"] = l.color.b;
+        return r;
+    };
+    Light["setColor"] = [](int e, float r, float g, float b) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).color = {r, g, b};
+    };
+    Light["getIntensity"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<LightComponent>((Entity)e).intensity;
+    };
+    Light["setIntensity"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).intensity = v;
+    };
+    Light["getRange"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<LightComponent>((Entity)e).range;
+    };
+    Light["setRange"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).range = v;
+    };
+    Light["getInnerCone"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<LightComponent>((Entity)e).innerConeAngle;
+    };
+    Light["setInnerCone"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).innerConeAngle = v;
+    };
+    Light["getOuterCone"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<LightComponent>((Entity)e).outerConeAngle;
+    };
+    Light["setOuterCone"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).outerConeAngle = v;
+    };
+    Light["castsShadow"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<LightComponent>((Entity)e)
+            && s_reg->Get<LightComponent>((Entity)e).castShadow;
+    };
+    Light["setCastShadow"] = [](int e, bool v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).castShadow = v;
+    };
+    // getType: "Directional", "Point", "Spot"
+    Light["getType"] = [](int e) -> std::string {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return "";
+        switch (s_reg->Get<LightComponent>((Entity)e).type) {
+            case LightType::Directional: return "Directional";
+            case LightType::Point:       return "Point";
+            case LightType::Spot:        return "Spot";
+        }
+        return "";
+    };
+    Light["setType"] = [](int e, const std::string& t) {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return;
+        auto& l = s_reg->Get<LightComponent>((Entity)e);
+        if (t == "Directional")   l.type = LightType::Directional;
+        else if (t == "Point")    l.type = LightType::Point;
+        else if (t == "Spot")     l.type = LightType::Spot;
+    };
+    // Volumetric
+    Light["isVolumetricEnabled"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<LightComponent>((Entity)e)
+            && s_reg->Get<LightComponent>((Entity)e).volumetricEnabled;
+    };
+    Light["setVolumetricEnabled"] = [](int e, bool v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).volumetricEnabled = v;
+    };
+    Light["getVolDensity"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<LightComponent>((Entity)e).volDensity;
+    };
+    Light["setVolDensity"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).volDensity = v;
+    };
+    Light["getVolIntensity"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<LightComponent>((Entity)e).volIntensity;
+    };
+    Light["setVolIntensity"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).volIntensity = v;
+    };
+    Light["setVolTint"] = [](int e, float r, float g, float b) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).volTint = {r, g, b};
+    };
+    // Sun Shafts
+    Light["isSunShaftsEnabled"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<LightComponent>((Entity)e)
+            && s_reg->Get<LightComponent>((Entity)e).sunShaftsEnabled;
+    };
+    Light["setSunShaftsEnabled"] = [](int e, bool v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).sunShaftsEnabled = v;
+    };
+    Light["getShaftsDensity"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<LightComponent>((Entity)e).shaftsDensity;
+    };
+    Light["setShaftsDensity"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).shaftsDensity = v;
+    };
+    Light["setShaftsTint"] = [](int e, float r, float g, float b) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).shaftsTint = {r, g, b};
+    };
+    Light["getShaftsExposure"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<LightComponent>((Entity)e).shaftsExposure;
+    };
+    Light["setShaftsExposure"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).shaftsExposure = v;
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Animation table
+    // ─────────────────────────────────────────────────────────────────────────
+    sol::table Anim = m_lua.create_named_table("Animation");
+    Anim["hasAnimation"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<AnimationComponent>((Entity)e);
+    };
+    Anim["play"] = [](int e) {
+        if (s_reg && s_reg->Has<AnimationComponent>((Entity)e))
+            s_reg->Get<AnimationComponent>((Entity)e).playing = true;
+    };
+    Anim["stop"] = [](int e) {
+        if (s_reg && s_reg->Has<AnimationComponent>((Entity)e))
+            s_reg->Get<AnimationComponent>((Entity)e).playing = false;
+    };
+    Anim["isPlaying"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<AnimationComponent>((Entity)e)
+            && s_reg->Get<AnimationComponent>((Entity)e).playing;
+    };
+    Anim["setClip"] = [](int e, int idx) {
+        if (s_reg && s_reg->Has<AnimationComponent>((Entity)e))
+            s_reg->Get<AnimationComponent>((Entity)e).animIndex = idx;
+    };
+    Anim["getClip"] = [](int e) -> int {
+        if (!s_reg || !s_reg->Has<AnimationComponent>((Entity)e)) return 0;
+        return s_reg->Get<AnimationComponent>((Entity)e).animIndex;
+    };
+    Anim["setSpeed"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<AnimationComponent>((Entity)e))
+            s_reg->Get<AnimationComponent>((Entity)e).speed = v;
+    };
+    Anim["getSpeed"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<AnimationComponent>((Entity)e)) return 1.f;
+        return s_reg->Get<AnimationComponent>((Entity)e).speed;
+    };
+    Anim["setLoop"] = [](int e, bool v) {
+        if (s_reg && s_reg->Has<AnimationComponent>((Entity)e))
+            s_reg->Get<AnimationComponent>((Entity)e).loop = v;
+    };
+    Anim["isLooping"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<AnimationComponent>((Entity)e)
+            && s_reg->Get<AnimationComponent>((Entity)e).loop;
+    };
+    Anim["getTime"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<AnimationComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<AnimationComponent>((Entity)e).currentTime;
+    };
+    Anim["setBlendDuration"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<AnimationComponent>((Entity)e))
+            s_reg->Get<AnimationComponent>((Entity)e).blendDuration = v;
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // VolumetricFog table
+    // ─────────────────────────────────────────────────────────────────────────
+    sol::table Fog = m_lua.create_named_table("VolumetricFog");
+    Fog["hasFog"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<VolumetricFogComponent>((Entity)e);
+    };
+    Fog["isEnabled"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<VolumetricFogComponent>((Entity)e)
+            && s_reg->Get<VolumetricFogComponent>((Entity)e).enabled;
+    };
+    Fog["setEnabled"] = [](int e, bool v) {
+        if (s_reg && s_reg->Has<VolumetricFogComponent>((Entity)e))
+            s_reg->Get<VolumetricFogComponent>((Entity)e).enabled = v;
+    };
+    Fog["getDensity"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<VolumetricFogComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<VolumetricFogComponent>((Entity)e).density;
+    };
+    Fog["setDensity"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<VolumetricFogComponent>((Entity)e))
+            s_reg->Get<VolumetricFogComponent>((Entity)e).density = v;
+    };
+    Fog["getFogStart"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<VolumetricFogComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<VolumetricFogComponent>((Entity)e).fogStart;
+    };
+    Fog["setFogStart"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<VolumetricFogComponent>((Entity)e))
+            s_reg->Get<VolumetricFogComponent>((Entity)e).fogStart = v;
+    };
+    Fog["getFogEnd"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<VolumetricFogComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<VolumetricFogComponent>((Entity)e).fogEnd;
+    };
+    Fog["setFogEnd"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<VolumetricFogComponent>((Entity)e))
+            s_reg->Get<VolumetricFogComponent>((Entity)e).fogEnd = v;
+    };
+    Fog["setColor"] = [](int e, float r, float g, float b) {
+        if (s_reg && s_reg->Has<VolumetricFogComponent>((Entity)e))
+            s_reg->Get<VolumetricFogComponent>((Entity)e).fogColor = {r, g, b};
+    };
+    Fog["setScatterStrength"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<VolumetricFogComponent>((Entity)e))
+            s_reg->Get<VolumetricFogComponent>((Entity)e).scatterStrength = v;
     };
 
     // ─────────────────────────────────────────────────────────────────────────

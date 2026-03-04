@@ -181,7 +181,10 @@ namespace Krayon
             if (m_compiled)
             {
                 if (!pakPath.empty())
+                {
                     m_pak = std::make_unique<PakFile>(pakPath);
+                    LoadManifestFromPak();
+                }
             }
             else
             {
@@ -706,6 +709,40 @@ namespace Krayon
         }
 
         // ── Boot: load every existing sidecar ─────────────────────
+
+        // Load GUID manifest from an already-mounted PAK (compiled/player mode)
+        void LoadManifestFromPak()
+        {
+            if (!m_pak) return;
+            const auto bytes = m_pak->Load("assets.manifest");
+            if (bytes.empty())
+            {
+                std::cerr << "[AssetManager] No assets.manifest in PAK — GUID lookups will fail.\n";
+                return;
+            }
+            std::istringstream ss(std::string(bytes.begin(), bytes.end()));
+            std::string line;
+            int loaded = 0;
+            while (std::getline(ss, line))
+            {
+                if (line.empty() || line[0] == '#') continue;
+                // format: <guid_hex>\t<type>\t<name>\t<path>
+                std::istringstream ls(line);
+                std::string guidHex, typeStr, name, path;
+                if (!std::getline(ls, guidHex, '\t')) continue;
+                if (!std::getline(ls, typeStr,  '\t')) continue;
+                if (!std::getline(ls, name,     '\t')) continue;
+                if (!std::getline(ls, path,     '\t')) continue;
+                AssetMeta meta;
+                try { meta.guid = std::stoull(guidHex, nullptr, 16); } catch (...) { continue; }
+                meta.type = AssetTypeFromString(typeStr);
+                meta.name = name;
+                meta.path = NormalizePath(path);
+                RegisterMeta(meta);
+                ++loaded;
+            }
+            std::cout << "[AssetManager] Loaded " << loaded << " entries from assets.manifest\n";
+        }
 
         void LoadAllSidecars()
         {

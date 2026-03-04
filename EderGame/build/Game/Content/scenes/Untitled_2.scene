@@ -4,8 +4,8 @@ name=Untitled_2
 [entity]
 id=1
 tag.name=Entity
-transform.pos=-0.000023 39.080132 -0.000053
-transform.rot=-0.000063 0.005492 0.000167
+transform.pos=0.000078 18.256870 0.000158
+transform.rot=-0.000103 -0.009610 0.000247
 transform.scale=0.100000 0.100000 0.100000
 mesh.guid=0
 mesh.path=assets/Capoeira.fbx
@@ -50,5 +50,15 @@ collider.staticFric=0.5
 collider.dynFric=0.5
 collider.restitution=0.3
 collider.isTrigger=0
+[/entity]
+
+[entity]
+id=3
+tag.name=Entity
+transform.pos=0.000000 0.000000 0.000000
+transform.rot=0.000000 0.000000 0.000000
+transform.scale=1.000000 1.000000 1.000000
+script.guid=ea21448ae92a9f84
+script.path=scripts/test.lua
 [/entity]
 

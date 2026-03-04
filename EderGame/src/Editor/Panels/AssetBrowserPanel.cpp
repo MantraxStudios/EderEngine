@@ -426,9 +426,16 @@ void AssetBrowserPanel::DrawContent()
             if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
                 m_selectedDir = item.relPath;
         }
-        else if (clicked)
+        else if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
         {
-            if (m_onSelect)
+            if (item.type == AssetType::Script)
+            {
+                // Open in VS Code
+                const std::string absPath = (fs::path(WorkDir()) / item.relPath).string();
+                const std::string cmd = "code \"" + absPath + "\"";
+                system(cmd.c_str());
+            }
+            else if (m_onSelect)
             {
                 const AssetMeta* m = AssetManager::Get().FindByGuid(item.guid);
                 if (m) m_onSelect(item.guid, *m);
