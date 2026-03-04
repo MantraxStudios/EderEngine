@@ -359,14 +359,26 @@ void Application::LoadScene(const std::string& absPath)
 //  Progress is streamed to the Editor build log so the user can follow along.
 // ─────────────────────────────────────────────────────────────────────────────
 
-void Application::BuildPak(const std::string& outPakPath,
+void Application::BuildPak(const std::string& /*outPakPathHint*/,
                             const std::string& initialScene,
                             const std::string& gameName)
 {
     namespace fs = std::filesystem;
 
-    auto& AM       = Krayon::AssetManager::Get();
+    auto& AM        = Krayon::AssetManager::Get();
     const auto& all = AM.GetAll();
+
+    // Compute output dir: one folder above the AssetManager content dir.
+    //   AM.GetWorkDir() == "Game/Content"  (relative to build dir)
+    //   parent           == "Game"
+    //   dist dir         == "Game/<GameName>"
+    const fs::path buildDir  = fs::current_path();
+    const fs::path amContent = fs::path(AM.GetWorkDir()).is_absolute()
+                               ? fs::path(AM.GetWorkDir())
+                               : buildDir / AM.GetWorkDir();
+    const std::string gname  = gameName.empty() ? "EderGame" : gameName;
+    const fs::path distDir   = amContent.parent_path() / gname;
+    const std::string outPakPath = (distDir / "Game.pak").string();
 
     // Rescan content folder to catch any files added since last scan
     AM.Scan();
@@ -433,10 +445,9 @@ void Application::BuildPak(const std::string& outPakPath,
         if (m_buildThread.joinable())
             m_buildThread.join();
 
-        const std::string capturedOutPak  = outPakPath;
-        const std::string capturedGameName = gameName.empty() ? "EderGame" : gameName;
+        const std::string capturedOutPak = outPakPath;
 
-        m_buildThread = std::thread([this, capturedOutPak, capturedGameName]() mutable
+        m_buildThread = std::thread([this, capturedOutPak]() mutable
         {
             namespace fs = std::filesystem;
 
@@ -473,11 +484,12 @@ void Application::BuildPak(const std::string& outPakPath,
             m_editor.AppendBuildLog("[Compile] EderPlayer built OK.");
 
             // ── Copy dist files ─────────────────────────────────────────────────
-            const fs::path buildDir = fs::current_path();
-            const fs::path pakSrc   = fs::path(capturedOutPak).is_absolute()
+            const fs::path bldDir = fs::current_path();
+            const fs::path pakSrc = fs::path(capturedOutPak).is_absolute()
                                     ? fs::path(capturedOutPak)
-                                    : buildDir / capturedOutPak;
-            const fs::path outDir   = pakSrc.parent_path() / capturedGameName;
+                                    : bldDir / capturedOutPak;
+            // pak is already at distDir/Game.pak; outDir == pakSrc.parent_path()
+            const fs::path outDir = pakSrc.parent_path();
             std::error_code ec;
             fs::create_directories(outDir, ec);
 
@@ -492,10 +504,11 @@ void Application::BuildPak(const std::string& outPakPath,
                     m_editor.AppendBuildLog("[Package] " + dstName);
             };
 
-            copyFile(buildDir / "EderPlayer.exe",   "EderPlayer.exe");
-            copyFile(buildDir / "EderGraphics.dll",  "EderGraphics.dll");
-            copyFile(buildDir / "SDL3.dll",          "SDL3.dll");
-            copyFile(pakSrc,                          "Game.pak");
+            copyFile(bldDir / "EderPlayer.exe",         "EderPlayer.exe");
+            copyFile(bldDir / "EderGraphics.dll",        "EderGraphics.dll");
+            copyFile(bldDir / "SDL3.dll",                "SDL3.dll");
+            copyFile(bldDir / "assimp-vc143-mt.dll",     "assimp-vc143-mt.dll");
+            copyFile(pakSrc,                              "Game.pak");
 
             m_editor.AppendBuildLog("[Package] Done -> " + outDir.string());
             m_editor.SetBuildRunning(false);

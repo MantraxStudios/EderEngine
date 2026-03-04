@@ -759,7 +759,7 @@ void Editor::DrawBuildGameModal()
         m_buildModalOpen = false;
     }
 
-    ImGui::SetNextWindowSize(ImVec2(540, 420), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(640, 700), ImGuiCond_Always);
     if (!ImGui::BeginPopupModal("Build Game##dlg",
                                 nullptr,
                                 ImGuiWindowFlags_NoResize))
@@ -772,10 +772,14 @@ void Editor::DrawBuildGameModal()
 
     ImGui::Spacing();
 
-    // ── Output .pak path ──────────────────────────────────────────────────
-    ImGui::Text("Output PAK:");
-    ImGui::SetNextItemWidth(-1);
-    ImGui::InputText("##bgout", m_buildOutPath, sizeof(m_buildOutPath));
+    // ── Computed output path (read-only) ────────────────────────────────
+    {
+        namespace fs = std::filesystem;
+        const std::string& wdir = Krayon::AssetManager::Get().GetWorkDir();
+        const fs::path outPath  = fs::path(wdir.empty() ? "." : wdir).parent_path()
+                                  / m_buildGameName / "Game.pak";
+        ImGui::TextDisabled("Output: %s", outPath.string().c_str());
+    }
 
     ImGui::Spacing();
 
