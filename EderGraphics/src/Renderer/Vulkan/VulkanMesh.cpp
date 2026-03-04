@@ -82,7 +82,7 @@ void VulkanMesh::LoadFromMemory(const uint8_t* data, size_t size, const std::str
     gi.Inverse();
     globalInverseTransform = AiToGlm(gi);
 
-    ProcessNode(scene->mRootNode, scene);
+    ProcessNode(scene->mRootNode, scene, aiMatrix4x4()); // identity — nodeTransform is accumulated top-down
     BuildNodeTree(scene->mRootNode, UINT32_MAX);
     LoadAnimations(scene);
 
@@ -137,7 +137,7 @@ void VulkanMesh::_LoadFromPath(const std::string& path)
     gi.Inverse();
     globalInverseTransform = AiToGlm(gi);
 
-    ProcessNode(scene->mRootNode, scene);
+    ProcessNode(scene->mRootNode, scene, aiMatrix4x4()); // identity — nodeTransform is accumulated top-down
     BuildNodeTree(scene->mRootNode, UINT32_MAX);
     LoadAnimations(scene);
 
@@ -167,25 +167,68 @@ void VulkanMesh::_LoadFromPath(const std::string& path)
 // ─────────────────────────────────────────────────────────────────────────────
 // ProcessNode / ProcessMesh
 // ─────────────────────────────────────────────────────────────────────────────
-void VulkanMesh::ProcessNode(aiNode* node, const aiScene* scene)
+void VulkanMesh::ProcessNode(aiNode* node, const aiScene* scene, const aiMatrix4x4& parentTransform)
 {
+    aiMatrix4x4 nodeTransform = parentTransform * node->mTransformation;
     for (uint32_t i = 0; i < node->mNumMeshes; i++)
-        ProcessMesh(scene->mMeshes[node->mMeshes[i]], scene);
+        ProcessMesh(scene->mMeshes[node->mMeshes[i]], scene, nodeTransform);
     for (uint32_t i = 0; i < node->mNumChildren; i++)
-        ProcessNode(node->mChildren[i], scene);
+        ProcessNode(node->mChildren[i], scene, nodeTransform);
 }
 
-void VulkanMesh::ProcessMesh(aiMesh* mesh, const aiScene* /*scene*/)
+void VulkanMesh::ProcessMesh(aiMesh* mesh, const aiScene* /*scene*/, const aiMatrix4x4& nodeTransform)
 {
     uint32_t baseIndex = static_cast<uint32_t>(vertices.size());
+
+    // For skinned meshes the bone/animation pipeline already accumulates the
+    // full node-transform chain via ProcessNodeHierarchy, so we must NOT bake
+    // the transform into raw vertex positions here (it would fight the skinning).
+    // For static meshes we DO apply it so that FBX unit-scale (stored in the
+    // root node's mTransformation) is correctly converted to engine units.
+    const bool isStaticMesh = (mesh->mNumBones == 0);
+
+    // Pre-compute the 3×3 normal matrix (inverse-transpose of the upper-left 3×3)
+    // only when we're actually going to use it.
+    aiMatrix3x3 normalMatrix;
+    if (isStaticMesh)
+    {
+        normalMatrix = aiMatrix3x3(nodeTransform);
+        normalMatrix.Inverse();
+        normalMatrix.Transpose();
+    }
 
     for (uint32_t i = 0; i < mesh->mNumVertices; i++)
     {
         Vertex v{};
-        v.position  = { mesh->mVertices[i].x,  mesh->mVertices[i].y,  mesh->mVertices[i].z };
-        v.normal    = { mesh->mNormals[i].x,    mesh->mNormals[i].y,    mesh->mNormals[i].z };
-        v.tangent   = mesh->mTangents   ? glm::vec3(mesh->mTangents[i].x,   mesh->mTangents[i].y,   mesh->mTangents[i].z)   : glm::vec3(0);
-        v.bitangent = mesh->mBitangents ? glm::vec3(mesh->mBitangents[i].x, mesh->mBitangents[i].y, mesh->mBitangents[i].z) : glm::vec3(0);
+
+        if (isStaticMesh)
+        {
+            aiVector3D pos = nodeTransform * mesh->mVertices[i];
+            v.position = { pos.x, pos.y, pos.z };
+
+            if (mesh->mNormals)
+            {
+                aiVector3D nor = normalMatrix * mesh->mNormals[i];
+                v.normal = glm::normalize(glm::vec3(nor.x, nor.y, nor.z));
+            }
+            if (mesh->mTangents)
+            {
+                aiVector3D t = normalMatrix * mesh->mTangents[i];
+                v.tangent = glm::normalize(glm::vec3(t.x, t.y, t.z));
+            }
+            if (mesh->mBitangents)
+            {
+                aiVector3D b = normalMatrix * mesh->mBitangents[i];
+                v.bitangent = glm::normalize(glm::vec3(b.x, b.y, b.z));
+            }
+        }
+        else
+        {
+            v.position  = { mesh->mVertices[i].x,  mesh->mVertices[i].y,  mesh->mVertices[i].z };
+            v.normal    = { mesh->mNormals[i].x,    mesh->mNormals[i].y,    mesh->mNormals[i].z };
+            v.tangent   = mesh->mTangents   ? glm::vec3(mesh->mTangents[i].x,   mesh->mTangents[i].y,   mesh->mTangents[i].z)   : glm::vec3(0);
+            v.bitangent = mesh->mBitangents ? glm::vec3(mesh->mBitangents[i].x, mesh->mBitangents[i].y, mesh->mBitangents[i].z) : glm::vec3(0);
+        }
         v.uv        = mesh->mTextureCoords[0] ? glm::vec2(mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y) : glm::vec2(0);
         v.color     = { 1.0f, 1.0f, 1.0f, 1.0f };
         // boneIndices / boneWeights are zero-initialised by default — filled below

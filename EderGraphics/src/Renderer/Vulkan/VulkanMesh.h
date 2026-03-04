@@ -77,8 +77,8 @@ public:
 
 private:
     void _LoadFromPath       (const std::string& path);
-    void ProcessNode (aiNode* node, const aiScene* scene);
-    void ProcessMesh (aiMesh* mesh, const aiScene* scene);
+    void ProcessNode (aiNode* node, const aiScene* scene, const aiMatrix4x4& parentTransform);
+    void ProcessMesh (aiMesh* mesh, const aiScene* scene, const aiMatrix4x4& nodeTransform);
     void BuildNodeTree       (aiNode* node, uint32_t parentIdx);
     void LoadAnimations      (const aiScene* scene);
     void ProcessNodeHierarchy(uint32_t nodeIdx, const glm::mat4& parentTransform,
