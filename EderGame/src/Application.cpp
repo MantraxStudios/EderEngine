@@ -80,6 +80,11 @@ int Application::Run()
 
         SyncECSToScene();
         UpdateAnimations(dt);
+
+        PhysicsSystem::Get().SyncActors(m_registry);
+        PhysicsSystem::Get().Step(dt);
+        PhysicsSystem::Get().WriteBack(m_registry);
+
         RenderShadowPasses(cmd);
         RenderSceneView(cmd);
         RenderPostProcess(cmd);
@@ -144,6 +149,7 @@ void Application::Init()
 
     m_boneSSBO.Create(m_pipeline);
     m_editor.SetSceneViewFramebuffer(&m_debugFb);
+    PhysicsSystem::Get().Init();
     WireEditorCallbacks();
 }
 
@@ -555,6 +561,7 @@ void Application::Shutdown()
     m_albedoTex.Destroy();
     m_pipeline.Destroy();
 
+    PhysicsSystem::Get().Shutdown();
     SDL_DestroyWindow(m_window);
     SDL_Quit();
 }

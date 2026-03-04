@@ -6,6 +6,8 @@
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/VolumetricFogComponent.h"
 #include "ECS/Components/AnimationComponent.h"
+#include "ECS/Components/RigidbodyComponent.h"
+#include "ECS/Components/ColliderComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 #include "Core/MaterialManager.h"
 #include "Core/Material.h"
@@ -177,6 +179,8 @@ void InspectorPanel::OnDraw()
     DrawLightComponent();
     DrawVolumetricFogComponent();
     DrawAnimationComponent();
+    DrawRigidbodyComponent();
+    DrawColliderComponent();
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -516,6 +520,132 @@ void InspectorPanel::DrawAnimationComponent()
     ImGui::PopID();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+
+void InspectorPanel::DrawRigidbodyComponent()
+{
+    if (!registry->Has<RigidbodyComponent>(selected)) return;
+
+    if (ComponentHeader<RigidbodyComponent>("Rigidbody", registry, selected, ImVec4(0.3f, 0.6f, 1.0f, 1.0f)))
+    {
+        auto& rb = registry->Get<RigidbodyComponent>(selected);
+
+        ImGui::Columns(2, "rb_cols", false);
+        ImGui::SetColumnWidth(0, 130.0f);
+
+        ImGui::Text("Mass");        ImGui::NextColumn();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##rb_mass", &rb.mass, 0.1f, 0.001f, 9999.0f, "%.2f kg");
+        ImGui::NextColumn();
+
+        ImGui::Text("Linear Drag"); ImGui::NextColumn();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##rb_ldrag", &rb.linearDrag, 0.001f, 0.0f, 10.0f, "%.3f");
+        ImGui::NextColumn();
+
+        ImGui::Text("Angular Drag"); ImGui::NextColumn();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##rb_adrag", &rb.angularDrag, 0.001f, 0.0f, 10.0f, "%.3f");
+        ImGui::NextColumn();
+
+        ImGui::Text("Use Gravity"); ImGui::NextColumn();
+        ImGui::Checkbox("##rb_grav", &rb.useGravity);
+        ImGui::NextColumn();
+
+        ImGui::Text("Kinematic");  ImGui::NextColumn();
+        ImGui::Checkbox("##rb_kin", &rb.isKinematic);
+        ImGui::NextColumn();
+
+        ImGui::Columns(1);
+
+        // Read-only velocity
+        ImGui::Spacing();
+        ImGui::TextDisabled("Linear Vel:  (%.2f, %.2f, %.2f)",
+            rb.linearVelocity.x, rb.linearVelocity.y, rb.linearVelocity.z);
+        ImGui::TextDisabled("Angular Vel: (%.2f, %.2f, %.2f)",
+            rb.angularVelocity.x, rb.angularVelocity.y, rb.angularVelocity.z);
+
+        ImGui::Spacing();
+    }
+}
+
+void InspectorPanel::DrawColliderComponent()
+{
+    if (!registry->Has<ColliderComponent>(selected)) return;
+
+    if (ComponentHeader<ColliderComponent>("Collider", registry, selected, ImVec4(0.2f, 0.9f, 0.4f, 1.0f)))
+    {
+        auto& col = registry->Get<ColliderComponent>(selected);
+
+        // Shape selector
+        const char* shapes[] = { "Box", "Sphere", "Capsule" };
+        int shapeIdx = static_cast<int>(col.shape);
+        ImGui::Text("Shape"); ImGui::SameLine(130.0f);
+        ImGui::SetNextItemWidth(-1);
+        if (ImGui::Combo("##col_shape", &shapeIdx, shapes, 3))
+            col.shape = static_cast<ColliderShape>(shapeIdx);
+
+        ImGui::Columns(2, "col_cols", false);
+        ImGui::SetColumnWidth(0, 130.0f);
+
+        if (col.shape == ColliderShape::Box)
+        {
+            ImGui::Text("Half Extents"); ImGui::NextColumn();
+            ImGui::SetNextItemWidth(-1);
+            ImGui::DragFloat3("##col_hext", &col.boxHalfExtents.x, 0.01f, 0.001f, 999.0f, "%.3f");
+            ImGui::NextColumn();
+        }
+        else if (col.shape == ColliderShape::Sphere)
+        {
+            ImGui::Text("Radius"); ImGui::NextColumn();
+            ImGui::SetNextItemWidth(-1);
+            ImGui::DragFloat("##col_rad", &col.radius, 0.01f, 0.001f, 999.0f, "%.3f");
+            ImGui::NextColumn();
+        }
+        else // Capsule
+        {
+            ImGui::Text("Radius"); ImGui::NextColumn();
+            ImGui::SetNextItemWidth(-1);
+            ImGui::DragFloat("##col_crad", &col.radius, 0.01f, 0.001f, 999.0f, "%.3f");
+            ImGui::NextColumn();
+
+            ImGui::Text("Half Height"); ImGui::NextColumn();
+            ImGui::SetNextItemWidth(-1);
+            ImGui::DragFloat("##col_chh", &col.capsuleHalfHeight, 0.01f, 0.001f, 999.0f, "%.3f");
+            ImGui::NextColumn();
+        }
+
+        ImGui::Text("Center"); ImGui::NextColumn();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat3("##col_ctr", &col.center.x, 0.01f, -999.0f, 999.0f, "%.3f");
+        ImGui::NextColumn();
+
+        ImGui::Text("Static Fric."); ImGui::NextColumn();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##col_sf", &col.staticFriction,  0.01f, 0.0f, 1.0f, "%.2f");
+        ImGui::NextColumn();
+
+        ImGui::Text("Dynamic Fric."); ImGui::NextColumn();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##col_df", &col.dynamicFriction, 0.01f, 0.0f, 1.0f, "%.2f");
+        ImGui::NextColumn();
+
+        ImGui::Text("Restitution"); ImGui::NextColumn();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##col_res", &col.restitution,    0.01f, 0.0f, 1.0f, "%.2f");
+        ImGui::NextColumn();
+
+        ImGui::Text("Is Trigger"); ImGui::NextColumn();
+        ImGui::Checkbox("##col_trig", &col.isTrigger);
+        ImGui::NextColumn();
+
+        ImGui::Columns(1);
+        ImGui::Spacing();
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 void InspectorPanel::DrawAddComponent()
 {
     const bool canAddTransform    = !registry->Has<TransformComponent>(selected);
@@ -523,8 +653,10 @@ void InspectorPanel::DrawAddComponent()
     const bool canAddLight        = !registry->Has<LightComponent>(selected);
     const bool canAddFog          = !registry->Has<VolumetricFogComponent>(selected);
     const bool canAddAnim         = !registry->Has<AnimationComponent>(selected);
+    const bool canAddRigidbody    = !registry->Has<RigidbodyComponent>(selected);
+    const bool canAddCollider     = !registry->Has<ColliderComponent>(selected);
     const bool anyAvailable       = canAddTransform || canAddMeshRenderer || canAddLight
-                                 || canAddFog || canAddAnim;
+                                 || canAddFog || canAddAnim || canAddRigidbody || canAddCollider;
 
     float btnW = ImGui::GetContentRegionAvail().x;
     ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
@@ -545,6 +677,8 @@ void InspectorPanel::DrawAddComponent()
         if (canAddLight        && ImGui::MenuItem("   Light"))          registry->Add<LightComponent>(selected);
         if (canAddFog          && ImGui::MenuItem("   Volumetric Fog")) registry->Add<VolumetricFogComponent>(selected);
         if (canAddAnim         && ImGui::MenuItem("   Animation"))      registry->Add<AnimationComponent>(selected);
+        if (canAddRigidbody    && ImGui::MenuItem("   Rigidbody"))      registry->Add<RigidbodyComponent>(selected);
+        if (canAddCollider     && ImGui::MenuItem("   Collider"))       registry->Add<ColliderComponent>(selected);
         ImGui::EndPopup();
     }
 }

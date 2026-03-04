@@ -25,6 +25,7 @@
 #include "Renderer/Vulkan/VulkanVolumetricFog.h"
 #include "Renderer/Vulkan/BoneSSBO.h"
 #include "EderCore.h"
+#include "Physics/PhysicsSystem.h"
 #include <unordered_map>
 #include <string>
 #include <thread>
