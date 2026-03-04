@@ -914,6 +914,8 @@ void Application::SyncECSToScene()
     {
         if (obj.entityId == 0 || !m_registry.Has<TransformComponent>(obj.entityId)) continue;
 
+        obj.isSkinned = m_registry.Has<AnimationComponent>(obj.entityId);
+
         glm::mat4 world = TransformSystem::GetWorldMatrix(obj.entityId, m_registry);
 
         // Decompose world matrix into T / R(YXZ deg) / S
@@ -1038,9 +1040,14 @@ void Application::UpdateAnimations(float dt)
 
         for (uint32_t i = 0; i < static_cast<uint32_t>(boneMats.size()) && i < MAX_BONES; ++i)
             boneMatrices[i] = boneMats[i];
+
+        // Store per-entity so DrawSkinned can upload the right matrices
+        m_entityBoneMatrices[e] = boneMatrices;
     });
 
-    m_boneSSBO.Upload(boneMatrices);
+    // Upload identity for static (non-skinned) draws
+    static const std::vector<glm::mat4> s_identity(MAX_BONES, glm::mat4(1.0f));
+    m_boneSSBO.Upload(s_identity);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1100,6 +1107,17 @@ void Application::RenderSceneView(vk::CommandBuffer cmd)
     m_pipeline.Bind(cmd);
     m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
     m_scene.Draw(cmd, m_pipeline, m_camera, aspect, m_lights);
+
+    // Draw skinned (animated) objects one at a time with per-entity bone matrices
+    m_pipeline.Bind(cmd);
+    m_scene.DrawSkinned(cmd, m_pipeline, m_camera, aspect, m_lights,
+        [this, &cmd](uint32_t entityId)
+        {
+            auto it = m_entityBoneMatrices.find(entityId);
+            if (it != m_entityBoneMatrices.end())
+                m_boneSSBO.Upload(it->second);
+            m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
+        });
 
     // Skybox — after opaques so depth test skips covered pixels
     m_skybox.Draw(cmd, m_camera.GetView(), m_camera.GetProjection(aspect), -m_activeDirDir);
@@ -1261,6 +1279,17 @@ void Application::RenderMainPass(vk::CommandBuffer cmd)
     m_pipeline.Bind(cmd);
     m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
     m_scene.Draw(cmd, m_pipeline, m_camera, aspect, m_lights);
+
+    // Skinned objects
+    m_pipeline.Bind(cmd);
+    m_scene.DrawSkinned(cmd, m_pipeline, m_camera, aspect, m_lights,
+        [this, &cmd](uint32_t entityId)
+        {
+            auto it = m_entityBoneMatrices.find(entityId);
+            if (it != m_entityBoneMatrices.end())
+                m_boneSSBO.Upload(it->second);
+            m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
+        });
 
     // Skybox
     m_skybox.Draw(cmd, m_camera.GetView(), m_camera.GetProjection(aspect), -m_activeDirDir);

@@ -4,6 +4,7 @@
 #include "Renderer/Vulkan/VulkanInstanceBuffer.h"
 #include <vector>
 #include <map>
+#include <functional>
 #include "DLLHeader.h"
 
 class EDERGRAPHICS_API Camera;
@@ -18,6 +19,8 @@ public:
     SceneObject& Add(VulkanMesh& mesh, Material& material);
     void         Remove(uint32_t entityId);   // removes first object linked to entityId
     void         Draw            (vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights);
+    void         DrawSkinned     (vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights,
+                                  const std::function<void(uint32_t entityId)>& bindBonesFn);
     void         DrawTransparent (vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights);
     void         DrawShadow      (vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeline, const glm::mat4& lightViewProj);
     void         DrawShadowPoint (vk::CommandBuffer cmd, VulkanPointShadowPipeline& pipeline,
@@ -30,6 +33,7 @@ public:
 private:
     std::vector<SceneObject> objects;
     VulkanInstanceBuffer     instanceBuffer;
-    VulkanInstanceBuffer     shadowInstanceBuffer;       // separate — avoids handle collision with main instanceBuffer
-    VulkanInstanceBuffer     transparentInstanceBuffer;  // buffer separado — evita sobreescribir opacos
+    VulkanInstanceBuffer     shadowInstanceBuffer;
+    VulkanInstanceBuffer     transparentInstanceBuffer;
+    VulkanInstanceBuffer     skinnedInstanceBuffer;   // single-entry buffer for per-object skinned draws
 };

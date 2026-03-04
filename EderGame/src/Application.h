@@ -152,11 +152,13 @@ private:
     VulkanFramebuffer* m_postFb = nullptr;
 
     // ── Mesh hot-reload tracking (keyed by entity id, value = last loaded GUID) ─
-    std::unordered_map<uint32_t, uint64_t> m_lastMeshGuid;
-    std::unordered_map<uint32_t, uint64_t> m_lastAnimMeshGuid;
+    std::unordered_map<uint32_t, uint64_t>    m_lastMeshGuid;
+    std::unordered_map<uint32_t, uint64_t>    m_lastAnimMeshGuid;
     std::unordered_map<uint32_t, std::string> m_lastMaterialName;
     // Texture hot-swap tracking: matName → last-loaded albedoTexGuid
-    std::unordered_map<std::string, uint64_t>  m_lastMatTexGuid;
+    std::unordered_map<std::string, uint64_t> m_lastMatTexGuid;
+    // Per-entity bone matrices (populated by UpdateAnimations, consumed by DrawSkinned callback)
+    std::unordered_map<uint32_t, std::vector<glm::mat4>> m_entityBoneMatrices;
 
     // ── Scene persistence state ───────────────────────────────────────────────
     std::string m_currentScenePath;

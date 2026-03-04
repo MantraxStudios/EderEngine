@@ -105,5 +105,4 @@ private:
     std::unordered_map<uint32_t, uint64_t>    m_lastMeshGuid;
     std::unordered_map<uint32_t, uint64_t>    m_lastAnimMeshGuid;
     std::unordered_map<uint32_t, std::string> m_lastMaterialName;
-    std::unordered_map<std::string, uint64_t> m_lastMatTexGuid;
-};
+    std::unordered_map<std::string, uint64_t> m_lastMatTexGuid;    std::unordered_map<uint32_t, std::vector<glm::mat4>> m_entityBoneMatrices;};

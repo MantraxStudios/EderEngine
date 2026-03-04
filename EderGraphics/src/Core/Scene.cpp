@@ -33,6 +33,7 @@ void Scene::Draw(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& 
     {
         if (!obj.mesh || !obj.material) continue;
         if (obj.material->IsTransparent()) continue;  // skip transparents
+        if (obj.isSkinned) continue;                  // skip skinned — drawn separately
         groups[{ obj.mesh, obj.material }].push_back(obj.transform.GetMatrix());
     }
 
@@ -53,6 +54,33 @@ void Scene::Draw(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& 
         cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &viewProj);
         mesh->DrawInstanced(cmd, first, static_cast<uint32_t>(matrices.size()));
         first += static_cast<uint32_t>(matrices.size());
+    }
+}
+
+void Scene::DrawSkinned(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights,
+                        const std::function<void(uint32_t)>& bindBonesFn)
+{
+    glm::mat4 viewProj        = camera.GetProjection(aspect) * camera.GetView();
+    vk::PipelineLayout layout = *pipeline.GetLayout();
+
+    lights.Bind(cmd, layout);
+
+    for (auto& obj : objects)
+    {
+        if (!obj.mesh || !obj.material || !obj.isSkinned) continue;
+        if (obj.material->IsTransparent()) continue;
+
+        // Upload this object's single transform into the per-skinned instance buffer
+        const glm::mat4 model = obj.transform.GetMatrix();
+        skinnedInstanceBuffer.Upload({ model });
+        skinnedInstanceBuffer.Bind(cmd);
+
+        // Let the caller bind the correct BoneSSBO for this entity
+        bindBonesFn(obj.entityId);
+
+        obj.material->Bind(cmd, layout);
+        cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &viewProj);
+        obj.mesh->DrawInstanced(cmd, 0, 1);
     }
 }
 

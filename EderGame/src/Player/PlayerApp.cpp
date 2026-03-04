@@ -531,6 +531,8 @@ void PlayerApp::SyncECSToScene()
     {
         if (obj.entityId == 0 || !m_registry.Has<TransformComponent>(obj.entityId)) continue;
 
+        obj.isSkinned = m_registry.Has<AnimationComponent>(obj.entityId);
+
         glm::mat4 world = TransformSystem::GetWorldMatrix(obj.entityId, m_registry);
 
         obj.transform.position = glm::vec3(world[3]);
@@ -653,9 +655,12 @@ void PlayerApp::UpdateAnimations(float dt)
 
         for (uint32_t i = 0; i < static_cast<uint32_t>(boneMats.size()) && i < MAX_BONES; ++i)
             boneMatrices[i] = boneMats[i];
+
+        m_entityBoneMatrices[e] = boneMatrices;
     });
 
-    m_boneSSBO.Upload(boneMatrices);
+    static const std::vector<glm::mat4> s_identity(MAX_BONES, glm::mat4(1.0f));
+    m_boneSSBO.Upload(s_identity);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -717,6 +722,17 @@ void PlayerApp::RenderMainPass(vk::CommandBuffer cmd)
     m_pipeline.Bind(cmd);
     m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
     m_scene.Draw(cmd, m_pipeline, m_camera, aspect, m_lights);
+
+    // Skinned (animated) objects
+    m_pipeline.Bind(cmd);
+    m_scene.DrawSkinned(cmd, m_pipeline, m_camera, aspect, m_lights,
+        [this, &cmd](uint32_t entityId)
+        {
+            auto it = m_entityBoneMatrices.find(entityId);
+            if (it != m_entityBoneMatrices.end())
+                m_boneSSBO.Upload(it->second);
+            m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
+        });
 
     // Skybox
     m_skybox.Draw(cmd, m_camera.GetView(), m_camera.GetProjection(aspect), -m_activeDirDir);

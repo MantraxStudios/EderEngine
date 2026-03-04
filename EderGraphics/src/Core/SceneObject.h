@@ -7,8 +7,9 @@ class EDERGRAPHICS_API Material;
 
 struct SceneObject
 {
-    VulkanMesh* mesh     = nullptr;
-    Material*   material = nullptr;
+    VulkanMesh* mesh      = nullptr;
+    Material*   material  = nullptr;
     Transform   transform;
-    uint32_t    entityId = 0;   // links to ECS entity (0 = not linked)
+    uint32_t    entityId  = 0;    // links to ECS entity (0 = not linked)
+    bool        isSkinned = false; // true = drawn separately with per-entity bone matrices
 };
