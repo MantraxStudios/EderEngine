@@ -106,5 +106,17 @@
   "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderCore/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderGame.dir\\vendor\\include\\imgui\\ImGuizmo.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\vendor\\include\\imgui\\ImGuizmo.cpp",
   "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/ImGuizmo.cpp",
   "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderGame.dir/vendor/include/imgui/ImGuizmo.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DEDER_PLAYER -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderCore/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderPlayer.dir\\src\\Player\\PlayerMain.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\src\\Player\\PlayerMain.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src/Player/PlayerMain.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderPlayer.dir/src/Player/PlayerMain.cpp.obj"
+},
+{
+  "directory": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build",
+  "command": "C:\\PROGRA~1\\LLVM\\bin\\CLANG_~1.EXE -DEDER_PLAYER -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DVK_USE_PLATFORM_WIN32_KHR -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderCore/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g -o CMakeFiles\\EderPlayer.dir\\src\\Player\\PlayerApp.cpp.obj -c C:\\Users\\tupap\\OneDrive\\Escritorio\\EderEngine\\EderGame\\src\\Player\\PlayerApp.cpp",
+  "file": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src/Player/PlayerApp.cpp",
+  "output": "C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/CMakeFiles/EderPlayer.dir/src/Player/PlayerApp.cpp.obj"
 }
 ]

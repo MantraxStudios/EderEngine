@@ -189,14 +189,38 @@ public:
     //  resolving hierarchy parent/child cross-references.
     //  Returns false only on file-open error.
     // ─────────────────────────────────────────────────────────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    //  Load — deserialises a .scene file from disk into `reg`.
+    // ─────────────────────────────────────────────────────────────────────────
     static bool Load(const std::string& path,
                      Registry&          reg,
                      std::string*       outSceneName = nullptr)
     {
         std::ifstream f(path);
         if (!f.is_open()) return false;
+        return ParseStream(f, reg, outSceneName);
+    }
 
-        // ── Pass 1: split into per-entity key-value blocks ────────────────────
+    // ─────────────────────────────────────────────────────────────────────────
+    //  LoadFromBytes — deserialises from raw bytes (e.g. read from a .pak).
+    // ─────────────────────────────────────────────────────────────────────────
+    static bool LoadFromBytes(const std::vector<uint8_t>& bytes,
+                              Registry&                   reg,
+                              std::string*                outSceneName = nullptr)
+    {
+        const std::string text(bytes.begin(), bytes.end());
+        std::istringstream ss(text);
+        return ParseStream(ss, reg, outSceneName);
+    }
+
+private:
+    // ─────────────────────────────────────────────────────────────────────────
+    //  ParseStream — shared istream-based scene parser used by Load + LoadFromBytes
+    // ─────────────────────────────────────────────────────────────────────────
+    static bool ParseStream(std::istream& f,
+                            Registry&     reg,
+                            std::string*  outSceneName)
+    {
         struct Block { std::unordered_map<std::string, std::string> kv; };
         std::vector<Block> blocks;
         Block* cur = nullptr;

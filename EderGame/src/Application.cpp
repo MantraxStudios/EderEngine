@@ -9,6 +9,7 @@
 #include <algorithm>
 #include <filesystem>
 #include <iostream>
+#include <cstdio>
 
 #include "Core/MaterialLayout.h"
 #include "Core/MaterialManager.h"
@@ -240,19 +241,34 @@ void Application::WireEditorCallbacks()
     m_editor.SetSaveSceneCallback([this]()
     {
         if (m_currentScenePath.empty())
-        {
-            // Unsaved scene — prompt Save As
             SaveSceneAs(m_currentSceneName);
-        }
         else
-        {
             SaveScene();
-        }
     });
 
-    m_editor.SetSaveAsCallback([this](const std::string& name) { SaveSceneAs(name); });
-
+    m_editor.SetSaveAsCallback  ([this](const std::string& name) { SaveSceneAs(name); });
     m_editor.SetOpenSceneCallback([this](const std::string& path) { LoadScene(path); });
+
+    m_editor.SetBuildPakCallback([this](const std::string& outPak,
+                                        const std::string& initialScene,
+                                        const std::string& gameName)
+    {
+        BuildPak(outPak, initialScene, gameName);
+    });
+
+    // Play: auto-save current scene then reload it so the game starts fresh
+    m_editor.SetPlayCallback([this]()
+    {
+        if (!m_currentScenePath.empty())
+            SaveScene();
+        m_editor.AppendBuildLog("[Play] Game started.");
+    });
+
+    // Stop: nothing special needed in editor mode
+    m_editor.SetStopCallback([this]()
+    {
+        m_editor.AppendBuildLog("[Stop] Game stopped.");
+    });
 
     m_editor.SetCurrentSceneName(m_currentSceneName);
 }
@@ -336,11 +352,171 @@ void Application::LoadScene(const std::string& absPath)
     }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  BuildPak
+//  Packs every registered asset in Game/Content into a single .pak file and
+//  embeds a game.conf entry that records the initial scene path and game name.
+//  Progress is streamed to the Editor build log so the user can follow along.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void Application::BuildPak(const std::string& outPakPath,
+                            const std::string& initialScene,
+                            const std::string& gameName)
+{
+    namespace fs = std::filesystem;
+
+    auto& AM       = Krayon::AssetManager::Get();
+    const auto& all = AM.GetAll();
+
+    // Rescan content folder to catch any files added since last scan
+    AM.Scan();
+
+    // Build the file-asset map: relative-path → absolute-path
+    std::unordered_map<std::string, std::string> fileMap;
+    fileMap.reserve(all.size());
+    const std::string workDir = AM.GetWorkDir();
+
+    for (const auto& [guid, meta] : all)
+    {
+        // Skip .pak entries themselves and any unknown types
+        if (meta.type == Krayon::AssetType::Unknown) continue;
+        if (meta.type == Krayon::AssetType::PAK)      continue;
+
+        const std::string absPath = workDir + "/" + meta.path;
+        if (fs::exists(absPath))
+            fileMap[meta.path] = absPath;
+    }
+
+    // Build in-memory entries: game.conf
+    Krayon::GameConfig config;
+    config.gameName     = gameName.empty() ? "EderGame" : gameName;
+    config.initialScene = initialScene;
+
+    const std::string cfgText = config.Serialize();
+    std::unordered_map<std::string, std::vector<uint8_t>> memMap;
+    memMap["game.conf"] = std::vector<uint8_t>(cfgText.begin(), cfgText.end());
+
+    // Ensure output directory exists
+    const fs::path outDir = fs::path(outPakPath).parent_path();
+    if (!outDir.empty())
+    {
+        std::error_code ec;
+        fs::create_directories(outDir, ec);
+    }
+
+    m_editor.AppendBuildLog("[Build] Starting — " + std::to_string(fileMap.size()) + " assets + game.conf");
+    m_editor.AppendBuildLog("[Build] Output: " + outPakPath);
+    m_editor.AppendBuildLog("[Build] Initial scene: " + (initialScene.empty() ? "(none)" : initialScene));
+
+    try
+    {
+        Krayon::KRCompiler::Build(
+            outPakPath,
+            fileMap,
+            memMap,
+            [this](int done, int total, const std::string& name)
+            {
+                if (!name.empty())
+                {
+                    const std::string line = "  [" + std::to_string(done + 1) + "/" +
+                                             std::to_string(total) + "]  " + name;
+                    m_editor.AppendBuildLog(line);
+                }
+            });
+
+        m_editor.AppendBuildLog("[Build] Done!  " + outPakPath);
+
+        // ── Launch background thread: compile EderPlayer + package dist ──────────
+        m_editor.AppendBuildLog("[Compile] Building EderPlayer.exe...");
+        m_editor.SetBuildRunning(true);
+
+        if (m_buildThread.joinable())
+            m_buildThread.join();
+
+        const std::string capturedOutPak  = outPakPath;
+        const std::string capturedGameName = gameName.empty() ? "EderGame" : gameName;
+
+        m_buildThread = std::thread([this, capturedOutPak, capturedGameName]() mutable
+        {
+            namespace fs = std::filesystem;
+
+            // cmake --build . --target EderPlayer  (CWD is already the build dir)
+            const std::string cmd = "cmake --build . --target EderPlayer 2>&1";
+            FILE* pipe = _popen(cmd.c_str(), "r");
+            if (pipe)
+            {
+                char buf[512];
+                while (fgets(buf, sizeof(buf), pipe))
+                {
+                    std::string line(buf);
+                    while (!line.empty() &&
+                           (line.back() == '\n' || line.back() == '\r'))
+                        line.pop_back();
+                    if (!line.empty())
+                        m_editor.AppendBuildLog(line);
+                }
+                const int ret = _pclose(pipe);
+                if (ret != 0)
+                {
+                    m_editor.AppendBuildLog(
+                        "[Compile] FAILED (exit=" + std::to_string(ret) + ")");
+                    m_editor.SetBuildRunning(false);
+                    return;
+                }
+            }
+            else
+            {
+                m_editor.AppendBuildLog("[Compile] ERROR: could not run cmake");
+                m_editor.SetBuildRunning(false);
+                return;
+            }
+            m_editor.AppendBuildLog("[Compile] EderPlayer built OK.");
+
+            // ── Copy dist files ─────────────────────────────────────────────────
+            const fs::path buildDir = fs::current_path();
+            const fs::path pakSrc   = fs::path(capturedOutPak).is_absolute()
+                                    ? fs::path(capturedOutPak)
+                                    : buildDir / capturedOutPak;
+            const fs::path outDir   = pakSrc.parent_path() / capturedGameName;
+            std::error_code ec;
+            fs::create_directories(outDir, ec);
+
+            auto copyFile = [&](const fs::path& src, const std::string& dstName)
+            {
+                fs::copy_file(src, outDir / dstName,
+                              fs::copy_options::overwrite_existing, ec);
+                if (ec)
+                    m_editor.AppendBuildLog(
+                        "[Package] WARN: could not copy " + src.filename().string());
+                else
+                    m_editor.AppendBuildLog("[Package] " + dstName);
+            };
+
+            copyFile(buildDir / "EderPlayer.exe",   "EderPlayer.exe");
+            copyFile(buildDir / "EderGraphics.dll",  "EderGraphics.dll");
+            copyFile(buildDir / "SDL3.dll",          "SDL3.dll");
+            copyFile(pakSrc,                          "Game.pak");
+
+            m_editor.AppendBuildLog("[Package] Done -> " + outDir.string());
+            m_editor.SetBuildRunning(false);
+        });
+        m_buildThread.detach();
+    }
+    catch (const std::exception& e)
+    {
+        m_editor.AppendBuildLog(std::string("[Build] ERROR: ") + e.what());
+    }
+}
+
 // ──────────────────────────────────────────────────────────────────────────────//  Shutdown
 // ─────────────────────────────────────────────────────────────────────────────
 
 void Application::Shutdown()
 {
+    // Wait for any running build thread before tearing down Vulkan resources
+    if (m_buildThread.joinable())
+        m_buildThread.join();
+
     VulkanInstance::Get().GetDevice().waitIdle();
 
     m_editor.Shutdown();

@@ -258,6 +258,7 @@ void Editor::Draw(Camera& cam, Registry& registry, float dt)
                          &registry, hierarchy.GetSelected());
     }
     if (showDemo)         ImGui::ShowDemoWindow(&showDemo);
+    DrawBuildGameModal();
 }
 
 void Editor::Render(VkCommandBuffer cmd)
@@ -321,6 +322,34 @@ void Editor::HandleSceneShortcuts()
     {
         m_openScenePickerOpen = true;
         ImGui::OpenPopup("##openScene");
+    }
+
+    // Build
+    if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_B, false))
+    {
+        if (!m_buildRunning)
+        {
+            m_buildLog.clear();
+            m_buildModalOpen = true;
+        }
+    }
+
+    // Play / Stop (F5 / F7)
+    if (!ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_F5, false))
+    {
+        if (playState == PlayState::Stopped || playState == PlayState::Paused)
+        {
+            playState = PlayState::Playing;
+            if (m_onPlay) m_onPlay();
+        }
+    }
+    if (!ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_F7, false))
+    {
+        if (playState != PlayState::Stopped)
+        {
+            playState = PlayState::Stopped;
+            if (m_onStop) m_onStop();
+        }
     }
 }
 
@@ -489,8 +518,16 @@ void Editor::DrawMenuBar()
 
     if (ImGui::BeginMenu("Build"))
     {
+        if (ImGui::MenuItem("Build Game...", "Ctrl+B"))
+        {
+            if (!m_buildRunning)
+            {
+                m_buildLog.clear();
+                m_buildModalOpen = true;
+            }
+        }
+        ImGui::Separator();
         ImGui::BeginDisabled();
-        ImGui::MenuItem("Build All Levels");
         ImGui::MenuItem("Build Lighting Only");
         ImGui::EndDisabled();
         ImGui::EndMenu();
@@ -587,7 +624,10 @@ void Editor::DrawToolbar()
         if (ImGui::Button(playing ? "|| Play" : "> Play", ImVec2(60, 24)))
         {
             if (playState == PlayState::Stopped || playState == PlayState::Paused)
+            {
                 playState = PlayState::Playing;
+                if (m_onPlay) m_onPlay();
+            }
         }
         if (playing) ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Play  [F5]");
@@ -614,7 +654,10 @@ void Editor::DrawToolbar()
     {
         ImGui::BeginDisabled(playState == PlayState::Stopped);
         if (ImGui::Button("[ ] Stop", ImVec2(60, 24)))
+        {
             playState = PlayState::Stopped;
+            if (m_onStop) m_onStop();
+        }
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop  [F7]");
     }
@@ -687,4 +730,126 @@ void Editor::DrawDockspace()
     }
 
     ImGui::End();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  DrawBuildGameModal
+//  Shown when the user clicks Build > Build Game... or presses Ctrl+B.
+//  Lets the user set game name, output .pak path, and initial scene, then
+//  triggers Application::BuildPak via m_onBuildPak.
+// ─────────────────────────────────────────────────────────────────────────────
+
+void Editor::DrawBuildGameModal()
+{
+    // Drain background-thread log lines into the main-thread string
+    {
+        std::lock_guard<std::mutex> lk(m_buildLogMutex);
+        if (!m_pendingLogLines.empty())
+        {
+            m_buildLog      += m_pendingLogLines;
+            m_pendingLogLines.clear();
+            m_buildLogDirty  = true;
+        }
+    }
+
+    // OpenPopup must be called in the same window-stack context as BeginPopupModal.
+    if (m_buildModalOpen)
+    {
+        ImGui::OpenPopup("Build Game##dlg");
+        m_buildModalOpen = false;
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(540, 420), ImGuiCond_Always);
+    if (!ImGui::BeginPopupModal("Build Game##dlg",
+                                nullptr,
+                                ImGuiWindowFlags_NoResize))
+        return;
+
+    // ── Game Name ─────────────────────────────────────────────────────────
+    ImGui::Text("Game Name:");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputText("##bgname", m_buildGameName, sizeof(m_buildGameName));
+
+    ImGui::Spacing();
+
+    // ── Output .pak path ──────────────────────────────────────────────────
+    ImGui::Text("Output PAK:");
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputText("##bgout", m_buildOutPath, sizeof(m_buildOutPath));
+
+    ImGui::Spacing();
+
+    // ── Initial Scene picker ───────────────────────────────────────────────
+    ImGui::Text("Initial Scene:");
+    ImGui::SetNextItemWidth(-1);
+
+    // Collect all registered .scene assets for the combo
+    const auto& all = Krayon::AssetManager::Get().GetAll();
+    std::vector<const Krayon::AssetMeta*> scenes;
+    for (const auto& [guid, meta] : all)
+        if (meta.type == Krayon::AssetType::Scene)
+            scenes.push_back(&meta);
+    std::sort(scenes.begin(), scenes.end(),
+              [](const Krayon::AssetMeta* a, const Krayon::AssetMeta* b){
+                  return a->path < b->path; });
+
+    // Display combo
+    const char* previewStr = (m_buildInitialScene[0] != '\0') ? m_buildInitialScene : "<None>";
+    if (ImGui::BeginCombo("##bgscene", previewStr))
+    {
+        for (const auto* meta : scenes)
+        {
+            const bool sel = (meta->path == m_buildInitialScene);
+            if (ImGui::Selectable(meta->path.c_str(), sel))
+                std::strncpy(m_buildInitialScene, meta->path.c_str(), sizeof(m_buildInitialScene) - 1);
+            if (sel) ImGui::SetItemDefaultFocus();
+        }
+        ImGui::EndCombo();
+    }
+
+    ImGui::Spacing();
+    ImGui::Separator();
+    ImGui::Spacing();
+
+    // ── Log ───────────────────────────────────────────────────────────────
+    ImGui::Text("Build Log:");
+    const float logH = ImGui::GetContentRegionAvail().y - 38.0f;
+    ImGui::BeginChild("##buildlog", ImVec2(0, logH), true,
+                      ImGuiWindowFlags_HorizontalScrollbar);
+    if (!m_buildLog.empty())
+        ImGui::TextUnformatted(m_buildLog.c_str());
+    if (m_buildLogDirty)
+    {
+        ImGui::SetScrollHereY(1.0f);
+        m_buildLogDirty = false;
+    }
+    ImGui::EndChild();
+
+    ImGui::Spacing();
+
+    // ── Buttons ───────────────────────────────────────────────────────────
+    ImGui::BeginDisabled(m_buildRunning);
+
+    if (ImGui::Button("Build", ImVec2(120, 0)))
+    {
+        if (m_onBuildPak)
+        {
+            m_buildRunning  = true;
+            m_buildLog.clear();
+            m_onBuildPak(m_buildOutPath, m_buildInitialScene, m_buildGameName);
+            m_buildRunning = false;
+        }
+    }
+
+    ImGui::EndDisabled();
+
+    ImGui::SameLine();
+
+    if (ImGui::Button("Close", ImVec2(120, 0)))
+    {
+        m_buildModalOpen = false;
+        ImGui::CloseCurrentPopup();
+    }
+
+    ImGui::EndPopup();
 }

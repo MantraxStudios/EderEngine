@@ -3,6 +3,8 @@
 #include <vulkan/vulkan.h>
 #include <functional>
 #include <string>
+#include <atomic>
+#include <mutex>
 #include "EditorTypes.h"
 #include "Core/Camera.h"
 #include "ECS/Registry.h"
@@ -46,6 +48,24 @@ public:
     void SetSaveAsCallback     (std::function<void(const std::string&)> cb) { m_onSaveAs      = std::move(cb); }
     void SetOpenSceneCallback  (std::function<void(const std::string&)> cb) { m_onOpenScene   = std::move(cb); }
 
+    // ── Build / Play callbacks ────────────────────────────────────────────────────
+    // outPak        : absolute path where the .pak should be written
+    // initialScene  : relative content path e.g. "scenes/main.scene"
+    void SetBuildPakCallback(std::function<void(const std::string& outPak,
+                                                const std::string& initialScene,
+                                                const std::string& gameName)> cb)
+    { m_onBuildPak = std::move(cb); }
+    void SetPlayCallback (std::function<void()> cb) { m_onPlay  = std::move(cb); }
+    void SetStopCallback (std::function<void()> cb) { m_onStop  = std::move(cb); }
+
+    // Called by Application (possibly from a background thread) to append to the build log
+    void AppendBuildLog(const std::string& line)
+    {
+        std::lock_guard<std::mutex> lk(m_buildLogMutex);
+        m_pendingLogLines += line + "\n";
+    }
+    void SetBuildRunning(bool v) { m_buildRunning.store(v); }
+
     void SetCurrentSceneName(const std::string& name) { m_currentSceneName = name; }
     const std::string& GetCurrentSceneName() const    { return m_currentSceneName; }
 
@@ -55,6 +75,7 @@ private:
     void DrawDockspace();
     void DrawOpenScenePicker();
     void DrawSaveSceneAsModal();
+    void DrawBuildGameModal();
     void HandleSceneShortcuts();
     void ApplyTheme();
 
@@ -72,11 +93,25 @@ private:
     bool        m_saveSceneAsOpen      = false;
     char        m_saveSceneAsName[128] = {};
 
+    // ── Build Game modal state ───────────────────────────────────────────────────────
+    bool        m_buildModalOpen         = false;
+    char        m_buildGameName[128]     = "EderGame";
+    char        m_buildOutPath[512]      = "Game.pak";
+    char        m_buildInitialScene[512] = {};   // relative path selected by user
+    std::string m_buildLog;
+    std::string m_pendingLogLines;           // written from bg thread, drained on main thread
+    bool        m_buildLogDirty  = false;    // scroll-to-bottom flag
+    std::atomic<bool> m_buildRunning{false};
+    std::mutex  m_buildLogMutex;
+
     // ── Callbacks ─────────────────────────────────────────────────────────────────────
     std::function<void()>                   m_onNewScene;
     std::function<void()>                   m_onSaveScene;
     std::function<void(const std::string&)> m_onSaveAs;
     std::function<void(const std::string&)> m_onOpenScene;
+    std::function<void(const std::string&, const std::string&, const std::string&)> m_onBuildPak;
+    std::function<void()>                   m_onPlay;
+    std::function<void()>                   m_onStop;
 
     StatsPanel        stats;
     CameraPanel       cameraPanel;

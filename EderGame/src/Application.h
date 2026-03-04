@@ -27,6 +27,7 @@
 #include "EderCore.h"
 #include <unordered_map>
 #include <string>
+#include <thread>
 
 // ────────────────────────────────────────────────────────────────────────────
 // Application
@@ -70,6 +71,13 @@ private:
     void SaveScene();
     void SaveSceneAs(const std::string& name);
     void LoadScene (const std::string& absPath);
+
+    // ── Build / Play ──────────────────────────────────────────────────────
+    /// Pack all registered assets + game.conf into a .pak at outPakPath.
+    /// Runs synchronously; progress is forwarded to the Editor log.
+    void BuildPak(const std::string& outPakPath,
+                  const std::string& initialScene,
+                  const std::string& gameName);
     // ── Utility ──────────────────────────────────────────────────────────────
     float SceneViewAspect() const;
 
@@ -153,4 +161,7 @@ private:
     // ── Scene persistence state ───────────────────────────────────────────────
     std::string m_currentScenePath;
     std::string m_currentSceneName = "Untitled";
+
+    // ── Background build thread ──────────────────────────────────────────────
+    std::thread m_buildThread;
 };

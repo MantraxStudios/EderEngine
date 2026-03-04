@@ -26,6 +26,8 @@ set(EDERGRAPHICS_DLL ${EDERGRAPHICS_DIR}/build/EderGraphics.dll)
 
 # Fuentes
 file(GLOB_RECURSE GAME_SOURCES src/*.cpp)
+# Excluir fuentes del player standalone de EderGame
+list(FILTER GAME_SOURCES EXCLUDE REGEX ".*/Player/.*")
 
 # ImGui sources (compilados directamente en EderGame)
 set(IMGUI_DIR ${CMAKE_SOURCE_DIR}/vendor/include/imgui)
@@ -113,5 +115,73 @@ if (WIN32)
         "${EDERGRAPHICS_VENDOR_LIB}/SDL3.dll"
         $<TARGET_FILE_DIR:EderGame>
         COMMENT "Copiando SDL3.dll"
+    )
+endif()
+
+# --------------------------------------------------
+# EderPlayer — runtime de juego standalone (sin ImGui)
+# --------------------------------------------------
+set(PLAYER_SOURCES
+    src/Player/PlayerMain.cpp
+    src/Player/PlayerApp.cpp
+)
+
+add_executable(EderPlayer ${PLAYER_SOURCES})
+
+target_include_directories(EderPlayer PRIVATE
+    src
+    ${EDERCORE_DIR}/src
+    ${EDERGRAPHICS_INCLUDE}
+    ${EDERGRAPHICS_VENDOR_INCLUDE}
+    ${CMAKE_SOURCE_DIR}/vendor/include
+)
+
+target_compile_definitions(EderPlayer PRIVATE
+    EDER_PLAYER
+    GLM_ENABLE_EXPERIMENTAL
+    GLM_FORCE_RADIANS
+    GLM_FORCE_DEPTH_ZERO_TO_ONE
+)
+
+if (MSVC)
+    target_compile_options(EderPlayer PRIVATE
+        /EHsc
+        /W0
+        $<$<CONFIG:Debug>:/Od /Zi>
+        $<$<CONFIG:Release>:/O2>
+    )
+else()
+    target_compile_options(EderPlayer PRIVATE
+        -fexceptions
+        -w
+        $<$<CONFIG:Debug>:-O0 -g>
+        $<$<CONFIG:Release>:-O2>
+    )
+endif()
+
+if (WIN32)
+    target_link_libraries(EderPlayer PRIVATE
+        ${EDERGRAPHICS_LIB}
+        ${EDERGRAPHICS_VENDOR_LIB}/SDL3.lib
+        ${EDERGRAPHICS_VENDOR_LIB}/vulkan-1.lib
+    )
+
+    target_compile_definitions(EderPlayer PRIVATE
+        VK_USE_PLATFORM_WIN32_KHR
+        NOMINMAX
+    )
+
+    add_custom_command(TARGET EderPlayer POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${EDERGRAPHICS_DLL}"
+        $<TARGET_FILE_DIR:EderPlayer>
+        COMMENT "Copiando EderGraphics.dll para EderPlayer"
+    )
+
+    add_custom_command(TARGET EderPlayer POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${EDERGRAPHICS_VENDOR_LIB}/SDL3.dll"
+        $<TARGET_FILE_DIR:EderPlayer>
+        COMMENT "Copiando SDL3.dll para EderPlayer"
     )
 endif()

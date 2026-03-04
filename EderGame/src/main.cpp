@@ -28,32 +28,22 @@ int main()
 
 
 /*
-// ── PAK workflow (offline build step) ────────────────────────────
-Krayon::KRCompiler::Build("Game.pak", {
-    { "textures/stone.png", "C:/Assets/stone.png" },
-    { "shaders/triangle.frag.spv", "C:/Assets/triangle.frag.spv" }
-});
-
-// ── Shipping mode ─────────────────────────────────────────────────
-Krayon::AssetManager::Get().Init(".", true, "Game.pak");
-
-// ── Query bytes anywhere ──────────────────────────────────────────
-auto bytes = Krayon::AssetManager::Get().GetBytes("textures/stone.png");
-auto bytes = Krayon::AssetManager::Get().GetBytesByGuid(guid);
-*/
-
-
-/*
-// ── PAK workflow (offline build step) ────────────────────────────
-Krayon::KRCompiler::Build("Game.pak", {
-    { "textures/stone.png", "C:/Assets/stone.png" },
-    { "shaders/triangle.frag.spv", "C:/Assets/triangle.frag.spv" }
-});
-
-// ── Shipping mode ─────────────────────────────────────────────────
-Krayon::AssetManager::Get().Init(".", true, "Game.pak");
-
-// ── Query bytes anywhere ──────────────────────────────────────────
-auto bytes = Krayon::AssetManager::Get().GetBytes("textures/stone.png");
-auto bytes = Krayon::AssetManager::Get().GetBytesByGuid(guid);
+// ── SHIPPING MODE — replace the editor Init block above with this: ─────────
+//
+//   1.  Build > Build Game...  in the Editor writes "Game.pak" containing
+//       all assets + "game.conf" (gameName= and initialScene=).
+//
+//   2.  In main() for the shipping executable:
+//
+//       Krayon::AssetManager::Get().Init(".", true, "Game.pak");
+//       EG_InitAssets(".", true, "Game.pak");
+//
+//       // Read initial scene and game name from the embedded config
+//       auto cfgBytes = Krayon::AssetManager::Get().GetBytes("game.conf");
+//       auto config   = Krayon::GameConfig::Deserialize(cfgBytes);
+//       // config.gameName      → "MyGame"
+//       // config.initialScene  → "scenes/main.scene"
+//
+//       Application app;
+//       app.Run();   // App::Init() loads the initial scene via LoadScene()
 */

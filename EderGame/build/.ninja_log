@@ -1,8 +1,8 @@
 # ninja log v7
-15	9126	7942893116254659	CMakeFiles/EderGame.dir/src/main.cpp.obj	e5dc51c9278c82aa
-10150	10501	7942893217601981	EderGame.exe	534ddef3a58274fb
-4	109	7942897978232737	build.ninja	3361e71bdd89cd1a
-4	109	7942897978182779	C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/cmake_install.cmake	3361e71bdd89cd1a
+24	6192	7942910064233256	CMakeFiles/EderGame.dir/src/main.cpp.obj	e5dc51c9278c82aa
+6193	6448	7942910125920332	EderGame.exe	534ddef3a58274fb
+4	109	7942922039631546	build.ninja	3361e71bdd89cd1a
+4	109	7942922039581556	C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/cmake_install.cmake	3361e71bdd89cd1a
 101	1152	7942001416681674	CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_tables.cpp.obj	c9761785100edb4a
 130	1391	7942001416957590	CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_impl_vulkan.cpp.obj	1ff4a4055ae8a610
 120	1440	7942001416872290	CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_impl_sdl3.cpp.obj	7ef98ace2ef1ac4a
@@ -10,7 +10,7 @@
 111	1572	7942001416782032	CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_widgets.cpp.obj	b78b23084e3ff2cc
 76	2339	7942001416425852	CMakeFiles/EderGame.dir/vendor/include/imgui/imgui.cpp.obj	c59eec2ccb0adbf7
 83	921	7942001416506074	CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_demo.cpp.obj	f2f9265fcac31e24
-36	8149	7942880049025987	CMakeFiles/EderGame.dir/src/Editor/Editor.cpp.obj	899061f37c2d529b
+18	8403	7942908310328568	CMakeFiles/EderGame.dir/src/Editor/Editor.cpp.obj	899061f37c2d529b
 39	221	7942001416060734	CMakeFiles/EderGame.dir/src/Editor/Panels/StatsPanel.cpp.obj	f7e75e74a825893e
 20	1481	7942001415871499	CMakeFiles/EderGame.dir/src/Editor/Panels/CameraPanel.cpp.obj	7cde853fac0e0f31
 6752	13624	7942878264629888	CMakeFiles/EderGame.dir/src/Editor/Panels/SceneViewPanel.cpp.obj	203e85328258fcdc
@@ -22,9 +22,16 @@
 21	4901	7942003186607882	CMakeFiles/EderGame.dir/src/VulkanOcclusionPass.cpp.obj	46cda29006a9415
 18	5720	7942072103861284	CMakeFiles/EderGame.dir/src/VulkanVolumetricLight.cpp.obj	b59dd2be7a09191f
 20	4812	7942087707221790	CMakeFiles/EderGame.dir/src/VulkanVolumetricFog.cpp.obj	1caac682ecba36c9
-8	10150	7942893116172422	CMakeFiles/EderGame.dir/src/Application.cpp.obj	bcf337232951dc24
+11	10830	7942908310258497	CMakeFiles/EderGame.dir/src/Application.cpp.obj	bcf337232951dc24
 114	921	7942742524918696	CMakeFiles/EderGame.dir/vendor/include/imgui/ImGuizmo.cpp.obj	1f1a423cefc1dc36
 25	3528	7942878197362991	CMakeFiles/EderGame.dir/src/Editor/Panels/AssetBrowserPanel.cpp.obj	79e26d119a65781f
 3528	6752	7942878232395988	CMakeFiles/EderGame.dir/src/Editor/Panels/MaterialEditorPanel.cpp.obj	3407375f6ad74d3f
-8	8367	7942902810822264	CMakeFiles/EderGame.dir/src/Application.cpp.obj	bcf337232951dc24
-8368	8690	7942902894424337	EderGame.exe	534ddef3a58274fb
+16	8031	7942922131786521	CMakeFiles/EderPlayer.dir/src/Player/PlayerMain.cpp.obj	e18c669c671a9b50
+20	8137	7942922394495101	CMakeFiles/EderPlayer.dir/src/Player/PlayerApp.cpp.obj	941eed3fba816711
+8138	8528	7942922475666076	EderPlayer.exe	8f49cd6b62545056
+27	6635	7942922569053993	CMakeFiles/EderGame.dir/src/Editor/Editor.cpp.obj	899061f37c2d529b
+34	7537	7942922569132778	CMakeFiles/EderGame.dir/src/main.cpp.obj	e5dc51c9278c82aa
+21	8696	7942922568922910	CMakeFiles/EderGame.dir/src/Application.cpp.obj	bcf337232951dc24
+8696	9015	7942922655631516	EderGame.exe	534ddef3a58274fb
+8	5472	7942924322082688	CMakeFiles/EderGame.dir/src/Editor/Editor.cpp.obj	899061f37c2d529b
+5473	5724	7942924376728186	EderGame.exe	534ddef3a58274fb
