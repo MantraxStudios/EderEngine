@@ -64,7 +64,6 @@ void VulkanMesh::LoadFromMemory(const uint8_t* data, size_t size, const std::str
     rootNodeIndex = 0;
 
     Assimp::Importer importer;
-    importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, 0.01f);
 
     const aiScene* scene = importer.ReadFileFromMemory(
         data, size,
@@ -73,8 +72,7 @@ void VulkanMesh::LoadFromMemory(const uint8_t* data, size_t size, const std::str
         aiProcess_CalcTangentSpace      |
         aiProcess_FlipUVs               |
         aiProcess_JoinIdenticalVertices |
-        aiProcess_LimitBoneWeights      |
-        aiProcess_GlobalScale,
+        aiProcess_LimitBoneWeights,
         hint.empty() ? nullptr : hint.c_str());
 
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
@@ -123,7 +121,6 @@ void VulkanMesh::_LoadFromPath(const std::string& path)
     rootNodeIndex = 0;
 
     Assimp::Importer importer;
-    importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, 0.01f);
 
     const aiScene* scene = importer.ReadFile(path,
         aiProcess_Triangulate           |
@@ -131,8 +128,7 @@ void VulkanMesh::_LoadFromPath(const std::string& path)
         aiProcess_CalcTangentSpace      |
         aiProcess_FlipUVs               |
         aiProcess_JoinIdenticalVertices |
-        aiProcess_LimitBoneWeights      |
-        aiProcess_GlobalScale);
+        aiProcess_LimitBoneWeights);
 
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
         throw std::runtime_error("Assimp: " + std::string(importer.GetErrorString()));

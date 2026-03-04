@@ -30,5 +30,6 @@ public:
 private:
     std::vector<SceneObject> objects;
     VulkanInstanceBuffer     instanceBuffer;
+    VulkanInstanceBuffer     shadowInstanceBuffer;       // separate — avoids handle collision with main instanceBuffer
     VulkanInstanceBuffer     transparentInstanceBuffer;  // buffer separado — evita sobreescribir opacos
 };

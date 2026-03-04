@@ -110,8 +110,8 @@ void Scene::DrawShadow(vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeli
         for (auto& m : matrices)
             allMatrices.push_back(m);
 
-    instanceBuffer.Upload(allMatrices);
-    instanceBuffer.Bind(cmd);
+    shadowInstanceBuffer.Upload(allMatrices);
+    shadowInstanceBuffer.Bind(cmd);
     cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &lightViewProj);
 
     uint32_t first = 0;
@@ -144,8 +144,8 @@ void Scene::DrawShadowPoint(vk::CommandBuffer cmd, VulkanPointShadowPipeline& pi
         for (auto& m : matrices)
             allMatrices.push_back(m);
 
-    instanceBuffer.Upload(allMatrices);
-    instanceBuffer.Bind(cmd);
+    shadowInstanceBuffer.Upload(allMatrices);
+    shadowInstanceBuffer.Bind(cmd);
     cmd.pushConstants(layout,
         vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
         0, static_cast<uint32_t>(sizeof(PushData)), &push);
@@ -167,6 +167,7 @@ void Scene::Clear()
 void Scene::Destroy()
 {
     instanceBuffer.Destroy();
+    shadowInstanceBuffer.Destroy();
     transparentInstanceBuffer.Destroy();
     objects.clear();
 }

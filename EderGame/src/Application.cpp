@@ -608,8 +608,10 @@ void Application::SyncECSToScene()
         if (loadPath.empty()) return;
 
         // Find existing SceneObject for this entity (if any)
+        // NOTE: Re-fetch GetObjects() each time — a previous Add() may have
+        //       reallocated the vector, invalidating any earlier pointer.
         SceneObject* existingObj = nullptr;
-        for (auto& o : objs)
+        for (auto& o : m_scene.GetObjects())
             if (o.entityId == e) { existingObj = &o; break; }
 
         // Change detection by GUID (or path if no GUID yet)
@@ -718,7 +720,8 @@ void Application::SyncECSToScene()
 
     // 3. Mirror world transform → SceneObject::transform every frame
     //    (TransformComponent values are LOCAL; SceneObject needs world space)
-    for (auto& obj : objs)
+    //    Re-obtain the vector reference — Add() may have reallocated it.
+    for (auto& obj : m_scene.GetObjects())
     {
         if (obj.entityId == 0 || !m_registry.Has<TransformComponent>(obj.entityId)) continue;
 
@@ -740,7 +743,7 @@ void Application::SyncECSToScene()
     }
 
     // 4. Sync alphaMode → alphaThreshold UBO field
-    for (auto& obj : objs)
+    for (auto& obj : m_scene.GetObjects())
     {
         if (!obj.material) continue;
         float threshold = (obj.material->alphaMode == Material::AlphaMode::AlphaTest)
