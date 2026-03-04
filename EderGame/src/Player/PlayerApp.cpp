@@ -22,6 +22,7 @@
 #include "Renderer/Vulkan/VulkanSpotShadowMap.h"
 #include <IO/AssetManager.h>
 #include <IO/SceneSerializer.h>
+#include "Physics/PhysicsSystem.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Run
@@ -57,6 +58,11 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
         auto cmd = VulkanRenderer::Get().GetCommandBuffer();
         SyncECSToScene();
         UpdateAnimations(dt);
+
+        PhysicsSystem::Get().SyncActors(m_registry);
+        PhysicsSystem::Get().Step(dt);
+        PhysicsSystem::Get().WriteBack(m_registry);
+
         RenderShadowPasses(cmd);
         RenderMainPass(cmd);
 
@@ -130,6 +136,8 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
             Krayon::SceneSerializer::LoadFromBytes(bytes, m_registry);
         }
     }
+
+    PhysicsSystem::Get().Init();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -216,6 +224,8 @@ void PlayerApp::Shutdown()
     m_glassMat3.Destroy();
     m_albedoTex.Destroy();
     m_pipeline.Destroy();
+
+    PhysicsSystem::Get().Shutdown();
 
     SDL_DestroyWindow(m_window);
     SDL_Quit();

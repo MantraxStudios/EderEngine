@@ -4,8 +4,8 @@ name=Untitled_2
 [entity]
 id=1
 tag.name=Entity
-transform.pos=0.000000 29.200001 0.000000
-transform.rot=0.000000 0.000000 0.000000
+transform.pos=-0.000023 39.080132 -0.000053
+transform.rot=-0.000063 0.005492 0.000167
 transform.scale=0.100000 0.100000 0.100000
 mesh.guid=0
 mesh.path=assets/Capoeira.fbx
@@ -13,6 +13,20 @@ mesh.matGuid=0
 mesh.matName=default
 mesh.castShadow=1
 mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.5
+collider.dynFric=0.5
+collider.restitution=0.3
+collider.isTrigger=0
+rb.mass=1
+rb.isKinematic=0
+rb.useGravity=1
+rb.linearDrag=0.01
+rb.angularDrag=0.05
 [/entity]
 
 [entity]
@@ -27,5 +41,14 @@ mesh.matGuid=0
 mesh.matName=default
 mesh.castShadow=1
 mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=2.960000 1.530000 3.770000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.5
+collider.dynFric=0.5
+collider.restitution=0.3
+collider.isTrigger=0
 [/entity]
 

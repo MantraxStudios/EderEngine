@@ -145,6 +145,7 @@ endif()
 set(PLAYER_SOURCES
     src/Player/PlayerMain.cpp
     src/Player/PlayerApp.cpp
+    src/Physics/PhysicsSystem.cpp
 )
 
 add_executable(EderPlayer ${PLAYER_SOURCES})
@@ -224,3 +225,6 @@ if (WIN32)
         )
     endforeach()
 endif()
+
+# EderPlayer se compila siempre que EderGame se compile
+add_dependencies(EderGame EderPlayer)

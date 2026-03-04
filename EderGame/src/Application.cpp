@@ -514,6 +514,10 @@ void Application::BuildPak(const std::string& /*outPakPathHint*/,
             copyFile(bldDir / "EderGraphics.dll",        "EderGraphics.dll");
             copyFile(bldDir / "SDL3.dll",                "SDL3.dll");
             copyFile(bldDir / "assimp-vc143-mt.dll",     "assimp-vc143-mt.dll");
+            copyFile(bldDir / "PhysX_64.dll",            "PhysX_64.dll");
+            copyFile(bldDir / "PhysXCommon_64.dll",      "PhysXCommon_64.dll");
+            copyFile(bldDir / "PhysXFoundation_64.dll",  "PhysXFoundation_64.dll");
+            copyFile(bldDir / "PhysXCooking_64.dll",     "PhysXCooking_64.dll");
             copyFile(pakSrc,                              "Game.pak");
 
             m_editor.AppendBuildLog("[Package] Done -> " + outDir.string());

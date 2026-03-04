@@ -153,10 +153,12 @@ PxTransform PhysicsSystem::EntityPose(Registry& registry, Entity e)
     glm::vec4 perspective;
     glm::decompose(world, scl, rot, pos, skew, perspective);
 
-    auto& col = registry.Get<ColliderComponent>(e);
-    // Add local center offset (not scaled by parent, just local offset)
-    glm::vec3 offset = rot * col.center;
-    pos += offset;
+    // Apply center offset only when a ColliderComponent exists
+    if (registry.Has<ColliderComponent>(e))
+    {
+        const auto& col = registry.Get<ColliderComponent>(e);
+        pos += rot * col.center;
+    }
 
     return PxTransform(ToPhysX(pos), ToPhysX(rot));
 }
@@ -184,6 +186,20 @@ uint32_t PhysicsSystem::ShapeHash(Registry& registry, Entity e) const
     h ^= hashF(col.restitution);
     h ^= hashF(scl.x); h ^= hashF(scl.y); h ^= hashF(scl.z);
     h ^= static_cast<uint32_t>(col.isTrigger);
+
+    // Include rigidbody presence and properties so adding/removing it
+    // forces a static -> dynamic (or dynamic -> static) actor rebuild.
+    if (registry.Has<RigidbodyComponent>(e))
+    {
+        const auto& rb = registry.Get<RigidbodyComponent>(e);
+        h ^= 0xDEADBEEFu;
+        h ^= hashF(rb.mass);
+        h ^= hashF(rb.linearDrag);
+        h ^= hashF(rb.angularDrag);
+        h ^= (rb.isKinematic ? 0xAAAAAAAAu : 0u);
+        h ^= (rb.useGravity  ? 0x55555555u : 0u);
+    }
+
     return h;
 }
 
@@ -272,17 +288,17 @@ void PhysicsSystem::SyncActors(Registry& registry)
 {
     if (!m_initialized) return;
 
-    // ── Remove actors for entities that no longer have a ColliderComponent ──
+    // ── Remove actors for entities that lost all physics components ─────────
     std::vector<Entity> toRemove;
     for (auto& [e, state] : m_actors)
     {
-        if (!registry.Has<ColliderComponent>(e))
+        if (!registry.Has<ColliderComponent>(e) && !registry.Has<RigidbodyComponent>(e))
             toRemove.push_back(e);
     }
     for (Entity e : toRemove)
         DestroyActor(e);
 
-    // ── Create / update actors for all entities with ColliderComponent ───────
+    // ── Entities with ColliderComponent (with or without RigidbodyComponent) ─
     registry.Each<ColliderComponent>([&](Entity e, ColliderComponent& col)
     {
         uint32_t newHash = ShapeHash(registry, e);
@@ -362,6 +378,64 @@ void PhysicsSystem::SyncActors(Registry& registry)
         }
 
         shape->release();
+        m_actors[e] = state;
+    });
+
+    // ── Entities with RigidbodyComponent but NO ColliderComponent ─────────────
+    // These still need a PxRigidDynamic so gravity / forces / velocity work.
+    // They have no shape, so they will not collide with anything.
+    registry.Each<RigidbodyComponent>([&](Entity e, RigidbodyComponent& rb)
+    {
+        if (registry.Has<ColliderComponent>(e)) return; // already handled above
+        if (!registry.Has<TransformComponent>(e)) return;
+
+        // Hash rb fields to detect changes
+        auto hashF = [](float f) -> uint32_t {
+            uint32_t u; memcpy(&u, &f, sizeof(u)); return u * 2246822519u;
+        };
+        uint32_t newHash = hashF(rb.mass) ^ hashF(rb.linearDrag) ^ hashF(rb.angularDrag)
+                         ^ (rb.isKinematic ? 0xAAAAAAAAu : 0u)
+                         ^ (rb.useGravity  ? 0x55555555u : 0u);
+
+        auto it = m_actors.find(e);
+        if (it != m_actors.end())
+        {
+            if (it->second.shapeHash == newHash)
+            {
+                // Already up-to-date — just push kinematic target if needed
+                if (it->second.kinematic)
+                {
+                    auto* dyn = static_cast<PxRigidDynamic*>(it->second.actor);
+                    dyn->setKinematicTarget(EntityPose(registry, e));
+                }
+                return;
+            }
+            // rb params changed — rebuild
+            DestroyActor(e);
+        }
+
+        PxTransform pose = EntityPose(registry, e);
+        PxRigidDynamic* dyn = m_physics->createRigidDynamic(pose);
+
+        // Shapeless actor: visible to simulation (gravity, forces) but no collisions
+        float mass = rb.mass > 0.0f ? rb.mass : 1.0f;
+        dyn->setMass(mass);
+        dyn->setMassSpaceInertiaTensor(PxVec3(mass * 0.1f)); // minimal inertia tensor
+        dyn->setLinearDamping(rb.linearDrag);
+        dyn->setAngularDamping(rb.angularDrag);
+        dyn->setActorFlag(PxActorFlag::eDISABLE_GRAVITY, !rb.useGravity);
+        if (rb.isKinematic)
+            dyn->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
+        dyn->userData = reinterpret_cast<void*>(static_cast<uintptr_t>(e));
+        m_scene->addActor(*dyn);
+
+        ActorState state;
+        state.actor      = dyn;
+        state.dynamic    = true;
+        state.kinematic  = rb.isKinematic;
+        state.useGravity = rb.useGravity;
+        state.mass       = rb.mass;
+        state.shapeHash  = newHash;
         m_actors[e] = state;
     });
 }

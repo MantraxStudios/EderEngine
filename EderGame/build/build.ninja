@@ -47,7 +47,7 @@ cmake_ninja_workdir = C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/bu
 #############################################
 # Order-only phony target for EderGame
 
-build cmake_object_order_depends_target_EderGame: phony || .
+build cmake_object_order_depends_target_EderGame: phony || EderPlayer.exe
 
 build CMakeFiles/EderGame.dir/src/Application.cpp.obj: CXX_COMPILER__EderGame_unscanned_Debug C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src/Application.cpp || cmake_object_order_depends_target_EderGame
   CONFIG = Debug
@@ -285,7 +285,7 @@ build CMakeFiles/EderGame.dir/vendor/include/imgui/ImGuizmo.cpp.obj: CXX_COMPILE
 #############################################
 # Link the executable EderGame.exe
 
-build EderGame.exe: CXX_EXECUTABLE_LINKER__EderGame_Debug CMakeFiles/EderGame.dir/src/Application.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Editor.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/AssetBrowserPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/CameraPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/HierarchyPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/InspectorPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/MaterialEditorPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/SceneViewPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/StatsPanel.cpp.obj CMakeFiles/EderGame.dir/src/Physics/PhysicsSystem.cpp.obj CMakeFiles/EderGame.dir/src/main.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_demo.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_draw.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_tables.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_widgets.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_impl_sdl3.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_impl_vulkan.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/ImGuizmo.cpp.obj | C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/build/EderGraphics.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/SDL3.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/vulkan-1.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysX_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXCommon_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXFoundation_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXExtensions_static_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXPvdSDK_static_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXCooking_64.lib
+build EderGame.exe: CXX_EXECUTABLE_LINKER__EderGame_Debug CMakeFiles/EderGame.dir/src/Application.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Editor.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/AssetBrowserPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/CameraPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/HierarchyPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/InspectorPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/MaterialEditorPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/SceneViewPanel.cpp.obj CMakeFiles/EderGame.dir/src/Editor/Panels/StatsPanel.cpp.obj CMakeFiles/EderGame.dir/src/Physics/PhysicsSystem.cpp.obj CMakeFiles/EderGame.dir/src/main.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_demo.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_draw.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_tables.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_widgets.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_impl_sdl3.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/imgui_impl_vulkan.cpp.obj CMakeFiles/EderGame.dir/vendor/include/imgui/ImGuizmo.cpp.obj | C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/build/EderGraphics.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/SDL3.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/vulkan-1.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysX_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXCommon_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXFoundation_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXExtensions_static_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXPvdSDK_static_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXCooking_64.lib || EderPlayer.exe
   CONFIG = Debug
   FLAGS = -O0 -g -Xclang -gcodeview -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd
   LINK_FLAGS = -Xlinker /subsystem:console -fuse-ld=lld-link
@@ -332,6 +332,18 @@ build CMakeFiles/EderPlayer.dir/src/Player/PlayerApp.cpp.obj: CXX_COMPILER__Eder
   TARGET_PDB = EderPlayer.pdb
   TARGET_SUPPORT_DIR = CMakeFiles\EderPlayer.dir
 
+build CMakeFiles/EderPlayer.dir/src/Physics/PhysicsSystem.cpp.obj: CXX_COMPILER__EderPlayer_unscanned_Debug C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src/Physics/PhysicsSystem.cpp || cmake_object_order_depends_target_EderPlayer
+  CONFIG = Debug
+  DEFINES = -DEDER_PLAYER -DGLM_ENABLE_EXPERIMENTAL -DGLM_FORCE_DEPTH_ZERO_TO_ONE -DGLM_FORCE_RADIANS -DNOMINMAX -DPX_SIMD_DISABLED -DVK_USE_PLATFORM_WIN32_KHR
+  DEP_FILE = CMakeFiles\EderPlayer.dir\src\Physics\PhysicsSystem.cpp.obj.d
+  FLAGS = -O0 -g -Xclang -gcodeview -std=c++20 -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd -fexceptions -w -O0 -g
+  INCLUDES = -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderCore/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/src -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include -IC:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderCore/vendor/include
+  OBJECT_DIR = CMakeFiles\EderPlayer.dir
+  OBJECT_FILE_DIR = CMakeFiles\EderPlayer.dir\src\Physics
+  TARGET_COMPILE_PDB = CMakeFiles\EderPlayer.dir\
+  TARGET_PDB = EderPlayer.pdb
+  TARGET_SUPPORT_DIR = CMakeFiles\EderPlayer.dir
+
 
 # =============================================================================
 # Link build statements for EXECUTABLE target EderPlayer
@@ -340,7 +352,7 @@ build CMakeFiles/EderPlayer.dir/src/Player/PlayerApp.cpp.obj: CXX_COMPILER__Eder
 #############################################
 # Link the executable EderPlayer.exe
 
-build EderPlayer.exe: CXX_EXECUTABLE_LINKER__EderPlayer_Debug CMakeFiles/EderPlayer.dir/src/Player/PlayerMain.cpp.obj CMakeFiles/EderPlayer.dir/src/Player/PlayerApp.cpp.obj | C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/build/EderGraphics.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/SDL3.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/vulkan-1.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysX_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXCommon_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXFoundation_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXExtensions_static_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXPvdSDK_static_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXCooking_64.lib
+build EderPlayer.exe: CXX_EXECUTABLE_LINKER__EderPlayer_Debug CMakeFiles/EderPlayer.dir/src/Player/PlayerMain.cpp.obj CMakeFiles/EderPlayer.dir/src/Player/PlayerApp.cpp.obj CMakeFiles/EderPlayer.dir/src/Physics/PhysicsSystem.cpp.obj | C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/build/EderGraphics.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/SDL3.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/../EderGraphics/vendor/lib/vulkan-1.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysX_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXCommon_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXFoundation_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXExtensions_static_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXPvdSDK_static_64.lib C$:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/lib/PhysXCooking_64.lib
   CONFIG = Debug
   FLAGS = -O0 -g -Xclang -gcodeview -D_DEBUG -D_DLL -D_MT -Xclang --dependent-lib=msvcrtd
   LINK_FLAGS = -Xlinker /subsystem:console -fuse-ld=lld-link

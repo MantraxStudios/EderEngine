@@ -28,6 +28,8 @@
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/AnimationComponent.h"
 #include "ECS/Components/VolumetricFogComponent.h"
+#include "ECS/Components/ColliderComponent.h"
+#include "ECS/Components/RigidbodyComponent.h"
 
 #include <fstream>
 #include <sstream>
@@ -156,6 +158,32 @@ public:
                 f << "anim.loop="          << (a.loop    ? 1 : 0) << "\n";
                 f << "anim.playing="       << (a.playing ? 1 : 0) << "\n";
                 f << "anim.blendDuration=" << a.blendDuration << "\n";
+            }
+
+            // ── ColliderComponent ─────────────────────────────────────────────
+            if (reg.Has<ColliderComponent>(e))
+            {
+                const auto& c = reg.Get<ColliderComponent>(e);
+                f << "collider.shape="          << static_cast<int>(c.shape)      << "\n";
+                f << "collider.boxHalfExtents=" << Vec3Str(c.boxHalfExtents)      << "\n";
+                f << "collider.radius="          << c.radius                       << "\n";
+                f << "collider.capsuleHalfH="    << c.capsuleHalfHeight            << "\n";
+                f << "collider.center="          << Vec3Str(c.center)              << "\n";
+                f << "collider.staticFric="      << c.staticFriction               << "\n";
+                f << "collider.dynFric="         << c.dynamicFriction              << "\n";
+                f << "collider.restitution="     << c.restitution                  << "\n";
+                f << "collider.isTrigger="       << (c.isTrigger ? 1 : 0)         << "\n";
+            }
+
+            // ── RigidbodyComponent ────────────────────────────────────────────
+            if (reg.Has<RigidbodyComponent>(e))
+            {
+                const auto& rb = reg.Get<RigidbodyComponent>(e);
+                f << "rb.mass="        << rb.mass                        << "\n";
+                f << "rb.isKinematic=" << (rb.isKinematic ? 1 : 0)      << "\n";
+                f << "rb.useGravity="  << (rb.useGravity  ? 1 : 0)      << "\n";
+                f << "rb.linearDrag="  << rb.linearDrag                  << "\n";
+                f << "rb.angularDrag=" << rb.angularDrag                 << "\n";
             }
 
             // ── VolumetricFogComponent ────────────────────────────────────────
@@ -358,6 +386,32 @@ private:
                 if (kv.count("anim.loop"))          a.loop          = kv.at("anim.loop")    == "1";
                 if (kv.count("anim.playing"))       a.playing       = kv.at("anim.playing") == "1";
                 if (kv.count("anim.blendDuration")) a.blendDuration = std::stof(kv.at("anim.blendDuration"));
+            }
+
+            // ColliderComponent
+            if (kv.count("collider.shape"))
+            {
+                auto& c = reg.Add<ColliderComponent>(e);
+                c.shape = static_cast<ColliderShape>(std::stoi(kv.at("collider.shape")));
+                if (kv.count("collider.boxHalfExtents")) c.boxHalfExtents   = ParseVec3(kv.at("collider.boxHalfExtents"));
+                if (kv.count("collider.radius"))         c.radius            = std::stof(kv.at("collider.radius"));
+                if (kv.count("collider.capsuleHalfH"))   c.capsuleHalfHeight = std::stof(kv.at("collider.capsuleHalfH"));
+                if (kv.count("collider.center"))         c.center            = ParseVec3(kv.at("collider.center"));
+                if (kv.count("collider.staticFric"))     c.staticFriction    = std::stof(kv.at("collider.staticFric"));
+                if (kv.count("collider.dynFric"))        c.dynamicFriction   = std::stof(kv.at("collider.dynFric"));
+                if (kv.count("collider.restitution"))    c.restitution       = std::stof(kv.at("collider.restitution"));
+                if (kv.count("collider.isTrigger"))      c.isTrigger         = kv.at("collider.isTrigger") == "1";
+            }
+
+            // RigidbodyComponent
+            if (kv.count("rb.mass"))
+            {
+                auto& rb     = reg.Add<RigidbodyComponent>(e);
+                rb.mass      = std::stof(kv.at("rb.mass"));
+                if (kv.count("rb.isKinematic")) rb.isKinematic = kv.at("rb.isKinematic") == "1";
+                if (kv.count("rb.useGravity"))  rb.useGravity  = kv.at("rb.useGravity")  == "1";
+                if (kv.count("rb.linearDrag"))  rb.linearDrag  = std::stof(kv.at("rb.linearDrag"));
+                if (kv.count("rb.angularDrag")) rb.angularDrag = std::stof(kv.at("rb.angularDrag"));
             }
 
             // VolumetricFogComponent

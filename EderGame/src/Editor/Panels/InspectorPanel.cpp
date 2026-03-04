@@ -9,6 +9,7 @@
 #include "ECS/Components/RigidbodyComponent.h"
 #include "ECS/Components/ColliderComponent.h"
 #include "ECS/Systems/TransformSystem.h"
+#include "Physics/PhysicsSystem.h"
 #include "Core/MaterialManager.h"
 #include "Core/Material.h"
 #include <IO/AssetManager.h>
@@ -268,6 +269,9 @@ void InspectorPanel::DrawTransformComponent()
             "Transform", registry, selected, ImVec4(0.25f, 0.85f, 0.45f, 1.0f)))
     {
         auto& t = registry->Get<TransformComponent>(selected);
+
+        const glm::vec3 prevScale = t.scale;
+
         ImGui::PushStyleVar(ImGuiStyleVar_CellPadding, ImVec2(4, 3));
         if (ImGui::BeginTable("##xform", 3, ImGuiTableFlags_None))
         {
@@ -280,6 +284,11 @@ void InspectorPanel::DrawTransformComponent()
             ImGui::EndTable();
         }
         ImGui::PopStyleVar();
+
+        // Scale affects shape geometry — force physics actor rebuild immediately.
+        // Position / rotation are handled every frame via setGlobalPose in SyncActors.
+        if (t.scale != prevScale && registry->Has<ColliderComponent>(selected))
+            PhysicsSystem::Get().MarkDirty(selected);
     }
     ImGui::PopID();
 }
@@ -530,6 +539,13 @@ void InspectorPanel::DrawRigidbodyComponent()
     {
         auto& rb = registry->Get<RigidbodyComponent>(selected);
 
+        // snapshot for dirty detection
+        const float prevMass        = rb.mass;
+        const float prevLinearDrag  = rb.linearDrag;
+        const float prevAngularDrag = rb.angularDrag;
+        const bool  prevUseGravity  = rb.useGravity;
+        const bool  prevKinematic   = rb.isKinematic;
+
         ImGui::Columns(2, "rb_cols", false);
         ImGui::SetColumnWidth(0, 130.0f);
 
@@ -566,6 +582,16 @@ void InspectorPanel::DrawRigidbodyComponent()
             rb.angularVelocity.x, rb.angularVelocity.y, rb.angularVelocity.z);
 
         ImGui::Spacing();
+
+        // Apply changes to PhysX if any field was modified
+        if (rb.mass        != prevMass        ||
+            rb.linearDrag  != prevLinearDrag  ||
+            rb.angularDrag != prevAngularDrag ||
+            rb.useGravity  != prevUseGravity  ||
+            rb.isKinematic != prevKinematic)
+        {
+            PhysicsSystem::Get().MarkDirty(selected);
+        }
     }
 }
 
@@ -576,6 +602,17 @@ void InspectorPanel::DrawColliderComponent()
     if (ComponentHeader<ColliderComponent>("Collider", registry, selected, ImVec4(0.2f, 0.9f, 0.4f, 1.0f)))
     {
         auto& col = registry->Get<ColliderComponent>(selected);
+
+        // snapshot for dirty detection
+        const ColliderShape prevShape      = col.shape;
+        const glm::vec3     prevHalfExt    = col.boxHalfExtents;
+        const float         prevRadius     = col.radius;
+        const float         prevCapsuleHH  = col.capsuleHalfHeight;
+        const glm::vec3     prevCenter     = col.center;
+        const float         prevStaticFric = col.staticFriction;
+        const float         prevDynFric    = col.dynamicFriction;
+        const float         prevRest       = col.restitution;
+        const bool          prevTrigger    = col.isTrigger;
 
         // Shape selector
         const char* shapes[] = { "Box", "Sphere", "Capsule" };
@@ -641,6 +678,20 @@ void InspectorPanel::DrawColliderComponent()
 
         ImGui::Columns(1);
         ImGui::Spacing();
+
+        // Apply changes to PhysX if any field was modified
+        if (col.shape            != prevShape       ||
+            col.boxHalfExtents   != prevHalfExt     ||
+            col.radius           != prevRadius      ||
+            col.capsuleHalfHeight!= prevCapsuleHH   ||
+            col.center           != prevCenter      ||
+            col.staticFriction   != prevStaticFric  ||
+            col.dynamicFriction  != prevDynFric     ||
+            col.restitution      != prevRest        ||
+            col.isTrigger        != prevTrigger)
+        {
+            PhysicsSystem::Get().MarkDirty(selected);
+        }
     }
 }
 
@@ -677,8 +728,16 @@ void InspectorPanel::DrawAddComponent()
         if (canAddLight        && ImGui::MenuItem("   Light"))          registry->Add<LightComponent>(selected);
         if (canAddFog          && ImGui::MenuItem("   Volumetric Fog")) registry->Add<VolumetricFogComponent>(selected);
         if (canAddAnim         && ImGui::MenuItem("   Animation"))      registry->Add<AnimationComponent>(selected);
-        if (canAddRigidbody    && ImGui::MenuItem("   Rigidbody"))      registry->Add<RigidbodyComponent>(selected);
-        if (canAddCollider     && ImGui::MenuItem("   Collider"))       registry->Add<ColliderComponent>(selected);
+        if (canAddRigidbody && ImGui::MenuItem("   Rigidbody"))
+        {
+            registry->Add<RigidbodyComponent>(selected);
+            PhysicsSystem::Get().MarkDirty(selected); // rebuild static->dynamic if collider exists
+        }
+        if (canAddCollider  && ImGui::MenuItem("   Collider"))
+        {
+            registry->Add<ColliderComponent>(selected);
+            PhysicsSystem::Get().MarkDirty(selected); // rebuild shapeless->shaped if rigidbody exists
+        }
         ImGui::EndPopup();
     }
 }
