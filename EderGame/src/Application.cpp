@@ -29,6 +29,7 @@
 #include "Renderer/Vulkan/VulkanSwapchain.h"
 #include "Physics/PhysicsSystem.h"
 #include "Scripting/LuaScriptSystem.h"
+#include <IO/DebugDraw.h>
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Public entry point
@@ -111,6 +112,7 @@ int Application::Run()
         m_editor.Draw(m_camera, m_registry, dt);
         m_editor.Render(cmd);
         VulkanRenderer::Get().EndFrame();
+        Krayon::DebugDraw::Get().Tick(dt);  // expire debug lines after rendering
     }
 
     Shutdown();

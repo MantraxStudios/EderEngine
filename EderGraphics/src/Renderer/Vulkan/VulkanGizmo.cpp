@@ -3,7 +3,9 @@
 #include "ECS/Registry.h"
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/LightComponent.h"
+#include "ECS/Components/ColliderComponent.h"
 #include <IO/AssetManager.h>
+#include <IO/DebugDraw.h>
 #include <fstream>
 #include <stdexcept>
 #include <algorithm>
@@ -231,6 +233,95 @@ void VulkanGizmo::AddCone(std::vector<Vertex>& v, glm::vec3 origin,
     }
 }
 
+// Draw the 12 edges of an axis-aligned box defined by halfExtents and center,
+// all transformed by the entity world matrix.
+void VulkanGizmo::AddBox(std::vector<Vertex>& v, const glm::mat4& world,
+                          const glm::vec3& halfExtents, const glm::vec3& center)
+{
+    // 8 local-space corners
+    glm::vec3 corners[8];
+    for (int i = 0; i < 8; i++)
+    {
+        glm::vec3 local = center + glm::vec3(
+            (i & 1) ? halfExtents.x : -halfExtents.x,
+            (i & 2) ? halfExtents.y : -halfExtents.y,
+            (i & 4) ? halfExtents.z : -halfExtents.z);
+        glm::vec4 w = world * glm::vec4(local, 1.0f);
+        corners[i]  = { w.x, w.y, w.z };
+    }
+    // 12 edges (each as a pair of corner indices)
+    static const int edges[12][2] = {
+        {0,1},{2,3},{4,5},{6,7},   // along X
+        {0,2},{1,3},{4,6},{5,7},   // along Y
+        {0,4},{1,5},{2,6},{3,7}    // along Z
+    };
+    for (auto& e : edges)
+    {
+        v.push_back({corners[e[0]].x, corners[e[0]].y, corners[e[0]].z});
+        v.push_back({corners[e[1]].x, corners[e[1]].y, corners[e[1]].z});
+    }
+}
+
+// Draw a capsule wireframe: two end-cap circles + four connecting lines +
+// hemisphere arcs at both ends (all in world space).
+void VulkanGizmo::AddCapsule(std::vector<Vertex>& v, const glm::mat4& world,
+                              float radius, float halfHeight,
+                              const glm::vec3& center, int N)
+{
+    // Local-space up axis is Y; capsule axis runs from -halfHeight to +halfHeight.
+    // We transform the world matrix's Y axis and a pair of perpendicular axes.
+    glm::vec3 worldCenter = glm::vec3(world * glm::vec4(center, 1.0f));
+    glm::vec3 axisY  = glm::normalize(glm::vec3(world[1])); // column 1 (local Y)
+    glm::vec3 axisX  = glm::normalize(glm::vec3(world[0]));
+    glm::vec3 axisZ  = glm::normalize(glm::vec3(world[2]));
+    float     scaleY = glm::length(glm::vec3(world[1]));
+    float     scaleX = glm::length(glm::vec3(world[0]));
+    float     wHH    = halfHeight * scaleY;  // scaled half-height
+    float     wR     = radius    * scaleX;   // scaled radius
+
+    glm::vec3 top    = worldCenter + axisY * wHH;
+    glm::vec3 bottom = worldCenter - axisY * wHH;
+
+    // Body circles at both ends
+    AddCircle(v, top,    axisX, axisZ, wR, N);
+    AddCircle(v, bottom, axisX, axisZ, wR, N);
+
+    // 4 vertical lines connecting the two circles
+    for (int i = 0; i < 4; i++)
+    {
+        float     a  = glm::two_pi<float>() * static_cast<float>(i) / 4.0f;
+        glm::vec3 dt = axisX * (wR * std::cos(a)) + axisZ * (wR * std::sin(a));
+        v.push_back({top.x + dt.x, top.y + dt.y, top.z + dt.z});
+        v.push_back({bottom.x + dt.x, bottom.y + dt.y, bottom.z + dt.z});
+    }
+
+    // Hemisphere arcs — two semicircles at the top cap (XY and ZY planes)
+    int halfN = N / 2;
+    float step = glm::pi<float>() / static_cast<float>(halfN);
+    for (int pass = 0; pass < 2; pass++)           // XY arc and ZY arc
+    {
+        glm::vec3 side = (pass == 0) ? axisX : axisZ;
+        for (int i = 0; i < halfN; i++)
+        {
+            float     a0 = step * static_cast<float>(i);
+            float     a1 = step * static_cast<float>(i + 1);
+            glm::vec3 p0 = top + side * (wR * std::cos(a0)) + axisY * (wR * std::sin(a0));
+            glm::vec3 p1 = top + side * (wR * std::cos(a1)) + axisY * (wR * std::sin(a1));
+            v.push_back({p0.x, p0.y, p0.z});
+            v.push_back({p1.x, p1.y, p1.z});
+        }
+        for (int i = 0; i < halfN; i++)
+        {
+            float     a0 = step * static_cast<float>(i)  + glm::pi<float>();
+            float     a1 = step * static_cast<float>(i + 1) + glm::pi<float>();
+            glm::vec3 p0 = bottom + side * (wR * std::cos(a0)) - axisY * (wR * std::sin(a0 - glm::pi<float>()));
+            glm::vec3 p1 = bottom + side * (wR * std::cos(a1)) - axisY * (wR * std::sin(a1 - glm::pi<float>()));
+            v.push_back({p0.x, p0.y, p0.z});
+            v.push_back({p1.x, p1.y, p1.z});
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Draw
 // ---------------------------------------------------------------------------
@@ -300,6 +391,56 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
         uint32_t count = static_cast<uint32_t>(verts.size()) - start;
         if (count > 0)
             calls.push_back({start, count, col});
+    }
+
+    // ── Collider wireframes ─────────────────────────────────────────────────
+    for (Entity e : registry.GetEntities())
+    {
+        if (!registry.Has<ColliderComponent>(e))  continue;
+        if (!registry.Has<TransformComponent>(e)) continue;
+
+        const auto& t   = registry.Get<TransformComponent>(e);
+        const auto& col = registry.Get<ColliderComponent>(e);
+
+        bool      isSel = (e == selectedEntity);
+        glm::vec4 color;
+        if      (isSel)         color = glm::vec4(0.20f, 1.00f, 0.20f, 1.00f); // bright green
+        else if (col.isTrigger) color = glm::vec4(0.00f, 0.90f, 0.90f, 0.75f); // cyan
+        else                    color = glm::vec4(0.15f, 0.80f, 0.15f, 0.75f); // green
+
+        glm::mat4 world = t.GetMatrix();
+        uint32_t  start = static_cast<uint32_t>(verts.size());
+
+        if (col.shape == ColliderShape::Box)
+        {
+            AddBox(verts, world, col.boxHalfExtents, col.center);
+        }
+        else if (col.shape == ColliderShape::Sphere)
+        {
+            // Transform center to world
+            glm::vec3 wPos = glm::vec3(world * glm::vec4(col.center, 1.0f));
+            float     wR   = col.radius * glm::length(glm::vec3(world[0]));
+            AddCircle(verts, wPos, {1,0,0}, {0,1,0}, wR, 24); // XY
+            AddCircle(verts, wPos, {1,0,0}, {0,0,1}, wR, 24); // XZ
+            AddCircle(verts, wPos, {0,1,0}, {0,0,1}, wR, 24); // YZ
+        }
+        else if (col.shape == ColliderShape::Capsule)
+        {
+            AddCapsule(verts, world, col.radius, col.capsuleHalfHeight, col.center, 24);
+        }
+
+        uint32_t count = static_cast<uint32_t>(verts.size()) - start;
+        if (count > 0)
+            calls.push_back({start, count, color});
+    }
+
+    // ── Lua / C++ debug lines (Debug.drawRay etc.) ─────────────────────────
+    for (const auto& line : Krayon::DebugDraw::Get().GetLines())
+    {
+        uint32_t start = static_cast<uint32_t>(verts.size());
+        verts.push_back({line.start.x, line.start.y, line.start.z});
+        verts.push_back({line.end.x,   line.end.y,   line.end.z  });
+        calls.push_back({start, 2, line.color});
     }
 
     if (verts.empty()) return;

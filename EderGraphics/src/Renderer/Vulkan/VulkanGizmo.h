@@ -32,15 +32,20 @@ private:
     void BuildPipeline(vk::Format colorFormat, vk::Format depthFormat);
 
     static std::vector<uint32_t> LoadSpv(const std::string& path);
-    static void AddCross (std::vector<Vertex>& v, glm::vec3 pos, float size);
-    static void AddCircle(std::vector<Vertex>& v, glm::vec3 center,
-                           glm::vec3 right, glm::vec3 up, float radius, int N = 16);
-    static void AddCone  (std::vector<Vertex>& v, glm::vec3 origin, glm::vec3 dir,
-                           float range, float angleDeg, int N = 16);
+    static void AddCross  (std::vector<Vertex>& v, glm::vec3 pos, float size);
+    static void AddCircle (std::vector<Vertex>& v, glm::vec3 center,
+                            glm::vec3 right, glm::vec3 up, float radius, int N = 16);
+    static void AddCone   (std::vector<Vertex>& v, glm::vec3 origin, glm::vec3 dir,
+                            float range, float angleDeg, int N = 16);
+    static void AddBox    (std::vector<Vertex>& v, const glm::mat4& world,
+                            const glm::vec3& halfExtents, const glm::vec3& center);
+    static void AddCapsule(std::vector<Vertex>& v, const glm::mat4& world,
+                            float radius, float halfHeight,
+                            const glm::vec3& center, int N = 24);
 
     vk::raii::PipelineLayout pipelineLayout = nullptr;
     vk::raii::Pipeline       pipeline       = nullptr;
     VulkanBuffer             vertexBuffer;
 
-    static constexpr uint32_t MAX_VERTS = 16384;
+    static constexpr uint32_t MAX_VERTS = 65536;
 };

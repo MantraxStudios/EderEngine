@@ -25,6 +25,7 @@ namespace fs = std::filesystem;
 #include "ECS/Components/LayerComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 #include <IO/AssetManager.h>
+#include <IO/DebugDraw.h>
 #include "Physics/PhysicsSystem.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1140,5 +1141,51 @@ void LuaScriptSystem::BindAPI()
         std::error_code ec;
         auto sz = fs::file_size(path, ec);
         return ec ? -1LL : static_cast<long long>(sz);
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Debug — visual debug drawing (collider gizmos, rays, lines)
+    // ─────────────────────────────────────────────────────────────────────────
+    auto Debug = m_lua.create_named_table("Debug");
+
+    // Debug.drawLine(x1,y1,z1, x2,y2,z2 [,r,g,b,a [,duration]])
+    // Draws a line for one frame (duration=0) or N seconds.
+    // Default color: green (0,1,0,1).
+    Debug["drawLine"] = [](float x1, float y1, float z1,
+                            float x2, float y2, float z2,
+                            sol::variadic_args va)
+    {
+        glm::vec4 color(0.f, 1.f, 0.f, 1.f);
+        float     duration = 0.f;
+        int i = 0;
+        if (va.size() > static_cast<std::size_t>(i)) color.r   = va[i++].get<float>();
+        if (va.size() > static_cast<std::size_t>(i)) color.g   = va[i++].get<float>();
+        if (va.size() > static_cast<std::size_t>(i)) color.b   = va[i++].get<float>();
+        if (va.size() > static_cast<std::size_t>(i)) color.a   = va[i++].get<float>();
+        if (va.size() > static_cast<std::size_t>(i)) duration   = va[i].get<float>();
+        Krayon::DebugDraw::Get().AddLine({x1,y1,z1}, {x2,y2,z2}, color, duration);
+    };
+
+    // Debug.drawRay(ox,oy,oz, dx,dy,dz [,r,g,b,a [,duration]])
+    // Draws a ray: origin + direction (magnitude = length). Default color: green.
+    Debug["drawRay"] = [](float ox, float oy, float oz,
+                           float dx, float dy, float dz,
+                           sol::variadic_args va)
+    {
+        glm::vec4 color(0.f, 1.f, 0.f, 1.f);
+        float     duration = 0.f;
+        int i = 0;
+        if (va.size() > static_cast<std::size_t>(i)) color.r   = va[i++].get<float>();
+        if (va.size() > static_cast<std::size_t>(i)) color.g   = va[i++].get<float>();
+        if (va.size() > static_cast<std::size_t>(i)) color.b   = va[i++].get<float>();
+        if (va.size() > static_cast<std::size_t>(i)) color.a   = va[i++].get<float>();
+        if (va.size() > static_cast<std::size_t>(i)) duration   = va[i].get<float>();
+        Krayon::DebugDraw::Get().AddRay({ox,oy,oz}, {dx,dy,dz}, color, duration);
+    };
+
+    // Debug.log(message)
+    // Prints a message to stdout prefixed with "[Lua]".
+    Debug["log"] = [](const std::string& msg) {
+        std::cout << "[Lua] " << msg << '\n';
     };
 }
