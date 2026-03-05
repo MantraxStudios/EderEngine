@@ -145,6 +145,117 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  RunPreview / InitPreview  — editor play mode
+//
+//  Assets are already initialised with a raw (non-PAK) workdir by
+//  PlayerMain before this is called.  We load the scene from the absolute
+//  path the editor wrote and run the full physics + scripting loop.
+// ─────────────────────────────────────────────────────────────────────────────
+
+int PlayerApp::RunPreview(const std::string& scenePath)
+{
+    m_previewMode = true;
+    try { InitPreview(scenePath); }
+    catch (const std::exception& e)
+    {
+        std::cerr << "[EderPlayer] Preview init failed: " << e.what() << "\n";
+        return -1;
+    }
+
+    uint64_t prevTime = SDL_GetTicks();
+
+    while (m_running)
+    {
+        const uint64_t currTime = SDL_GetTicks();
+        const float    dt       = static_cast<float>(currTime - prevTime) / 1000.0f;
+        prevTime = currTime;
+
+        PollEvents();
+        ProcessInput(dt);
+
+        VulkanRenderer::Get().BeginFrame();
+        if (!VulkanRenderer::Get().IsFrameStarted())
+            continue;
+
+        UpdateLightBuffer();
+        auto cmd = VulkanRenderer::Get().GetCommandBuffer();
+        SyncECSToScene();
+        UpdateAnimations(dt);
+
+        PhysicsSystem::Get().SyncActors(m_registry);
+        PhysicsSystem::Get().Step(dt);
+        PhysicsSystem::Get().WriteBack(m_registry);
+        PhysicsSystem::Get().DispatchEvents(m_registry);
+        LuaScriptSystem::Get().Update(m_registry, dt);
+
+        RenderShadowPasses(cmd);
+        RenderMainPass(cmd);
+
+        VulkanRenderer::Get().EndFrame();
+    }
+
+    Shutdown();
+    return 0;
+}
+
+void PlayerApp::InitPreview(const std::string& scenePath)
+{
+    SDL_Init(SDL_INIT_VIDEO);
+
+    // Create a borderless window; the editor will reparent it into its viewport.
+    m_window = SDL_CreateWindow("EderPreview", 1280, 720,
+        SDL_WINDOW_VULKAN | SDL_WINDOW_BORDERLESS);
+    if (!m_window)
+        throw std::runtime_error("SDL_CreateWindow (preview) failed");
+
+    m_camera.fpsMode = true;
+    m_camera.fpsPos  = { 0.0f, 2.0f, 12.0f };
+    m_camera.SetOrientation(0.0f, 0.0f);
+    SDL_SetWindowRelativeMouseMode(m_window, false);
+
+    VulkanInstance::Get().Init(m_window);
+    VulkanSwapchain::Get().Init(m_window);
+    VulkanRenderer::Get().Init();
+    VulkanRenderer::Get().SetWindow(m_window);
+
+    m_pipeline.Create(
+        "shaders/triangle.vert.spv",
+        "shaders/triangle.frag.spv",
+        VulkanSwapchain::Get().GetFormat(),
+        VulkanRenderer::Get().GetDepthFormat());
+
+    InitMaterials();
+
+    m_shadowMap.Create(1024);
+    m_shadowPipeline.Create(m_shadowMap.GetFormat());
+    m_spotShadowMap.Create(1024);
+    m_pointShadowMap.Create(512);
+    m_pointShadowPipeline.Create(m_pointShadowMap.GetFormat());
+
+    m_lights.Build(m_pipeline);
+    m_lights.BindShadowMap     (m_shadowMap.GetArrayView(),          m_shadowMap.GetSampler());
+    m_lights.BindSpotShadowMap (m_spotShadowMap.GetArrayView(),      m_spotShadowMap.GetSampler());
+    m_lights.BindPointShadowMap(m_pointShadowMap.GetCubeArrayView(), m_pointShadowMap.GetSampler());
+
+    m_skybox.Create(VulkanSwapchain::Get().GetFormat(),
+                    VulkanRenderer::Get().GetDepthFormat());
+    m_boneSSBO.Create(m_pipeline);
+
+    // Load scene from absolute file path (loose-file mode)
+    if (!scenePath.empty())
+    {
+        std::string loadedName;
+        if (!Krayon::SceneSerializer::Load(scenePath, m_registry, &loadedName))
+            std::cerr << "[EderPlayer] Warning: failed to load preview scene: " << scenePath << "\n";
+        else
+            std::cout << "[EderPlayer] Preview scene loaded: " << loadedName << "\n";
+    }
+
+    PhysicsSystem::Get().Init();
+    LuaScriptSystem::Get().Init();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  InitMaterials
 // ─────────────────────────────────────────────────────────────────────────────
 

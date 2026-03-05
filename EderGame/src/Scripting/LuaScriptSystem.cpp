@@ -5,6 +5,7 @@
 #include <fstream>
 #include <sstream>
 #include <filesystem>
+#include <algorithm>
 #include <cstdlib>
 #include <ctime>
 
@@ -21,8 +22,10 @@ namespace fs = std::filesystem;
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/AnimationComponent.h"
 #include "ECS/Components/VolumetricFogComponent.h"
+#include "ECS/Components/LayerComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 #include <IO/AssetManager.h>
+#include "Physics/PhysicsSystem.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Singleton
@@ -812,6 +815,110 @@ void LuaScriptSystem::BindAPI()
 
     // Global log alias
     m_lua["log"] = [](const std::string& s) { std::cout << "[Lua] " << s << "\n"; };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Layer table — read / write LayerComponent
+    // ─────────────────────────────────────────────────────────────────────────
+    sol::table LayerT = m_lua.create_named_table("Layer");
+
+    // Returns true when the entity has a LayerComponent.
+    LayerT["hasLayer"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<LayerComponent>((Entity)e);
+    };
+    // Returns the layer index (0-31). Entities without a LayerComponent are layer 0.
+    LayerT["getLayer"] = [](int e) -> int {
+        if (!s_reg || !s_reg->Has<LayerComponent>((Entity)e)) return 0;
+        return static_cast<int>(s_reg->Get<LayerComponent>((Entity)e).layer);
+    };
+    // Assigns the entity to a layer (0-31). Creates LayerComponent if absent.
+    // Marks the physics actor dirty so filter data is refreshed next frame.
+    LayerT["setLayer"] = [](int e, int layer) {
+        if (!s_reg) return;
+        if (!s_reg->Has<LayerComponent>((Entity)e))
+            s_reg->Add<LayerComponent>((Entity)e);
+        auto& lc = s_reg->Get<LayerComponent>((Entity)e);
+        lc.layer = static_cast<uint8_t>(std::clamp(layer, 0, 31));
+        PhysicsSystem::Get().MarkDirty((Entity)e);
+    };
+    // Returns the collision / raycast mask as an integer bitmask.
+    LayerT["getMask"] = [](int e) -> int {
+        if (!s_reg || !s_reg->Has<LayerComponent>((Entity)e)) return static_cast<int>(0xFFFFFFFFu);
+        return static_cast<int>(s_reg->Get<LayerComponent>((Entity)e).layerMask);
+    };
+    // Sets the collision / raycast mask as a bitmask integer.
+    LayerT["setMask"] = [](int e, int mask) {
+        if (!s_reg) return;
+        if (!s_reg->Has<LayerComponent>((Entity)e))
+            s_reg->Add<LayerComponent>((Entity)e);
+        s_reg->Get<LayerComponent>((Entity)e).layerMask = static_cast<uint32_t>(mask);
+        PhysicsSystem::Get().MarkDirty((Entity)e);
+    };
+    // Enable or disable interaction with a specific layer index.
+    LayerT["setLayerEnabled"] = [](int e, int targetLayer, bool enabled) {
+        if (!s_reg) return;
+        if (!s_reg->Has<LayerComponent>((Entity)e))
+            s_reg->Add<LayerComponent>((Entity)e);
+        auto& lc = s_reg->Get<LayerComponent>((Entity)e);
+        uint32_t bit = (targetLayer >= 0 && targetLayer < 32) ? (1u << targetLayer) : 0u;
+        if (enabled) lc.layerMask |=  bit;
+        else         lc.layerMask &= ~bit;
+        PhysicsSystem::Get().MarkDirty((Entity)e);
+    };
+    // Returns true if the given layer bit is set in this entity's mask.
+    LayerT["isLayerEnabled"] = [](int e, int targetLayer) -> bool {
+        if (!s_reg || !s_reg->Has<LayerComponent>((Entity)e)) return true;
+        uint32_t bit = (targetLayer >= 0 && targetLayer < 32) ? (1u << targetLayer) : 0u;
+        return (s_reg->Get<LayerComponent>((Entity)e).layerMask & bit) != 0;
+    };
+    // Explicitly add a LayerComponent with default values (layer=0, mask=0xFFFFFFFF).
+    // Safe to call even if the component already exists (no-op in that case).
+    LayerT["add"] = [](int e) {
+        if (!s_reg) return;
+        if (!s_reg->Has<LayerComponent>((Entity)e))
+            s_reg->Add<LayerComponent>((Entity)e);
+    };
+    // Remove the LayerComponent from the entity.
+    // The actor will be treated as layer 0 / all-mask on the next SyncActors.
+    LayerT["remove"] = [](int e) {
+        if (!s_reg) return;
+        s_reg->Remove<LayerComponent>((Entity)e);
+        PhysicsSystem::Get().MarkDirty((Entity)e);
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Physics table — scene queries
+    // ─────────────────────────────────────────────────────────────────────────
+    sol::table PhysicsT = m_lua.create_named_table("Physics");
+
+    // Physics.raycast(ox, oy, oz, dx, dy, dz, maxDist [, layerMask]) -> hit table
+    //   Casts a ray from origin (ox,oy,oz) in direction (dx,dy,dz) up to maxDist.
+    //   layerMask is optional (default 0xFFFFFFFF = all layers).
+    //   Returns: { hit=bool, entity=int, distance=float,
+    //              x=float, y=float, z=float,       -- hit world position
+    //              nx=float, ny=float, nz=float }     -- surface normal
+    PhysicsT["raycast"] = [this](float ox, float oy, float oz,
+                                 float dx, float dy, float dz,
+                                 float maxDist,
+                                 sol::optional<int> maskOpt) -> sol::table
+    {
+        uint32_t mask = maskOpt.has_value()
+                        ? static_cast<uint32_t>(maskOpt.value())
+                        : 0xFFFFFFFFu;
+        RaycastHit h = PhysicsSystem::Get().Raycast(
+            {ox, oy, oz}, {dx, dy, dz}, maxDist, mask);
+
+        sol::table t = m_lua.create_table();
+        t["hit"]      = h.hit;
+        t["entity"]   = static_cast<int>(h.entity);
+        t["distance"] = h.distance;
+        t["x"]        = h.position.x;
+        t["y"]        = h.position.y;
+        t["z"]        = h.position.z;
+        t["nx"]       = h.normal.x;
+        t["ny"]       = h.normal.y;
+        t["nz"]       = h.normal.z;
+        return t;
+    };
 
     // ─────────────────────────────────────────────────────────────────────────
     // Script — cross-entity script communication

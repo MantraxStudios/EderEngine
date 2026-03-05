@@ -1,6 +1,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 //  EderPlayer — standalone game runtime (no ImGui / Editor).
 //  All assets are loaded from Game.pak (compiled mode).
+//  When launched with --preview, assets are loaded from a loose workdir
+//  and the given scene file is used directly (editor play mode).
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include "PlayerApp.h"
@@ -9,20 +11,60 @@
 #include <IO/KRCompiler.h>
 #include <filesystem>
 #include <iostream>
+#include <string>
 #ifdef _WIN32
 #include <windows.h>
 #endif
 
-int main()
+int main(int argc, char* argv[])
 {
-    // Ensure CWD = directory containing the executable (where Game.pak lives)
+    // Ensure CWD = directory containing the executable
 #ifdef _WIN32
     char exePath[MAX_PATH];
     GetModuleFileNameA(nullptr, exePath, MAX_PATH);
     std::filesystem::current_path(std::filesystem::path(exePath).parent_path());
 #endif
 
-    // Init both singletons (exe + DLL) in compiled/PAK mode
+    // ── Parse command-line arguments ─────────────────────────────────────────
+    bool        previewMode = false;
+    std::string workdir;
+    std::string scenePath;
+
+    for (int i = 1; i < argc; ++i)
+    {
+        const std::string arg = argv[i];
+        if (arg == "--preview")
+        {
+            previewMode = true;
+        }
+        else if (arg == "--workdir" && i + 1 < argc)
+        {
+            workdir = argv[++i];
+        }
+        else if (arg == "--scene" && i + 1 < argc)
+        {
+            scenePath = argv[++i];
+        }
+    }
+
+    // ── Preview mode (editor play mode) ──────────────────────────────────────
+    if (previewMode)
+    {
+        if (workdir.empty() || scenePath.empty())
+        {
+            std::cerr << "[EderPlayer] --preview requires --workdir and --scene.\n";
+            return 1;
+        }
+
+        // Init asset managers with raw loose files (non-PAK)
+        Krayon::AssetManager::Get().Init(workdir, false);
+        EG_InitAssets(workdir, false);
+
+        PlayerApp app;
+        return app.RunPreview(scenePath);
+    }
+
+    // ── Normal shipping mode (PAK) ────────────────────────────────────────────
     Krayon::AssetManager::Get().Init(".", true, "Game.pak");
     EG_InitAssets(".", true, "Game.pak");
 

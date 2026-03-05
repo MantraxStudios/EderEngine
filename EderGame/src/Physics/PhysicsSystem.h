@@ -9,6 +9,18 @@
 #include "ECS/Components/CollisionCallbackComponent.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
+// RaycastHit — result returned by PhysicsSystem::Raycast
+// ─────────────────────────────────────────────────────────────────────────────
+struct RaycastHit
+{
+    bool      hit      = false;           // true if any actor was struck
+    Entity    entity   = NULL_ENTITY;     // entity that was struck
+    float     distance = 0.0f;           // distance along the ray
+    glm::vec3 position = {};             // world-space hit position
+    glm::vec3 normal   = {};             // world-space surface normal at hit
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
 // PhysicsSystem
 // ─────────────────────────────────────────────────────────────────────────────
 class PhysicsSystem
@@ -33,6 +45,16 @@ public:
     void RemoveEntity(Entity e);
     // Call when an entity's ColliderComponent or RigidbodyComponent is removed
     void MarkDirty   (Entity e);
+
+    // ── Raycasting ───────────────────────────────────────────────────────────
+    // Cast a ray from `origin` in `direction` (need not be normalised) up to
+    // `maxDistance` metres. Only hits actors whose LayerComponent.layer bit is
+    // set in `layerMask` (default 0xFFFFFFFF = all layers).
+    // Returns the *closest* hit found, or an empty RaycastHit if nothing was struck.
+    RaycastHit Raycast(const glm::vec3& origin,
+                       const glm::vec3& direction,
+                       float            maxDistance,
+                       uint32_t         layerMask = 0xFFFFFFFFu) const;
 
 private:
     PhysicsSystem()  = default;

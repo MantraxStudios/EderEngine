@@ -1,6 +1,7 @@
 #pragma once
 #include <SDL3/SDL.h>
 #include <vulkan/vulkan.h>
+#include <imgui/imgui.h>
 #include <functional>
 #include <string>
 #include <atomic>
@@ -40,6 +41,14 @@ public:
     PlayState GetPlayState() const { return playState; }
     GizmoMode GetGizmoMode() const { return gizmoMode; }
     Entity    GetSelected()  const { return hierarchy.GetSelected(); }
+
+    // Force the editor back to Stopped state (e.g. when EderPlayer process exits).
+    void ForceStop() { playState = PlayState::Stopped; }
+
+    // Screen-space rectangle of the rendered scene image inside the Viewport panel.
+    // Valid after the first Draw() call.  Use for Win32 window embedding.
+    ImVec2 GetSceneViewContentPos()  const { return sceneView.GetContentScreenPos();  }
+    ImVec2 GetSceneViewContentSize() const { return sceneView.GetContentScreenSize(); }
 
     // ── Scene operation callbacks ─────────────────────────────────────────────────
 

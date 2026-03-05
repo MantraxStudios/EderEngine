@@ -61,7 +61,13 @@ void SceneViewPanel::OnDraw(GizmoMode gizmoMode, bool snap, float snapValue,
         desiredSize = avail;
 
     if (texDS != VK_NULL_HANDLE && avail.x > 0 && avail.y > 0)
+    {
         ImGui::Image(ImTextureRef((ImTextureID)(uint64_t)texDS), avail);
+        // Store screen-space position/size so the editor can overlay/embed
+        // the EderPlayer preview window on top of this exact rectangle.
+        contentScreenPos  = ImGui::GetItemRectMin();
+        contentScreenSize = ImGui::GetItemRectSize();
+    }
     else
     {
         ImGui::SetCursorPos(ImVec2(avail.x * 0.5f - 60, avail.y * 0.5f));

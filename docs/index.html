@@ -1,0 +1,1452 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>EderEngine — Scripting API</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css"/>
+<style>
+/* ── Reset & Base ─────────────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --bg:        #0d0d0d;
+  --bg2:       #141414;
+  --bg3:       #1a1a1a;
+  --surface:   #1f1f1f;
+  --border:    #2a2a2a;
+  --border2:   #333;
+  --red:       #e8303a;
+  --red-dark:  #b02028;
+  --red-glow:  rgba(232,48,58,.18);
+  --red-dim:   rgba(232,48,58,.08);
+  --text:      #e8e8e8;
+  --text2:     #aaa;
+  --text3:     #666;
+  --white:     #fff;
+  --code-bg:   #111;
+  --code-border:#252525;
+  --nav-h:     60px;
+  --sidebar-w: 260px;
+  --radius:    6px;
+  --transition:.18s ease;
+}
+
+html { scroll-behavior: smooth; }
+
+body {
+  font-family: 'Segoe UI', system-ui, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.65;
+  font-size: 15px;
+}
+
+/* ── Scrollbar ────────────────────────────────────────────────────────────── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: var(--bg2); }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--red); }
+
+/* ── Navbar ───────────────────────────────────────────────────────────────── */
+#navbar {
+  position: fixed; top: 0; left: 0; right: 0; z-index: 100;
+  height: var(--nav-h);
+  background: rgba(13,13,13,.96);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center;
+  padding: 0 24px;
+  gap: 20px;
+}
+
+.nav-logo {
+  display: flex; align-items: center; gap: 10px;
+  text-decoration: none; flex-shrink: 0;
+}
+.nav-logo-icon {
+  width: 34px; height: 34px;
+  background: var(--red);
+  border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 900; font-size: 16px; color: #fff;
+  letter-spacing: -1px;
+  box-shadow: 0 0 16px var(--red-glow);
+}
+.nav-logo-text {
+  font-size: 17px; font-weight: 700; color: var(--white);
+  letter-spacing: .3px;
+}
+.nav-logo-text span { color: var(--red); }
+
+.nav-divider { width: 1px; height: 24px; background: var(--border2); }
+
+.nav-links {
+  display: flex; gap: 4px; list-style: none; flex: 1;
+}
+.nav-links a {
+  color: var(--text2); text-decoration: none;
+  padding: 5px 12px; border-radius: var(--radius);
+  font-size: 13.5px; font-weight: 500;
+  transition: background var(--transition), color var(--transition);
+}
+.nav-links a:hover, .nav-links a.active {
+  background: var(--red-dim); color: var(--red);
+}
+
+/* ── Search bar ───────────────────────────────────────────────────────────── */
+.search-wrap {
+  position: relative; flex-shrink: 0; width: 220px;
+}
+.search-wrap input {
+  width: 100%;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: 20px;
+  color: var(--text);
+  font-size: 13px;
+  padding: 7px 36px 7px 14px;
+  outline: none;
+  transition: border var(--transition), box-shadow var(--transition);
+}
+.search-wrap input::placeholder { color: var(--text3); }
+.search-wrap input:focus {
+  border-color: var(--red);
+  box-shadow: 0 0 0 3px var(--red-dim);
+}
+.search-wrap .search-icon {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  color: var(--text3); pointer-events: none; font-size: 13px;
+}
+
+/* Search dropdown */
+#search-results {
+  display: none;
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  max-height: 320px; overflow-y: auto;
+  box-shadow: 0 8px 32px rgba(0,0,0,.6);
+  z-index: 200;
+}
+#search-results.open { display: block; }
+.sr-item {
+  padding: 10px 14px; cursor: pointer;
+  border-bottom: 1px solid var(--border);
+  transition: background var(--transition);
+}
+.sr-item:last-child { border-bottom: none; }
+.sr-item:hover { background: var(--red-dim); }
+.sr-item-title { font-weight: 600; font-size: 13px; color: var(--white); }
+.sr-item-sub   { font-size: 12px; color: var(--text3); margin-top: 1px; }
+.sr-item-tag {
+  display: inline-block; font-size: 10px; font-weight: 700;
+  padding: 1px 6px; border-radius: 3px;
+  background: var(--red-dim); color: var(--red);
+  margin-right: 6px; text-transform: uppercase; letter-spacing: .5px;
+}
+.sr-no-results { padding: 16px; text-align: center; color: var(--text3); font-size: 13px; }
+
+/* ── Layout ───────────────────────────────────────────────────────────────── */
+#layout {
+  display: flex;
+  padding-top: var(--nav-h);
+  min-height: 100vh;
+}
+
+/* ── Sidebar ──────────────────────────────────────────────────────────────── */
+#sidebar {
+  width: var(--sidebar-w);
+  flex-shrink: 0;
+  position: sticky; top: var(--nav-h);
+  height: calc(100vh - var(--nav-h));
+  overflow-y: auto;
+  background: var(--bg2);
+  border-right: 1px solid var(--border);
+  padding: 24px 0 40px;
+}
+
+.sidebar-section { margin-bottom: 8px; }
+.sidebar-label {
+  font-size: 10px; font-weight: 700; letter-spacing: 1.2px;
+  text-transform: uppercase; color: var(--text3);
+  padding: 0 20px 6px;
+  display: block; margin-top: 16px;
+}
+.sidebar-section:first-child .sidebar-label { margin-top: 0; }
+
+.sidebar-link {
+  display: flex; align-items: center; gap: 8px;
+  padding: 7px 20px;
+  color: var(--text2); text-decoration: none;
+  font-size: 13.5px;
+  border-left: 2px solid transparent;
+  transition: all var(--transition);
+}
+.sidebar-link:hover {
+  color: var(--text); background: var(--surface);
+  border-left-color: var(--border2);
+}
+.sidebar-link.active {
+  color: var(--red); background: var(--red-dim);
+  border-left-color: var(--red);
+  font-weight: 600;
+}
+.sidebar-link .dot {
+  width: 6px; height: 6px; border-radius: 50%;
+  background: var(--border2); flex-shrink: 0;
+  transition: background var(--transition);
+}
+.sidebar-link.active .dot, .sidebar-link:hover .dot { background: var(--red); }
+
+/* ── Main content ─────────────────────────────────────────────────────────── */
+#content {
+  flex: 1; min-width: 0;
+  padding: 48px 64px 80px;
+  max-width: 900px;
+}
+
+/* ── Page sections ────────────────────────────────────────────────────────── */
+.page { display: none; }
+.page.active { display: block; }
+
+/* ── Hero ─────────────────────────────────────────────────────────────────── */
+.hero {
+  border: 1px solid var(--border2);
+  border-radius: 10px;
+  background: linear-gradient(135deg, var(--bg3) 0%, var(--surface) 100%);
+  padding: 40px 44px;
+  margin-bottom: 48px;
+  position: relative; overflow: hidden;
+}
+.hero::before {
+  content: '';
+  position: absolute; top: -40px; right: -40px;
+  width: 200px; height: 200px;
+  background: radial-gradient(circle, var(--red-glow) 0%, transparent 70%);
+  pointer-events: none;
+}
+.hero-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  background: var(--red-dim); border: 1px solid rgba(232,48,58,.3);
+  color: var(--red); font-size: 11px; font-weight: 700;
+  letter-spacing: 1px; text-transform: uppercase;
+  padding: 4px 10px; border-radius: 20px; margin-bottom: 16px;
+}
+.hero h1 {
+  font-size: 32px; font-weight: 800; color: var(--white);
+  line-height: 1.2; margin-bottom: 12px;
+}
+.hero h1 span { color: var(--red); }
+.hero p { color: var(--text2); font-size: 15px; max-width: 520px; line-height: 1.7; }
+
+.quick-cards {
+  display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 12px; margin-top: 32px;
+}
+.qcard {
+  background: var(--surface);
+  border: 1px solid var(--border2);
+  border-radius: var(--radius);
+  padding: 16px;
+  cursor: pointer;
+  transition: border-color var(--transition), background var(--transition), transform var(--transition);
+  text-decoration: none;
+}
+.qcard:hover {
+  border-color: var(--red); background: var(--red-dim);
+  transform: translateY(-2px);
+}
+.qcard-icon { font-size: 20px; margin-bottom: 8px; color: var(--red); display:flex; align-items:center; justify-content:center; height:28px; }
+.qcard-title { font-size: 13px; font-weight: 700; color: var(--white); }
+.qcard-sub   { font-size: 11px; color: var(--text3); margin-top: 2px; }
+
+/* ── Typography ───────────────────────────────────────────────────────────── */
+.page h2 {
+  font-size: 24px; font-weight: 800; color: var(--white);
+  margin: 0 0 6px;
+  display: flex; align-items: center; gap: 10px;
+}
+.page h2 .badge {
+  font-size: 10px; font-weight: 700; letter-spacing: .8px;
+  text-transform: uppercase; padding: 3px 8px;
+  border-radius: 4px; background: var(--red-dim);
+  color: var(--red); border: 1px solid rgba(232,48,58,.25);
+}
+.page-desc {
+  color: var(--text2); margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  font-size: 14px; line-height: 1.7;
+}
+
+.page h3 {
+  font-size: 16px; font-weight: 700; color: var(--white);
+  margin: 32px 0 12px;
+  display: flex; align-items: center; gap: 8px;
+}
+.page h3::before {
+  content: '';
+  width: 3px; height: 16px;
+  background: var(--red); border-radius: 2px;
+}
+
+.page p { color: var(--text2); margin: 0 0 14px; line-height: 1.7; }
+
+/* ── Code blocks ──────────────────────────────────────────────────────────── */
+.code-wrap {
+  background: var(--code-bg);
+  border: 1px solid var(--code-border);
+  border-radius: var(--radius);
+  overflow: hidden; margin: 12px 0 24px;
+}
+.code-header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 14px;
+  background: #151515;
+  border-bottom: 1px solid var(--code-border);
+}
+.code-lang {
+  font-size: 11px; font-weight: 700; letter-spacing: .8px;
+  text-transform: uppercase; color: var(--red);
+}
+.copy-btn {
+  font-size: 11px; color: var(--text3); background: none;
+  border: 1px solid var(--border2); border-radius: 4px;
+  padding: 3px 8px; cursor: pointer; transition: all var(--transition);
+}
+.copy-btn:hover { color: var(--white); border-color: var(--text3); }
+.copy-btn.copied { color: #4caf50; border-color: #4caf50; }
+
+pre {
+  padding: 18px 20px;
+  overflow-x: auto;
+  font-family: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  font-size: 13.5px;
+  line-height: 1.7;
+  color: #c8c8c8;
+}
+
+/* Lua syntax highlighting */
+.kw  { color: #e06c75; }   /* keywords */
+.fn  { color: #61afef; }   /* functions */
+.str { color: #98c379; }   /* strings */
+.num { color: #e5c07b; }   /* numbers */
+.cmt { color: #5c6370; font-style: italic; }  /* comments */
+.ret { color: #c678dd; }   /* -->  */
+.tbl { color: #e5c07b; }   /* table names */
+.dot { color: #abb2bf; }
+.op  { color: #56b6c2; }
+.var { color: #abb2bf; }
+
+/* ── Inline code ──────────────────────────────────────────────────────────── */
+code {
+  background: #1a1a1a; border: 1px solid var(--border2);
+  border-radius: 4px; padding: 1px 6px;
+  font-family: 'Cascadia Code','Fira Code','Consolas',monospace;
+  font-size: 13px; color: #e06c75;
+}
+
+/* ── Tables ───────────────────────────────────────────────────────────────── */
+.api-table {
+  width: 100%; border-collapse: collapse;
+  margin: 12px 0 24px; font-size: 13.5px;
+}
+.api-table th {
+  background: #191919; color: var(--text3);
+  font-size: 11px; font-weight: 700; letter-spacing: .8px; text-transform: uppercase;
+  padding: 9px 14px; text-align: left;
+  border-bottom: 1px solid var(--border2);
+}
+.api-table td {
+  padding: 9px 14px; border-bottom: 1px solid var(--border);
+  color: var(--text2); vertical-align: top;
+}
+.api-table tr:hover td { background: var(--surface); }
+.api-table td:first-child { color: var(--white); font-weight: 500; }
+.ret-badge {
+  display: inline-block;
+  background: rgba(97,175,239,.1); border: 1px solid rgba(97,175,239,.25);
+  color: #61afef; font-size: 11px; padding: 1px 7px; border-radius: 3px;
+  font-family: monospace;
+}
+
+/* ── Note / callout boxes ─────────────────────────────────────────────────── */
+.note {
+  background: rgba(97,175,239,.07);
+  border: 1px solid rgba(97,175,239,.2);
+  border-left: 3px solid #61afef;
+  border-radius: var(--radius); padding: 12px 16px;
+  margin: 16px 0 24px; font-size: 13.5px; color: var(--text2);
+}
+.warn {
+  background: rgba(229,192,123,.07);
+  border: 1px solid rgba(229,192,123,.2);
+  border-left: 3px solid #e5c07b;
+  border-radius: var(--radius); padding: 12px 16px;
+  margin: 16px 0 24px; font-size: 13.5px; color: var(--text2);
+}
+
+/* ── Tag chips ────────────────────────────────────────────────────────────── */
+.tag-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 8px 0 20px; }
+.tag {
+  display: inline-block; font-size: 11px; font-weight: 600;
+  padding: 3px 9px; border-radius: 20px;
+  background: var(--surface); border: 1px solid var(--border2);
+  color: var(--text2);
+}
+.tag.red   { background: var(--red-dim); border-color: rgba(232,48,58,.3); color: var(--red); }
+.tag.blue  { background: rgba(97,175,239,.1);  border-color: rgba(97,175,239,.3); color: #61afef; }
+.tag.green { background: rgba(152,195,121,.1); border-color: rgba(152,195,121,.28); color: #98c379; }
+
+/* ── Page nav (prev / next) ───────────────────────────────────────────────── */
+.page-nav {
+  display: flex; justify-content: space-between; gap: 12px;
+  margin-top: 56px; padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+.pnav-btn {
+  display: flex; flex-direction: column;
+  text-decoration: none; padding: 14px 18px;
+  border: 1px solid var(--border2); border-radius: var(--radius);
+  background: var(--surface); flex: 1; max-width: 240px;
+  transition: all var(--transition);
+}
+.pnav-btn:hover { border-color: var(--red); background: var(--red-dim); }
+.pnav-dir { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .8px; }
+.pnav-title { font-size: 14px; font-weight: 700; color: var(--white); margin-top: 3px; }
+.pnav-btn.next { text-align: right; margin-left: auto; }
+
+/* ── Breadcrumb ───────────────────────────────────────────────────────────── */
+.breadcrumb {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; color: var(--text3); margin-bottom: 20px;
+}
+.breadcrumb span { color: var(--text3); }
+.breadcrumb a { color: var(--text2); text-decoration: none; }
+.breadcrumb a:hover { color: var(--red); }
+
+/* ── Mobile menu toggle ───────────────────────────────────────────────────── */
+#menu-toggle { display: none; background: none; border: none; color: var(--text); font-size: 22px; cursor: pointer; padding: 4px; }
+
+/* ── Responsive ───────────────────────────────────────────────────────────── */
+@media (max-width: 900px) {
+  #content { padding: 32px 28px 60px; }
+  .hero { padding: 28px 24px; }
+  .hero h1 { font-size: 24px; }
+}
+@media (max-width: 700px) {
+  #menu-toggle { display: block; }
+  .nav-links { display: none; }
+  #sidebar {
+    position: fixed; left: 0; top: var(--nav-h); bottom: 0; z-index: 90;
+    transform: translateX(-100%); transition: transform .25s ease;
+    width: 240px;
+  }
+  #sidebar.open { transform: translateX(0); box-shadow: 4px 0 24px rgba(0,0,0,.6); }
+  #content { padding: 24px 18px 60px; }
+  .code-wrap { font-size: 12px; }
+  .search-wrap { width: 160px; }
+  .page-nav { flex-direction: column; }
+  .pnav-btn { max-width: 100%; }
+  .pnav-btn.next { margin-left: 0; text-align: left; }
+}
+</style>
+</head>
+<body>
+
+<!-- ── Navbar ──────────────────────────────────────────────────────────────── -->
+<nav id="navbar">
+  <button id="menu-toggle" onclick="toggleSidebar()" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
+  <a class="nav-logo" href="#" onclick="showPage('home')">
+    <div class="nav-logo-icon">E</div>
+    <span class="nav-logo-text">Eder<span>Engine</span></span>
+  </a>
+  <div class="nav-divider"></div>
+  <ul class="nav-links">
+    <li><a href="#" onclick="showPage('home')" id="nav-home">Home</a></li>
+    <li><a href="#" onclick="showPage('lifecycle')" id="nav-lifecycle">Lifecycle</a></li>
+    <li><a href="#" onclick="showPage('components')" id="nav-components">Components</a></li>
+    <li><a href="#" onclick="showPage('system')" id="nav-system">System</a></li>
+    <li><a href="#" onclick="showPage('examples')" id="nav-examples">Examples</a></li>
+  </ul>
+  <div class="search-wrap" style="margin-left:auto">
+    <input type="text" id="search-input" placeholder="Search API..." autocomplete="off" oninput="onSearch(this.value)" onfocus="onSearch(this.value)" onblur="setTimeout(()=>closeSearch(),200)"/>
+    <span class="search-icon"><i class="fa-solid fa-magnifying-glass"></i></span>
+    <div id="search-results"></div>
+  </div>
+</nav>
+
+<!-- ── Layout ──────────────────────────────────────────────────────────────── -->
+<div id="layout">
+
+  <!-- ── Sidebar ─────────────────────────────────────────────────────────── -->
+  <nav id="sidebar">
+    <div class="sidebar-section">
+      <span class="sidebar-label">Getting Started</span>
+      <a class="sidebar-link" href="#" onclick="showPage('home')"><span class="dot"></span>Overview</a>
+      <a class="sidebar-link" href="#" onclick="showPage('lifecycle')"><span class="dot"></span>Script Lifecycle</a>
+    </div>
+    <div class="sidebar-section">
+      <span class="sidebar-label">Components</span>
+      <a class="sidebar-link" href="#" onclick="showPage('transform')"><span class="dot"></span>Transform</a>
+      <a class="sidebar-link" href="#" onclick="showPage('tag')"><span class="dot"></span>Tag</a>
+      <a class="sidebar-link" href="#" onclick="showPage('rigidbody')"><span class="dot"></span>Rigidbody</a>
+      <a class="sidebar-link" href="#" onclick="showPage('collider')"><span class="dot"></span>Collider</a>
+      <a class="sidebar-link" href="#" onclick="showPage('hierarchy')"><span class="dot"></span>Hierarchy</a>
+      <a class="sidebar-link" href="#" onclick="showPage('meshrenderer')"><span class="dot"></span>MeshRenderer</a>
+      <a class="sidebar-link" href="#" onclick="showPage('light')"><span class="dot"></span>Light</a>
+      <a class="sidebar-link" href="#" onclick="showPage('animation')"><span class="dot"></span>Animation</a>
+      <a class="sidebar-link" href="#" onclick="showPage('volumetricfog')"><span class="dot"></span>VolumetricFog</a>
+      <a class="sidebar-link" href="#" onclick="showPage('layer')"><span class="dot"></span>Layer</a>
+    </div>
+    <div class="sidebar-section">
+      <span class="sidebar-label">Utilities</span>
+      <a class="sidebar-link" href="#" onclick="showPage('entity')"><span class="dot"></span>Entity</a>
+      <a class="sidebar-link" href="#" onclick="showPage('vec3')"><span class="dot"></span>Vec3</a>
+      <a class="sidebar-link" href="#" onclick="showPage('script')"><span class="dot"></span>Script</a>
+      <a class="sidebar-link" href="#" onclick="showPage('system')"><span class="dot"></span>System</a>
+      <a class="sidebar-link" href="#" onclick="showPage('physics')"><span class="dot"></span>Physics</a>
+    </div>
+    <div class="sidebar-section">
+      <span class="sidebar-label">Examples</span>
+      <a class="sidebar-link" href="#" onclick="showPage('examples')"><span class="dot"></span>Code Examples</a>
+    </div>
+  </nav>
+
+  <!-- ── Content ─────────────────────────────────────────────────────────── -->
+  <main id="content">
+
+    <!-- ═══════════════════════════════ HOME ═══════════════════════════════ -->
+    <section class="page active" id="page-home">
+      <div class="hero">
+        <div class="hero-badge"><i class="fa-solid fa-code"></i> Lua Scripting API</div>
+        <h1>EderEngine <span>Documentation</span></h1>
+        <p>Every entity with a <code>ScriptComponent</code> runs inside an isolated <code>sol::environment</code>. The following global tables are available in every script.</p>
+      </div>
+      <div class="quick-cards">
+        <a class="qcard" href="#" onclick="showPage('lifecycle')">
+          <div class="qcard-icon"><i class="fa-solid fa-bolt"></i></div>
+          <div class="qcard-title">Lifecycle</div>
+          <div class="qcard-sub">OnStart, OnUpdate, callbacks</div>
+        </a>
+        <a class="qcard" href="#" onclick="showPage('transform')">
+          <div class="qcard-icon"><i class="fa-solid fa-arrows-up-down-left-right"></i></div>
+          <div class="qcard-title">Transform</div>
+          <div class="qcard-sub">Position, rotation, scale</div>
+        </a>
+        <a class="qcard" href="#" onclick="showPage('rigidbody')">
+          <div class="qcard-icon"><i class="fa-solid fa-circle-dot"></i></div>
+          <div class="qcard-title">Rigidbody</div>
+          <div class="qcard-sub">Physics, velocity, mass</div>
+        </a>
+        <a class="qcard" href="#" onclick="showPage('light')">
+          <div class="qcard-icon"><i class="fa-solid fa-lightbulb"></i></div>
+          <div class="qcard-title">Light</div>
+          <div class="qcard-sub">Point, spot, directional</div>
+        </a>
+        <a class="qcard" href="#" onclick="showPage('system')">
+          <div class="qcard-icon"><i class="fa-solid fa-gear"></i></div>
+          <div class="qcard-title">System</div>
+          <div class="qcard-sub">Files, time, OS</div>
+        </a>
+        <a class="qcard" href="#" onclick="showPage('examples')">
+          <div class="qcard-icon"><i class="fa-solid fa-book-open"></i></div>
+          <div class="qcard-title">Examples</div>
+          <div class="qcard-sub">Ready-to-use snippets</div>
+        </a>
+      </div>
+
+      <h3>All available tables</h3>
+      <table class="api-table">
+        <thead><tr><th>Table</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Transform</code></td><td>Local position, rotation (degrees) and scale</td></tr>
+          <tr><td><code>Tag</code></td><td>Entity name tag</td></tr>
+          <tr><td><code>Rigidbody</code></td><td>Mass, velocity, drag, gravity, kinematic flag</td></tr>
+          <tr><td><code>Collider</code></td><td>Shape, trigger, physics material properties</td></tr>
+          <tr><td><code>Hierarchy</code></td><td>Parent / child navigation</td></tr>
+          <tr><td><code>MeshRenderer</code></td><td>Visibility, shadows, material</td></tr>
+          <tr><td><code>Light</code></td><td>Directional / Point / Spot — color, range, volumetric</td></tr>
+          <tr><td><code>Animation</code></td><td>Play, stop, clip, speed, looping</td></tr>
+          <tr><td><code>VolumetricFog</code></td><td>Density, distance, scatter, color</td></tr>
+          <tr><td><code>Layer</code></td><td>Layer index (0-31) and collision/raycast mask per entity</td></tr>
+          <tr><td><code>Entity</code></td><td>Create, destroy, isValid</td></tr>
+          <tr><td><code>Vec3</code></td><td>length, dot, normalize</td></tr>
+          <tr><td><code>Script</code></td><td>Call functions across entity scripts</td></tr>
+          <tr><td><code>System</code></td><td>Files, directories, time, OS info</td></tr>
+          <tr><td><code>Physics</code></td><td>Raycast scene queries with optional layer mask</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ══════════════════════════ LIFECYCLE ═══════════════════════════════ -->
+    <section class="page" id="page-lifecycle">
+      <div class="breadcrumb">
+        <a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Lifecycle</span>
+      </div>
+      <h2>Script Lifecycle <span class="badge">Core</span></h2>
+      <p class="page-desc">Functions called automatically by the engine each frame or on physics events.</p>
+
+      <h3>Basic callbacks</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnStart</span>()
+    <span class="cmt">-- Called once the first frame the entity is active.</span>
+<span class="kw">end</span>
+
+<span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="cmt">-- Called every frame. dt = delta-time in seconds.</span>
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Collision callbacks</h3>
+      <div class="note">Requires the entity to have both a <code>Collider</code> and a <code>Rigidbody</code> component.</div>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnCollisionEnter</span>(other, point, normal)
+    <span class="cmt">-- other = entity id of the colliding entity</span>
+<span class="kw">end</span>
+
+<span class="kw">function</span> <span class="fn">OnCollisionStay</span>(other, point, normal) <span class="kw">end</span>
+<span class="kw">function</span> <span class="fn">OnCollisionExit</span>(other, point, normal) <span class="kw">end</span>
+
+<span class="kw">function</span> <span class="fn">OnTriggerEnter</span>(other) <span class="kw">end</span>  <span class="cmt">-- trigger zone entered</span>
+<span class="kw">function</span> <span class="fn">OnTriggerExit</span>(other)  <span class="kw">end</span>  <span class="cmt">-- trigger zone exited</span></pre>
+      </div>
+
+      <h3>Built-in globals</h3>
+      <table class="api-table">
+        <thead><tr><th>Name</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>this_entity</code></td><td><span class="ret-badge">int</span></td><td>Entity id this script belongs to</td></tr>
+          <tr><td><code>print(...)</code></td><td></td><td>Prints to stderr tagged with entity id</td></tr>
+          <tr><td><code>log(msg)</code></td><td></td><td>Alias for <code>print</code></td></tr>
+        </tbody>
+      </table>
+
+      <div class="page-nav">
+        <a class="pnav-btn" href="#" onclick="showPage('home')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Overview</span></a>
+        <a class="pnav-btn next" href="#" onclick="showPage('transform')"><span class="pnav-dir">Next →</span><span class="pnav-title">Transform</span></a>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════ TRANSFORM ═══════════════════════════════ -->
+    <section class="page" id="page-transform">
+      <div class="breadcrumb">
+        <a href="#" onclick="showPage('home')">Home</a><span>/</span><a href="#" onclick="showPage('components')">Components</a><span>/</span><span>Transform</span>
+      </div>
+      <h2>Transform <span class="badge">Component</span></h2>
+      <p class="page-desc">Local position, rotation and scale of an entity. Rotation values are in <strong>degrees</strong> (pitch, yaw, roll).</p>
+
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Transform.getPosition(e)</code></td><td><span class="ret-badge">{x,y,z}</span></td><td>Local position</td></tr>
+          <tr><td><code>Transform.setPosition(e, x, y, z)</code></td><td></td><td>Set local position</td></tr>
+          <tr><td><code>Transform.getRotation(e)</code></td><td><span class="ret-badge">{x,y,z}</span></td><td>Euler angles in degrees</td></tr>
+          <tr><td><code>Transform.setRotation(e, x, y, z)</code></td><td></td><td>Set euler rotation (degrees)</td></tr>
+          <tr><td><code>Transform.getScale(e)</code></td><td><span class="ret-badge">{x,y,z}</span></td><td>Local scale</td></tr>
+          <tr><td><code>Transform.setScale(e, x, y, z)</code></td><td></td><td>Set local scale</td></tr>
+          <tr><td><code>Transform.getWorldPosition(e)</code></td><td><span class="ret-badge">{x,y,z}</span></td><td>World-space position</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Quick example</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="kw">local</span> pos = <span class="tbl">Transform</span>.getPosition(this_entity)
+    <span class="tbl">Transform</span>.setPosition(this_entity, pos.x, pos.y, pos.z + <span class="num">5</span> * dt)
+<span class="kw">end</span></pre>
+      </div>
+
+      <div class="page-nav">
+        <a class="pnav-btn" href="#" onclick="showPage('lifecycle')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Lifecycle</span></a>
+        <a class="pnav-btn next" href="#" onclick="showPage('rigidbody')"><span class="pnav-dir">Next →</span><span class="pnav-title">Rigidbody</span></a>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════ TAG ════════════════════════════════════ -->
+    <section class="page" id="page-tag">
+      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Tag</span></div>
+      <h2>Tag <span class="badge">Component</span></h2>
+      <p class="page-desc">Read or change the name tag of any entity.</p>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Tag.getName(e)</code></td><td><span class="ret-badge">string</span></td><td>Entity name</td></tr>
+          <tr><td><code>Tag.setName(e, name)</code></td><td></td><td>Rename entity</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ════════════════════════ RIGIDBODY ═════════════════════════════════ -->
+    <section class="page" id="page-rigidbody">
+      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><a href="#" onclick="showPage('components')">Components</a><span>/</span><span>Rigidbody</span></div>
+      <h2>Rigidbody <span class="badge">Component</span></h2>
+      <p class="page-desc">PhysX-backed rigid body. Controls mass, velocity, drag and physics behaviour.</p>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Rigidbody.hasRigidbody(e)</code></td><td><span class="ret-badge">bool</span></td><td>Component exists on entity</td></tr>
+          <tr><td><code>Rigidbody.getMass(e)</code></td><td><span class="ret-badge">float</span></td><td>Mass in kg</td></tr>
+          <tr><td><code>Rigidbody.setMass(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Rigidbody.getVelocity(e)</code></td><td><span class="ret-badge">{x,y,z}</span></td><td>Linear velocity</td></tr>
+          <tr><td><code>Rigidbody.setVelocity(e, x, y, z)</code></td><td></td><td></td></tr>
+          <tr><td><code>Rigidbody.getAngularVelocity(e)</code></td><td><span class="ret-badge">{x,y,z}</span></td><td>Angular velocity (rad/s)</td></tr>
+          <tr><td><code>Rigidbody.isKinematic(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>Rigidbody.setKinematic(e, bool)</code></td><td></td><td>Toggle kinematic mode</td></tr>
+          <tr><td><code>Rigidbody.useGravity(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>Rigidbody.setGravity(e, bool)</code></td><td></td><td>Enable / disable gravity</td></tr>
+          <tr><td><code>Rigidbody.getLinearDrag(e)</code></td><td><span class="ret-badge">float</span></td><td></td></tr>
+          <tr><td><code>Rigidbody.setLinearDrag(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Rigidbody.getAngularDrag(e)</code></td><td><span class="ret-badge">float</span></td><td></td></tr>
+          <tr><td><code>Rigidbody.setAngularDrag(e, v)</code></td><td></td><td></td></tr>
+        </tbody>
+      </table>
+      <div class="page-nav">
+        <a class="pnav-btn" href="#" onclick="showPage('transform')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Transform</span></a>
+        <a class="pnav-btn next" href="#" onclick="showPage('collider')"><span class="pnav-dir">Next →</span><span class="pnav-title">Collider</span></a>
+      </div>
+    </section>
+
+    <!-- ═════════════════════════ COLLIDER ═════════════════════════════════ -->
+    <section class="page" id="page-collider">
+      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><a href="#" onclick="showPage('components')">Components</a><span>/</span><span>Collider</span></div>
+      <h2>Collider <span class="badge">Component</span></h2>
+      <p class="page-desc">Shape, trigger flag and physics material properties.</p>
+      <div class="tag-row">
+        <span class="tag red">Box</span>
+        <span class="tag blue">Sphere</span>
+        <span class="tag green">Capsule</span>
+      </div>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Collider.hasCollider(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>Collider.isTrigger(e)</code></td><td><span class="ret-badge">bool</span></td><td>Is trigger zone?</td></tr>
+          <tr><td><code>Collider.setTrigger(e, bool)</code></td><td></td><td></td></tr>
+          <tr><td><code>Collider.getShape(e)</code></td><td><span class="ret-badge">string</span></td><td>"Box" / "Sphere" / "Capsule"</td></tr>
+          <tr><td><code>Collider.setShape(e, shape)</code></td><td></td><td></td></tr>
+          <tr><td><code>Collider.getBoxHalfExtents(e)</code></td><td><span class="ret-badge">{x,y,z}</span></td><td>Box half-size</td></tr>
+          <tr><td><code>Collider.setBoxHalfExtents(e, x, y, z)</code></td><td></td><td></td></tr>
+          <tr><td><code>Collider.getRadius(e)</code></td><td><span class="ret-badge">float</span></td><td>Sphere / Capsule radius</td></tr>
+          <tr><td><code>Collider.setRadius(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Collider.getCapsuleHalfHeight(e)</code></td><td><span class="ret-badge">float</span></td><td></td></tr>
+          <tr><td><code>Collider.setCapsuleHalfHeight(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Collider.getCenter(e)</code></td><td><span class="ret-badge">{x,y,z}</span></td><td>Collider offset</td></tr>
+          <tr><td><code>Collider.setCenter(e, x, y, z)</code></td><td></td><td></td></tr>
+          <tr><td><code>Collider.getStaticFriction(e)</code></td><td><span class="ret-badge">float</span></td><td></td></tr>
+          <tr><td><code>Collider.setStaticFriction(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Collider.getDynamicFriction(e)</code></td><td><span class="ret-badge">float</span></td><td></td></tr>
+          <tr><td><code>Collider.setDynamicFriction(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Collider.getRestitution(e)</code></td><td><span class="ret-badge">float</span></td><td>Bounciness 0–1</td></tr>
+          <tr><td><code>Collider.setRestitution(e, v)</code></td><td></td><td></td></tr>
+        </tbody>
+      </table>
+      <div class="page-nav">
+        <a class="pnav-btn" href="#" onclick="showPage('rigidbody')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Rigidbody</span></a>
+        <a class="pnav-btn next" href="#" onclick="showPage('hierarchy')"><span class="pnav-dir">Next →</span><span class="pnav-title">Hierarchy</span></a>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════ HIERARCHY ══════════════════════════════════ -->
+    <section class="page" id="page-hierarchy">
+      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Hierarchy</span></div>
+      <h2>Hierarchy <span class="badge">Component</span></h2>
+      <p class="page-desc">Navigate the entity parent / child tree.</p>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Hierarchy.hasParent(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>Hierarchy.getParent(e)</code></td><td><span class="ret-badge">entity id</span></td><td>NULL_ENTITY if root</td></tr>
+          <tr><td><code>Hierarchy.getChildCount(e)</code></td><td><span class="ret-badge">int</span></td><td></td></tr>
+          <tr><td><code>Hierarchy.getChild(e, idx)</code></td><td><span class="ret-badge">entity id</span></td><td>0-based index</td></tr>
+        </tbody>
+      </table>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnStart</span>()
+    <span class="kw">local</span> count = <span class="tbl">Hierarchy</span>.getChildCount(this_entity)
+    <span class="kw">for</span> i = <span class="num">0</span>, count - <span class="num">1</span> <span class="kw">do</span>
+        <span class="kw">local</span> child = <span class="tbl">Hierarchy</span>.getChild(this_entity, i)
+        print(<span class="str">"child: "</span> .. child)
+    <span class="kw">end</span>
+<span class="kw">end</span></pre>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════ MESHRENDERER ═══════════════════════════════ -->
+    <section class="page" id="page-meshrenderer">
+      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>MeshRenderer</span></div>
+      <h2>MeshRenderer <span class="badge">Component</span></h2>
+      <p class="page-desc">Control mesh visibility, shadow casting and material.</p>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>MeshRenderer.hasMeshRenderer(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>MeshRenderer.isVisible(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>MeshRenderer.setVisible(e, bool)</code></td><td></td><td>Show / hide mesh</td></tr>
+          <tr><td><code>MeshRenderer.castsShadow(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>MeshRenderer.setCastShadow(e, bool)</code></td><td></td><td></td></tr>
+          <tr><td><code>MeshRenderer.getMaterialName(e)</code></td><td><span class="ret-badge">string</span></td><td></td></tr>
+          <tr><td><code>MeshRenderer.setMaterialName(e, name)</code></td><td></td><td>Switch material at runtime</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ════════════════════════ LIGHT ═════════════════════════════════════ -->
+    <section class="page" id="page-light">
+      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><a href="#" onclick="showPage('components')">Components</a><span>/</span><span>Light</span></div>
+      <h2>Light <span class="badge">Component</span></h2>
+      <p class="page-desc">Directional, Point and Spot lights with volumetric and sun-shafts support.</p>
+      <div class="tag-row">
+        <span class="tag red">Directional</span>
+        <span class="tag blue">Point</span>
+        <span class="tag green">Spot</span>
+      </div>
+
+      <h3>Base properties</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Light.hasLight(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>Light.getType(e)</code></td><td><span class="ret-badge">string</span></td><td>"Directional" / "Point" / "Spot"</td></tr>
+          <tr><td><code>Light.setType(e, type)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getColor(e)</code></td><td><span class="ret-badge">{r,g,b}</span></td><td></td></tr>
+          <tr><td><code>Light.setColor(e, r, g, b)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getIntensity(e)</code></td><td><span class="ret-badge">float</span></td><td></td></tr>
+          <tr><td><code>Light.setIntensity(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getRange(e)</code></td><td><span class="ret-badge">float</span></td><td>Point / Spot only</td></tr>
+          <tr><td><code>Light.setRange(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getInnerCone(e)</code></td><td><span class="ret-badge">float°</span></td><td>Spot only</td></tr>
+          <tr><td><code>Light.setInnerCone(e, deg)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getOuterCone(e)</code></td><td><span class="ret-badge">float°</span></td><td>Spot only</td></tr>
+          <tr><td><code>Light.setOuterCone(e, deg)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.castsShadow(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>Light.setCastShadow(e, bool)</code></td><td></td><td></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Volumetric <span style="font-size:12px;font-weight:400;color:var(--text3)">(Directional only)</span></h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Light.isVolumetricEnabled(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>Light.setVolumetricEnabled(e, bool)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getVolDensity(e)</code></td><td><span class="ret-badge">float</span></td><td>σ_s scatter coefficient (0.005–0.05)</td></tr>
+          <tr><td><code>Light.setVolDensity(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getVolIntensity(e)</code></td><td><span class="ret-badge">float</span></td><td>Output multiplier</td></tr>
+          <tr><td><code>Light.setVolIntensity(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.setVolTint(e, r, g, b)</code></td><td></td><td>Color tint on scattered light</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Sun Shafts <span style="font-size:12px;font-weight:400;color:var(--text3)">(Directional only)</span></h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Light.isSunShaftsEnabled(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>Light.setSunShaftsEnabled(e, bool)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getShaftsDensity(e)</code></td><td><span class="ret-badge">float</span></td><td></td></tr>
+          <tr><td><code>Light.setShaftsDensity(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getShaftsExposure(e)</code></td><td><span class="ret-badge">float</span></td><td></td></tr>
+          <tr><td><code>Light.setShaftsExposure(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.setShaftsTint(e, r, g, b)</code></td><td></td><td></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Pulsing light example</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">local</span> t = <span class="num">0</span>
+<span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    t = t + dt
+    <span class="tbl">Light</span>.setIntensity(this_entity, <span class="num">1.0</span> + math.sin(t * <span class="num">3</span>) * <span class="num">0.5</span>)
+<span class="kw">end</span></pre>
+      </div>
+      <div class="page-nav">
+        <a class="pnav-btn" href="#" onclick="showPage('meshrenderer')"><span class="pnav-dir">← Previous</span><span class="pnav-title">MeshRenderer</span></a>
+        <a class="pnav-btn next" href="#" onclick="showPage('animation')"><span class="pnav-dir">Next →</span><span class="pnav-title">Animation</span></a>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════ ANIMATION ══════════════════════════════════ -->
+    <section class="page" id="page-animation">
+      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Animation</span></div>
+      <h2>Animation <span class="badge">Component</span></h2>
+      <p class="page-desc">Clip index is 0-based and maps to the clips embedded in the mesh asset.</p>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Animation.hasAnimation(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>Animation.play(e)</code></td><td></td><td></td></tr>
+          <tr><td><code>Animation.stop(e)</code></td><td></td><td></td></tr>
+          <tr><td><code>Animation.isPlaying(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>Animation.getClip(e)</code></td><td><span class="ret-badge">int</span></td><td>Current clip index</td></tr>
+          <tr><td><code>Animation.setClip(e, idx)</code></td><td></td><td>Switch clip (0-based)</td></tr>
+          <tr><td><code>Animation.getSpeed(e)</code></td><td><span class="ret-badge">float</span></td><td>Playback speed multiplier</td></tr>
+          <tr><td><code>Animation.setSpeed(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Animation.isLooping(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>Animation.setLoop(e, bool)</code></td><td></td><td></td></tr>
+          <tr><td><code>Animation.getTime(e)</code></td><td><span class="ret-badge">float</span></td><td>Seconds into current clip</td></tr>
+          <tr><td><code>Animation.setBlendDuration(e, sec)</code></td><td></td><td>Crossfade duration when changing clip</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ══════════════════════ VOLUMETRICFOG ═══════════════════════════════ -->
+    <section class="page" id="page-volumetricfog">
+      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>VolumetricFog</span></div>
+      <h2>VolumetricFog <span class="badge">Component</span></h2>
+      <p class="page-desc">Post-process volumetric fog applied to the full scene.</p>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>VolumetricFog.hasFog(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>VolumetricFog.isEnabled(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>VolumetricFog.setEnabled(e, bool)</code></td><td></td><td></td></tr>
+          <tr><td><code>VolumetricFog.getDensity(e)</code></td><td><span class="ret-badge">float</span></td><td></td></tr>
+          <tr><td><code>VolumetricFog.setDensity(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>VolumetricFog.getFogStart(e)</code></td><td><span class="ret-badge">float</span></td><td>Start distance (metres)</td></tr>
+          <tr><td><code>VolumetricFog.setFogStart(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>VolumetricFog.getFogEnd(e)</code></td><td><span class="ret-badge">float</span></td><td>End distance (metres)</td></tr>
+          <tr><td><code>VolumetricFog.setFogEnd(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>VolumetricFog.setColor(e, r, g, b)</code></td><td></td><td></td></tr>
+          <tr><td><code>VolumetricFog.setScatterStrength(e, v)</code></td><td></td><td></td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ══════════════════════════ LAYER ══════════════════════════════════ -->
+    <section class="page" id="page-layer">
+      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Layer</span></div>
+      <h2>Layer <span class="badge">Component</span></h2>
+      <p class="page-desc">Assigns an entity to one of 32 collision/rendering layers and controls which other layers it interacts with. The layer system drives both PhysX collision filtering and <code>Physics.raycast</code> queries.</p>
+
+      <div class="note">A <code>LayerComponent</code> is created automatically when you first call <code>Layer.setLayer</code> or <code>Layer.setMask</code>. Entities without one are treated as <strong>layer&nbsp;0</strong> with mask <code>0xFFFFFFFF</code> (interacts with everything).</div>
+
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Layer.hasLayer(e)</code></td><td><span class="ret-badge">bool</span></td><td>Returns true if the entity has a <code>LayerComponent</code></td></tr>
+          <tr><td><code>Layer.add(e)</code></td><td></td><td>Add a <code>LayerComponent</code> with defaults (layer 0, mask 0xFFFFFFFF). No-op if already present.</td></tr>
+          <tr><td><code>Layer.remove(e)</code></td><td></td><td>Remove the <code>LayerComponent</code>. Entity reverts to layer 0 / all-mask on next frame.</td></tr>
+          <tr><td><code>Layer.getLayer(e)</code></td><td><span class="ret-badge">int</span></td><td>Layer index (0–31). Returns 0 when absent.</td></tr>
+          <tr><td><code>Layer.setLayer(e, index)</code></td><td></td><td>Assign entity to a layer 0–31. Rebuilds physics filter data next frame.</td></tr>
+          <tr><td><code>Layer.getMask(e)</code></td><td><span class="ret-badge">int</span></td><td>Bitmask of layers this entity interacts with. Default <code>0xFFFFFFFF</code>.</td></tr>
+          <tr><td><code>Layer.setMask(e, mask)</code></td><td></td><td>Set the interaction mask as an integer bitmask.</td></tr>
+          <tr><td><code>Layer.setLayerEnabled(e, target, bool)</code></td><td></td><td>Enable or disable interaction with a single layer index.</td></tr>
+          <tr><td><code>Layer.isLayerEnabled(e, target)</code></td><td><span class="ret-badge">bool</span></td><td>Is interaction with the given layer index active?</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Layer bitmask quick reference</h3>
+      <div class="warn">Bit N = <code>(1 &lt;&lt; N)</code>. Layer 0 = 1 · Layer 1 = 2 · Layer 2 = 4 · Layer 3 = 8, etc.</div>
+
+      <h3>Setup: player vs enemy layers</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">local</span> LAYER_DEFAULT = <span class="num">0</span>
+<span class="kw">local</span> LAYER_PLAYER  = <span class="num">1</span>
+<span class="kw">local</span> LAYER_ENEMY   = <span class="num">2</span>
+<span class="kw">local</span> LAYER_TERRAIN = <span class="num">3</span>
+
+<span class="kw">function</span> <span class="fn">OnStart</span>()
+    <span class="cmt">-- Put this entity on the player layer</span>
+    <span class="tbl">Layer</span>.setLayer(this_entity, LAYER_PLAYER)
+
+    <span class="cmt">-- Collides with terrain and enemies, but NOT other players</span>
+    <span class="kw">local</span> mask = (<span class="num">1</span> <span class="op">&lt;&lt;</span> LAYER_TERRAIN) <span class="op">|</span> (<span class="num">1</span> <span class="op">&lt;&lt;</span> LAYER_ENEMY)
+    <span class="tbl">Layer</span>.setMask(this_entity, mask)
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Toggle layer at runtime</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="cmt">-- Stop colliding with bullets while shield is active</span>
+<span class="kw">function</span> <span class="fn">ActivateShield</span>()
+    <span class="tbl">Layer</span>.setLayerEnabled(this_entity, LAYER_BULLETS, <span class="kw">false</span>)
+<span class="kw">end</span>
+
+<span class="kw">function</span> <span class="fn">DeactivateShield</span>()
+    <span class="tbl">Layer</span>.setLayerEnabled(this_entity, LAYER_BULLETS, <span class="kw">true</span>)
+<span class="kw">end</span></pre>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════ PHYSICS ══════════════════════════════════ -->
+    <section class="page" id="page-physics">
+      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Physics</span></div>
+      <h2>Physics <span class="badge">Utility</span></h2>
+      <p class="page-desc">Scene-query utilities built on top of PhysX. Exposes raycast queries with optional layer filtering.</p>
+
+      <h3>Physics.raycast</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>Physics.raycast(ox,oy,oz, dx,dy,dz, maxDist [, layerMask])</code></td>
+            <td><span class="ret-badge">hit table</span></td>
+            <td>Cast a ray from origin in direction, up to maxDist metres. Returns a hit table.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Hit result fields</h3>
+      <table class="api-table">
+        <thead><tr><th>Field</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>hit</code></td><td><span class="ret-badge">bool</span></td><td>True when the ray struck an actor</td></tr>
+          <tr><td><code>entity</code></td><td><span class="ret-badge">int</span></td><td>Entity id of the struck actor, or 0 on miss</td></tr>
+          <tr><td><code>distance</code></td><td><span class="ret-badge">float</span></td><td>Distance along the ray to the hit point</td></tr>
+          <tr><td><code>x, y, z</code></td><td><span class="ret-badge">float</span></td><td>World-space hit position</td></tr>
+          <tr><td><code>nx, ny, nz</code></td><td><span class="ret-badge">float</span></td><td>World-space surface normal at the hit point</td></tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        <strong>layerMask</strong> is optional (default <code>0xFFFFFFFF</code> — hits any layer). Pass a bitmask to restrict hits to specific layers, e.g. <code>(1 &lt;&lt; 2)</code> for layer 2 only.
+      </div>
+
+      <h3>Basic — cast downward</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="kw">local</span> pos = <span class="tbl">Transform</span>.getWorldPosition(this_entity)
+    <span class="kw">local</span> h = <span class="tbl">Physics</span>.raycast(pos.x, pos.y, pos.z, <span class="num">0</span>, <span class="op">-</span><span class="num">1</span>, <span class="num">0</span>, <span class="num">10</span>)
+    <span class="kw">if</span> h.hit <span class="kw">then</span>
+        print(<span class="str">"Ground at: "</span> .. h.distance .. <span class="str">" m  entity="</span> .. h.entity)
+    <span class="kw">end</span>
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Shoot — only hit enemies (layer 2)</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">local</span> LAYER_ENEMY = <span class="num">2</span>
+
+<span class="kw">function</span> <span class="fn">Shoot</span>()
+    <span class="kw">local</span> pos = <span class="tbl">Transform</span>.getWorldPosition(this_entity)
+    <span class="kw">local</span> h = <span class="tbl">Physics</span>.raycast(pos.x, pos.y, pos.z,
+                               <span class="num">0</span>, <span class="num">0</span>, <span class="num">1</span>, <span class="num">50</span>, <span class="num">1</span> <span class="op">&lt;&lt;</span> LAYER_ENEMY)
+    <span class="kw">if</span> h.hit <span class="kw">then</span>
+        <span class="tbl">Script</span>.call(h.entity, <span class="str">"TakeDamage"</span>, <span class="num">25</span>)
+    <span class="kw">end</span>
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Slope detection via hit normal</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="kw">local</span> pos = <span class="tbl">Transform</span>.getWorldPosition(this_entity)
+    <span class="kw">local</span> h = <span class="tbl">Physics</span>.raycast(pos.x, pos.y, pos.z, <span class="num">0</span>, <span class="op">-</span><span class="num">1</span>, <span class="num">0</span>, <span class="num">5</span>)
+    <span class="kw">if</span> h.hit <span class="kw">then</span>
+        <span class="kw">local</span> slope = math.acos(h.ny) <span class="op">*</span> (<span class="num">180</span> <span class="op">/</span> math.pi)
+        print(<span class="str">"Floor slope: "</span> .. slope .. <span class="str">" deg"</span>)
+    <span class="kw">end</span>
+<span class="kw">end</span></pre>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════ ENTITY ══════════════════════════════════ -->
+    <section class="page" id="page-entity">
+      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Entity</span></div>
+      <h2>Entity <span class="badge">Utility</span></h2>
+      <p class="page-desc">Create and destroy entities at runtime.</p>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Entity.create()</code></td><td><span class="ret-badge">entity id</span></td><td>Spawns a new empty entity</td></tr>
+          <tr><td><code>Entity.destroy(e)</code></td><td></td><td>Destroys entity next frame</td></tr>
+          <tr><td><code>Entity.isValid(e)</code></td><td><span class="ret-badge">bool</span></td><td>Still alive?</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ═══════════════════════════ VEC3 ═══════════════════════════════════ -->
+    <section class="page" id="page-vec3">
+      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Vec3</span></div>
+      <h2>Vec3 <span class="badge">Utility</span></h2>
+      <p class="page-desc">Stateless math helpers operating on plain <code>{x, y, z}</code> tables.</p>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Vec3.new(x, y, z)</code></td><td><span class="ret-badge">{x,y,z}</span></td><td>Create a vec3</td></tr>
+          <tr><td><code>Vec3.length(v)</code></td><td><span class="ret-badge">float</span></td><td>Euclidean length</td></tr>
+          <tr><td><code>Vec3.dot(a, b)</code></td><td><span class="ret-badge">float</span></td><td>Dot product</td></tr>
+          <tr><td><code>Vec3.normalize(v)</code></td><td><span class="ret-badge">{x,y,z}</span></td><td>Unit vector</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ══════════════════════════ SCRIPT ══════════════════════════════════ -->
+    <section class="page" id="page-script">
+      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Script</span></div>
+      <h2>Script <span class="badge">Utility</span></h2>
+      <p class="page-desc">Call functions and read/write variables across entity script environments.</p>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Script.call(e, "Fn", ...)</code></td><td><span class="ret-badge">any</span></td><td>Call a Lua function on another entity, returns first result</td></tr>
+          <tr><td><code>Script.get(e, "var")</code></td><td><span class="ret-badge">any</span></td><td>Read a variable from another entity's env</td></tr>
+          <tr><td><code>Script.set(e, "var", val)</code></td><td></td><td>Write a value into another entity's env</td></tr>
+          <tr><td><code>Script.has(e)</code></td><td><span class="ret-badge">bool</span></td><td>Has an active script environment</td></tr>
+        </tbody>
+      </table>
+      <div class="note">
+        <code>Script.call</code> returns only the <strong>first</strong> return value. Returns <code>nil</code> if the function does not exist or the entity has no script.
+      </div>
+      <h3>Cross-entity damage example</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua — entity_enemy.lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>health = <span class="num">100</span>
+
+<span class="kw">function</span> <span class="fn">TakeDamage</span>(amount)
+    health = health - amount
+    <span class="kw">return</span> health
+<span class="kw">end</span></pre>
+      </div>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua — entity_player.lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnCollisionEnter</span>(other, point, normal)
+    <span class="kw">if</span> <span class="tbl">Script</span>.has(other) <span class="kw">then</span>
+        <span class="kw">local</span> hp = <span class="tbl">Script</span>.call(other, <span class="str">"TakeDamage"</span>, <span class="num">25</span>)
+        <span class="kw">if</span> hp <span class="kw">and</span> hp <= <span class="num">0</span> <span class="kw">then</span>
+            <span class="tbl">Entity</span>.destroy(other)
+        <span class="kw">end</span>
+    <span class="kw">end</span>
+<span class="kw">end</span></pre>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════ SYSTEM ══════════════════════════════════ -->
+    <section class="page" id="page-system">
+      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>System</span></div>
+      <h2>System <span class="badge">Utility</span></h2>
+      <p class="page-desc">Operating system utilities: files, directories, time and machine info.</p>
+
+      <h3>Time</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>System.getTime()</code></td><td><span class="ret-badge">float</span></td><td>Seconds since epoch (unix timestamp)</td></tr>
+          <tr><td><code>System.getDate(fmt?)</code></td><td><span class="ret-badge">string</span></td><td>Formatted date. Default: <code>"%Y-%m-%d %H:%M:%S"</code></td></tr>
+          <tr><td><code>System.getClock()</code></td><td><span class="ret-badge">float</span></td><td>CPU seconds since program start</td></tr>
+        </tbody>
+      </table>
+      <div class="warn">Common strftime codes: <code>%Y</code> year · <code>%m</code> month · <code>%d</code> day · <code>%H</code> hour · <code>%M</code> minute · <code>%S</code> second</div>
+
+      <h3>Machine / environment</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>System.getComputerName()</code></td><td><span class="ret-badge">string</span></td><td>PC hostname</td></tr>
+          <tr><td><code>System.getUserName()</code></td><td><span class="ret-badge">string</span></td><td>Current session user</td></tr>
+          <tr><td><code>System.getEnv("VAR")</code></td><td><span class="ret-badge">string</span></td><td>Environment variable (empty if absent)</td></tr>
+          <tr><td><code>System.getCwd()</code></td><td><span class="ret-badge">string</span></td><td>Current working directory</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Files</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>System.readFile(path)</code></td><td><span class="ret-badge">string|nil</span></td><td>Full file contents, or nil</td></tr>
+          <tr><td><code>System.writeFile(path, str)</code></td><td><span class="ret-badge">bool</span></td><td>Overwrite / create file</td></tr>
+          <tr><td><code>System.appendFile(path, str)</code></td><td><span class="ret-badge">bool</span></td><td>Append without truncating</td></tr>
+          <tr><td><code>System.deleteFile(path)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>System.fileSize(path)</code></td><td><span class="ret-badge">int</span></td><td>Bytes, or -1 on error</td></tr>
+          <tr><td><code>System.exists(path)</code></td><td><span class="ret-badge">bool</span></td><td>File or directory exists</td></tr>
+          <tr><td><code>System.isFile(path)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+          <tr><td><code>System.isDir(path)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Directories</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>System.createDir(path)</code></td><td><span class="ret-badge">bool</span></td><td>Creates all parent dirs too</td></tr>
+          <tr><td><code>System.listFiles(path, recursive?)</code></td><td><span class="ret-badge">table</span></td><td>Array of file names</td></tr>
+          <tr><td><code>System.listDirs(path)</code></td><td><span class="ret-badge">table</span></td><td>Array of subdirectory names</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Save file example</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnStart</span>()
+    <span class="kw">local</span> raw = <span class="tbl">System</span>.readFile(<span class="str">"saves/config.json"</span>)
+    <span class="kw">if</span> raw <span class="kw">then</span>
+        print(<span class="str">"Config loaded: "</span> .. #raw .. <span class="str">" bytes"</span>)
+    <span class="kw">else</span>
+        <span class="tbl">System</span>.createDir(<span class="str">"saves"</span>)
+        <span class="tbl">System</span>.writeFile(<span class="str">"saves/config.json"</span>, <span class="str">'{"volume":1.0}'</span>)
+    <span class="kw">end</span>
+<span class="kw">end</span></pre>
+      </div>
+    </section>
+
+    <!-- ════════════════════════ COMPONENTS OVERVIEW ═══════════════════════ -->
+    <section class="page" id="page-components">
+      <h2>Components <span class="badge">Reference</span></h2>
+      <p class="page-desc">All ECS components accessible from Lua. Click any card to open its reference.</p>
+      <div class="quick-cards" style="margin-top:0">
+        <a class="qcard" href="#" onclick="showPage('transform')"><div class="qcard-icon"><i class="fa-solid fa-arrows-up-down-left-right"></i></div><div class="qcard-title">Transform</div></a>
+        <a class="qcard" href="#" onclick="showPage('tag')"><div class="qcard-icon"><i class="fa-solid fa-tag"></i></div><div class="qcard-title">Tag</div></a>
+        <a class="qcard" href="#" onclick="showPage('rigidbody')"><div class="qcard-icon"><i class="fa-solid fa-circle-dot"></i></div><div class="qcard-title">Rigidbody</div></a>
+        <a class="qcard" href="#" onclick="showPage('collider')"><div class="qcard-icon"><i class="fa-solid fa-shield-halved"></i></div><div class="qcard-title">Collider</div></a>
+        <a class="qcard" href="#" onclick="showPage('hierarchy')"><div class="qcard-icon"><i class="fa-solid fa-sitemap"></i></div><div class="qcard-title">Hierarchy</div></a>
+        <a class="qcard" href="#" onclick="showPage('meshrenderer')"><div class="qcard-icon"><i class="fa-solid fa-cube"></i></div><div class="qcard-title">MeshRenderer</div></a>
+        <a class="qcard" href="#" onclick="showPage('light')"><div class="qcard-icon"><i class="fa-solid fa-lightbulb"></i></div><div class="qcard-title">Light</div></a>
+        <a class="qcard" href="#" onclick="showPage('animation')"><div class="qcard-icon"><i class="fa-solid fa-film"></i></div><div class="qcard-title">Animation</div></a>
+        <a class="qcard" href="#" onclick="showPage('volumetricfog')"><div class="qcard-icon"><i class="fa-solid fa-wind"></i></div><div class="qcard-title">VolumetricFog</div></a>
+        <a class="qcard" href="#" onclick="showPage('layer')"><div class="qcard-icon"><i class="fa-solid fa-layer-group"></i></div><div class="qcard-title">Layer</div></a>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════ EXAMPLES ═══════════════════════════════ -->
+    <section class="page" id="page-examples">
+      <h2>Examples <span class="badge">Snippets</span></h2>
+      <p class="page-desc">Ready-to-use Lua scripts for common game patterns.</p>
+
+      <h3>Move entity forward</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="kw">local</span> pos = <span class="tbl">Transform</span>.getPosition(this_entity)
+    <span class="tbl">Transform</span>.setPosition(this_entity, pos.x, pos.y, pos.z + <span class="num">5</span> * dt)
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Pulse a point light</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">local</span> t = <span class="num">0</span>
+<span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    t = t + dt
+    <span class="tbl">Light</span>.setIntensity(this_entity, <span class="num">1.0</span> + math.sin(t * <span class="num">3</span>) * <span class="num">0.5</span>)
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Play animation on collision</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnCollisionEnter</span>(other, point, normal)
+    <span class="tbl">Animation</span>.setClip(this_entity, <span class="num">1</span>)
+    <span class="tbl">Animation</span>.play(this_entity)
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Hide mesh after delay</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">local</span> timer = <span class="num">0</span>
+<span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    timer = timer + dt
+    <span class="kw">if</span> timer >= <span class="num">3.0</span> <span class="kw">then</span>
+        <span class="tbl">MeshRenderer</span>.setVisible(this_entity, <span class="kw">false</span>)
+    <span class="kw">end</span>
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Session log</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnStart</span>()
+    <span class="kw">local</span> pc   = <span class="tbl">System</span>.getComputerName()
+    <span class="kw">local</span> user = <span class="tbl">System</span>.getUserName()
+    <span class="kw">local</span> date = <span class="tbl">System</span>.getDate()
+    <span class="tbl">System</span>.createDir(<span class="str">"logs"</span>)
+    <span class="tbl">System</span>.appendFile(<span class="str">"logs/session.log"</span>,
+        date .. <span class="str">" | "</span> .. user .. <span class="str">"@"</span> .. pc .. <span class="str">" | started\n"</span>)
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Cross-entity damage system</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua — enemy.lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>health = <span class="num">100</span>
+
+<span class="kw">function</span> <span class="fn">TakeDamage</span>(amount)
+    health = health - amount
+    print(<span class="str">"HP: "</span> .. health)
+    <span class="kw">return</span> health
+<span class="kw">end</span></pre>
+      </div>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua — player.lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnCollisionEnter</span>(other, point, normal)
+    <span class="kw">if</span> <span class="tbl">Script</span>.has(other) <span class="kw">then</span>
+        <span class="kw">local</span> hp = <span class="tbl">Script</span>.call(other, <span class="str">"TakeDamage"</span>, <span class="num">25</span>)
+        <span class="kw">if</span> hp <span class="kw">and</span> hp <= <span class="num">0</span> <span class="kw">then</span>
+            <span class="tbl">Entity</span>.destroy(other)
+        <span class="kw">end</span>
+    <span class="kw">end</span>
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Raycast example</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">local</span> LAYER_ENEMY = <span class="num">2</span>
+
+<span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="kw">local</span> pos = <span class="tbl">Transform</span>.getWorldPosition(this_entity)
+    <span class="cmt">-- Ray straight down, only hit enemies (layer 2)</span>
+    <span class="kw">local</span> h = <span class="tbl">Physics</span>.raycast(pos.x, pos.y, pos.z,
+                                    <span class="num">0</span>, <span class="op">-</span><span class="num">1</span>, <span class="num">0</span>, <span class="num">20</span>, <span class="num">1</span> <span class="op">&lt;&lt;</span> LAYER_ENEMY)
+    <span class="kw">if</span> h.hit <span class="kw">then</span>
+        <span class="tbl">Script</span>.call(h.entity, <span class="str">"TakeDamage"</span>, <span class="num">25</span>)
+    <span class="kw">end</span>
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Walk child hierarchy</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnStart</span>()
+    <span class="kw">local</span> count = <span class="tbl">Hierarchy</span>.getChildCount(this_entity)
+    <span class="kw">for</span> i = <span class="num">0</span>, count - <span class="num">1</span> <span class="kw">do</span>
+        <span class="kw">local</span> child = <span class="tbl">Hierarchy</span>.getChild(this_entity, i)
+        <span class="tbl">MeshRenderer</span>.setVisible(child, <span class="kw">false</span>)
+    <span class="kw">end</span>
+<span class="kw">end</span></pre>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>
+// ── Page routing ────────────────────────────────────────────────────────────
+const pages = document.querySelectorAll('.page');
+const sidebarLinks = document.querySelectorAll('.sidebar-link');
+
+function showPage(id, pushState = true) {
+  pages.forEach(p => p.classList.remove('active'));
+  const target = document.getElementById('page-' + id);
+  if (target) {
+    target.classList.add('active');
+    document.getElementById('content').scrollTop = 0;
+    window.scrollTo(0, 0);
+  }
+
+  // Update sidebar active state
+  sidebarLinks.forEach(l => {
+    const onclick = l.getAttribute('onclick') || '';
+    l.classList.toggle('active', onclick.includes("'" + id + "'"));
+  });
+
+  // Update nav active
+  document.querySelectorAll('.nav-links a').forEach(a => {
+    const onclick = a.getAttribute('onclick') || '';
+    a.classList.toggle('active', onclick.includes("'" + id + "'"));
+  });
+
+  // Update URL hash
+  if (pushState) history.pushState({page: id}, '', '#' + id);
+
+  // Close mobile sidebar
+  document.getElementById('sidebar').classList.remove('open');
+
+  return false;
+}
+
+// Handle back/forward
+window.addEventListener('popstate', e => {
+  const hash = location.hash.replace('#', '') || 'home';
+  showPage(hash, false);
+});
+
+// Load from hash on start
+(function() {
+  const hash = location.hash.replace('#', '') || 'home';
+  showPage(hash, false);
+})();
+
+// ── Mobile sidebar ──────────────────────────────────────────────────────────
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+
+// ── Copy button ─────────────────────────────────────────────────────────────
+function copyCode(btn) {
+  const pre = btn.closest('.code-wrap').querySelector('pre');
+  const text = pre.innerText;
+  navigator.clipboard.writeText(text).then(() => {
+    btn.textContent = '✓ Copied';
+    btn.classList.add('copied');
+    setTimeout(() => { btn.textContent = 'Copy'; btn.classList.remove('copied'); }, 2000);
+  });
+}
+
+// ── Search ──────────────────────────────────────────────────────────────────
+const searchIndex = [
+  { page:'lifecycle',    tag:'Core',      title:'Script Lifecycle',    sub:'OnStart, OnUpdate, OnCollisionEnter, OnTriggerEnter' },
+  { page:'transform',    tag:'Component', title:'Transform',           sub:'getPosition setPosition getRotation setRotation getScale getWorldPosition' },
+  { page:'tag',          tag:'Component', title:'Tag',                 sub:'getName setName entity name' },
+  { page:'rigidbody',    tag:'Component', title:'Rigidbody',           sub:'getMass setVelocity getVelocity isKinematic setGravity linearDrag angularDrag mass physics' },
+  { page:'collider',     tag:'Component', title:'Collider',            sub:'isTrigger getShape Box Sphere Capsule radius friction restitution center' },
+  { page:'hierarchy',    tag:'Component', title:'Hierarchy',           sub:'getParent getChildCount getChild parent children' },
+  { page:'meshrenderer', tag:'Component', title:'MeshRenderer',        sub:'isVisible setVisible castsShadow getMaterialName setMaterialName mesh render' },
+  { page:'light',        tag:'Component', title:'Light',               sub:'getType setColor getIntensity setRange getRange Point Spot Directional volumetric sunshafts castShadow' },
+  { page:'animation',    tag:'Component', title:'Animation',           sub:'play stop isPlaying setClip getClip setSpeed setLoop getTime setBlendDuration' },
+  { page:'volumetricfog',tag:'Component', title:'VolumetricFog',       sub:'isEnabled setDensity getFogStart getFogEnd setColor setScatterStrength fog' },
+  { page:'entity',       tag:'Utility',   title:'Entity',              sub:'create destroy isValid spawn' },
+  { page:'vec3',         tag:'Utility',   title:'Vec3',                sub:'new length dot normalize vector math' },
+  { page:'script',       tag:'Utility',   title:'Script',              sub:'call get set has cross entity communication' },
+  { page:'system',       tag:'Utility',   title:'System',              sub:'readFile writeFile appendFile deleteFile listFiles listDirs createDir exists getTime getDate getComputerName getUserName getEnv getCwd' },
+  { page:'layer',        tag:'Component', title:'Layer',               sub:'add remove getLayer setLayer getMask setMask setLayerEnabled isLayerEnabled layer index bitmask collision filter raycast mask' },
+  { page:'physics',      tag:'Utility',   title:'Physics',             sub:'raycast hit entity distance position normal layerMask scene query x y z nx ny nz' },
+  { page:'examples',     tag:'Examples',  title:'Code Examples',       sub:'move pulse light animation collision log save config hierarchy damage raycast layer' },
+];
+
+function onSearch(q) {
+  const el = document.getElementById('search-results');
+  q = q.trim().toLowerCase();
+  if (!q) { el.classList.remove('open'); return; }
+
+  const hits = searchIndex.filter(item =>
+    (item.title + ' ' + item.sub).toLowerCase().includes(q)
+  ).slice(0, 8);
+
+  if (!hits.length) {
+    el.innerHTML = '<div class="sr-no-results">No results for "' + escHtml(q) + '"</div>';
+  } else {
+    el.innerHTML = hits.map(h =>
+      `<div class="sr-item" onmousedown="showPage('${h.page}');document.getElementById('search-input').value='';closeSearch()">
+        <div class="sr-item-title"><span class="sr-item-tag">${h.tag}</span>${escHtml(h.title)}</div>
+        <div class="sr-item-sub">${highlight(h.sub, q)}</div>
+      </div>`
+    ).join('');
+  }
+  el.classList.add('open');
+}
+
+function closeSearch() {
+  document.getElementById('search-results').classList.remove('open');
+}
+
+function highlight(text, q) {
+  const words = text.split(' ').slice(0, 10).join(' ');
+  const re = new RegExp('(' + q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&') + ')', 'gi');
+  return escHtml(words).replace(re, '<strong style="color:var(--red)">$1</strong>');
+}
+
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Close on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('.search-wrap')) closeSearch();
+});
+</script>
+</body>
+</html>

@@ -11,6 +11,11 @@
 #include <iostream>
 #include <sstream>
 #include <cstdio>
+#ifdef _WIN32
+#  define WIN32_LEAN_AND_MEAN
+#  define NOMINMAX
+#  include <windows.h>
+#endif
 
 #include "Core/MaterialLayout.h"
 #include "Core/MaterialManager.h"
@@ -84,11 +89,10 @@ int Application::Run()
         SyncECSToScene();
         UpdateAnimations(dt);
 
-        PhysicsSystem::Get().SyncActors(m_registry);
-        PhysicsSystem::Get().Step(dt);
-        PhysicsSystem::Get().WriteBack(m_registry);
-        PhysicsSystem::Get().DispatchEvents(m_registry);
-        LuaScriptSystem::Get().Update(m_registry, dt);
+        // Physics and scripting only run inside EderPlayer — never in the editor.
+        // While in PlayMode the embedded EderPlayer process handles its own loop.
+        if (m_playerHWND)
+            UpdatePlayerWindowPos();
 
         RenderShadowPasses(cmd);
         RenderSceneView(cmd);
@@ -268,21 +272,211 @@ void Application::WireEditorCallbacks()
         BuildPak(outPak, initialScene, gameName);
     });
 
-    // Play: auto-save current scene then reload it so the game starts fresh
+    // Play: auto-save current scene then launch embedded EderPlayer
     m_editor.SetPlayCallback([this]()
     {
-        if (!m_currentScenePath.empty())
-            SaveScene();
-        m_editor.AppendBuildLog("[Play] Game started.");
+        StartPlayMode();
     });
 
-    // Stop: nothing special needed in editor mode
+    // Stop: terminate embedded EderPlayer process
     m_editor.SetStopCallback([this]()
     {
-        m_editor.AppendBuildLog("[Stop] Game stopped.");
+        StopPlayMode();
     });
 
     m_editor.SetCurrentSceneName(m_currentSceneName);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Play mode — embedded EderPlayer preview
+// ─────────────────────────────────────────────────────────────────────────────
+
+#ifdef _WIN32
+namespace {
+    // EnumWindows callback: finds the first visible top-level window owned by
+    // the given process ID.
+    BOOL CALLBACK FindWindowByPID(HWND hwnd, LPARAM lParam)
+    {
+        auto* pair = reinterpret_cast<std::pair<DWORD, HWND>*>(lParam);
+        DWORD pid  = 0;
+        GetWindowThreadProcessId(hwnd, &pid);
+        if (pid == pair->first && IsWindowVisible(hwnd))
+        {
+            pair->second = hwnd;
+            return FALSE; // stop enumeration
+        }
+        return TRUE;
+    }
+} // namespace
+#endif // _WIN32
+
+void Application::StartPlayMode()
+{
+#ifdef _WIN32
+    namespace fs = std::filesystem;
+
+    // Auto-save so EderPlayer reads the latest version of the scene
+    if (!m_currentScenePath.empty())
+        SaveScene();
+
+    // Determine absolute workdir (editor runs with CWD = exe dir)
+    const std::string workdirAbs = fs::absolute(
+        Krayon::AssetManager::Get().GetWorkDir()).string();
+
+    // Use the current persisted scene; if unsaved, write a temp one
+    std::string scenePath = m_currentScenePath;
+    if (scenePath.empty())
+    {
+        m_tempScenePath = (fs::path(workdirAbs) / "__preview__.scene").string();
+        Krayon::SceneSerializer::Save(m_tempScenePath, m_registry, "__preview__");
+        scenePath = m_tempScenePath;
+    }
+    else
+    {
+        m_tempScenePath.clear();
+    }
+
+    // EderPlayer.exe lives next to the editor executable
+    char exeBuf[MAX_PATH] = {};
+    GetModuleFileNameA(nullptr, exeBuf, MAX_PATH);
+    const fs::path playerExe = fs::path(exeBuf).parent_path() / "EderPlayer.exe";
+
+    if (!fs::exists(playerExe))
+    {
+        m_editor.AppendBuildLog("[Play] ERROR: EderPlayer.exe not found at: " +
+                                playerExe.string());
+        m_editor.ForceStop();
+        return;
+    }
+
+    // Build launch command
+    const std::string cmdLine = "\"" + playerExe.string() + "\""
+        + " --preview"
+        + " --workdir \"" + workdirAbs + "\""
+        + " --scene \""  + scenePath  + "\"";
+
+    STARTUPINFOA si    = {};
+    si.cb              = sizeof(si);
+    PROCESS_INFORMATION pi = {};
+
+    std::vector<char> cmdBuf(cmdLine.begin(), cmdLine.end());
+    cmdBuf.push_back('\0');
+
+    if (!CreateProcessA(nullptr, cmdBuf.data(),
+                        nullptr, nullptr, FALSE, 0,
+                        nullptr, nullptr, &si, &pi))
+    {
+        m_editor.AppendBuildLog("[Play] ERROR: Failed to launch EderPlayer.exe "
+                                "(GetLastError=" + std::to_string(GetLastError()) + ").");
+        m_editor.ForceStop();
+        return;
+    }
+
+    m_playerProcess = reinterpret_cast<void*>(pi.hProcess);
+    CloseHandle(pi.hThread);
+    m_playerHWND = nullptr; // discovered lazily in UpdatePlayerWindowPos
+
+    m_editor.AppendBuildLog("[Play] EderPlayer launched (PID " +
+                            std::to_string(pi.dwProcessId) + ").");
+#else
+    m_editor.AppendBuildLog("[Play] Embedded play mode is only supported on Windows.");
+    m_editor.ForceStop();
+#endif
+}
+
+void Application::StopPlayMode()
+{
+#ifdef _WIN32
+    if (m_playerHWND)
+    {
+        // Restore player window style before reparenting back to desktop
+        HWND playerHWND = reinterpret_cast<HWND>(m_playerHWND);
+        LONG style = GetWindowLongA(playerHWND, GWL_STYLE);
+        style &= ~WS_CHILD;
+        SetWindowLongA(playerHWND, GWL_STYLE, style);
+        SetParent(playerHWND, nullptr);
+        m_playerHWND = nullptr;
+    }
+    if (m_playerProcess)
+    {
+        TerminateProcess(reinterpret_cast<HANDLE>(m_playerProcess), 0);
+        CloseHandle(reinterpret_cast<HANDLE>(m_playerProcess));
+        m_playerProcess = nullptr;
+    }
+    if (!m_tempScenePath.empty())
+    {
+        std::filesystem::remove(m_tempScenePath);
+        m_tempScenePath.clear();
+    }
+    m_editor.AppendBuildLog("[Stop] EderPlayer stopped.");
+#endif
+}
+
+void Application::UpdatePlayerWindowPos()
+{
+#ifdef _WIN32
+    HANDLE hProcess = reinterpret_cast<HANDLE>(m_playerProcess);
+    if (!hProcess) return;
+
+    // Check if process exited
+    if (WaitForSingleObject(hProcess, 0) == WAIT_OBJECT_0)
+    {
+        CloseHandle(hProcess);
+        m_playerProcess = nullptr;
+        m_playerHWND    = nullptr;
+        m_editor.ForceStop();
+        m_editor.AppendBuildLog("[Play] EderPlayer exited.");
+        return;
+    }
+
+    // Try to find & reparent the player window the first time it appears
+    if (!m_playerHWND)
+    {
+        const DWORD pid = GetProcessId(hProcess);
+        std::pair<DWORD, HWND> found = { pid, nullptr };
+        EnumWindows(FindWindowByPID, reinterpret_cast<LPARAM>(&found));
+
+        if (!found.second) return; // not ready yet
+
+        m_playerHWND = reinterpret_cast<void*>(found.second);
+
+        HWND playerHWND = reinterpret_cast<HWND>(m_playerHWND);
+        HWND editorHWND = reinterpret_cast<HWND>(
+            SDL_GetPointerProperty(SDL_GetWindowProperties(m_window),
+                                   SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
+
+        // Strip decorations, embed as child of the editor window
+        LONG style = GetWindowLongA(playerHWND, GWL_STYLE);
+        style &= ~(WS_CAPTION | WS_THICKFRAME | WS_MINIMIZEBOX |
+                   WS_MAXIMIZEBOX | WS_SYSMENU);
+        style |= WS_CHILD;
+        SetWindowLongA(playerHWND, GWL_STYLE, style);
+        SetParent(playerHWND, editorHWND);
+    }
+
+    // Reposition over the Viewport content rect every frame.
+    // ImGui returns screen-absolute coords; MoveWindow wants parent-client coords.
+    const ImVec2 pos  = m_editor.GetSceneViewContentPos();
+    const ImVec2 size = m_editor.GetSceneViewContentSize();
+
+    if (size.x > 4.0f && size.y > 4.0f)
+    {
+        HWND editorHWND = reinterpret_cast<HWND>(
+            SDL_GetPointerProperty(SDL_GetWindowProperties(m_window),
+                                   SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr));
+
+        POINT clientOrigin = { 0, 0 };
+        ClientToScreen(editorHWND, &clientOrigin);
+
+        const int x = static_cast<int>(pos.x)  - clientOrigin.x;
+        const int y = static_cast<int>(pos.y)  - clientOrigin.y;
+        const int w = static_cast<int>(size.x);
+        const int h = static_cast<int>(size.y);
+
+        MoveWindow(reinterpret_cast<HWND>(m_playerHWND), x, y, w, h, FALSE);
+        ShowWindow(reinterpret_cast<HWND>(m_playerHWND), SW_SHOW);
+    }
+#endif
 }
 
 void Application::NewScene()

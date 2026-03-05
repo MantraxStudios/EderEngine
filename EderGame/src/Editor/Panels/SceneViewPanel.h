@@ -30,9 +30,16 @@ public:
     // Tamaño deseado por el panel (content region del frame anterior). {0,0} al inicio.
     ImVec2 GetDesiredSize() const { return desiredSize; }
 
+    // Screen-space position and size of the rendered image (updated each Draw).
+    // Use these to overlay/embed the EderPlayer preview window.
+    ImVec2 GetContentScreenPos()  const { return contentScreenPos;  }
+    ImVec2 GetContentScreenSize() const { return contentScreenSize; }
+
 private:
-    VulkanFramebuffer* framebuffer = nullptr;
-    VkDescriptorSet    texDS       = VK_NULL_HANDLE;
-    VkImageView        lastView    = VK_NULL_HANDLE;
-    ImVec2             desiredSize = { 0.0f, 0.0f };
+    VulkanFramebuffer* framebuffer      = nullptr;
+    VkDescriptorSet    texDS            = VK_NULL_HANDLE;
+    VkImageView        lastView         = VK_NULL_HANDLE;
+    ImVec2             desiredSize      = { 0.0f, 0.0f };
+    ImVec2             contentScreenPos  = { 0.0f, 0.0f };
+    ImVec2             contentScreenSize = { 0.0f, 0.0f };
 };

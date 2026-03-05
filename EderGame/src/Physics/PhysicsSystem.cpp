@@ -4,6 +4,7 @@
 #include "ECS/Components/ColliderComponent.h"
 #include "ECS/Components/RigidbodyComponent.h"
 #include "ECS/Components/CollisionCallbackComponent.h"
+#include "ECS/Components/LayerComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 
 #include <glm/gtx/matrix_decompose.hpp>
@@ -25,14 +26,24 @@ PhysicsSystem& PhysicsSystem::Get()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Filter shader — enables all contact notifications on every pair
+// Filter shader — layer-aware collision filtering
+//
+//  Each shape stores in its PxFilterData:
+//    word0 = layer bit  (1u << layer)
+//    word1 = layerMask  (which layers this entity interacts with)
+//
+//  Two actors interact only when both accept each other’s layer.
 // ─────────────────────────────────────────────────────────────────────────────
 static PxFilterFlags ContactFilterShader(
-    PxFilterObjectAttributes /*a0*/, PxFilterData /*d0*/,
-    PxFilterObjectAttributes /*a1*/, PxFilterData /*d1*/,
+    PxFilterObjectAttributes /*a0*/, PxFilterData d0,
+    PxFilterObjectAttributes /*a1*/, PxFilterData d1,
     PxPairFlags& pairFlags,
     const void* /*constantBlock*/, PxU32 /*constantBlockSize*/)
 {
+    // Layer-mask check: A must accept B’s layer AND B must accept A’s layer.
+    if (!(d0.word1 & d1.word0) || !(d1.word1 & d0.word0))
+        return PxFilterFlag::eSUPPRESS;
+
     pairFlags = PxPairFlag::eCONTACT_DEFAULT
               | PxPairFlag::eNOTIFY_TOUCH_FOUND
               | PxPairFlag::eNOTIFY_TOUCH_LOST
@@ -229,6 +240,14 @@ uint32_t PhysicsSystem::ShapeHash(Registry& registry, Entity e) const
         h ^= (rb.useGravity  ? 0x55555555u : 0u);
     }
 
+    // Layer changes require a shape rebuild (filter data must be refreshed).
+    if (registry.Has<LayerComponent>(e))
+    {
+        const auto& lc = registry.Get<LayerComponent>(e);
+        h ^= static_cast<uint32_t>(lc.layer) * 0x12345678u;
+        h ^= lc.layerMask * 0x87654321u;
+    }
+
     return h;
 }
 
@@ -292,6 +311,28 @@ PxShape* PhysicsSystem::CreateShape(Registry& registry, Entity e)
             shape->setFlag(PxShapeFlag::eSIMULATION_SHAPE, false);
             shape->setFlag(PxShapeFlag::eTRIGGER_SHAPE,    true);
         }
+
+        // ── Layer filter data ────────────────────────────────────────────────────────
+        // word0 = bit representing this entity’s layer
+        // word1 = layer mask (which layers this entity interacts with)
+        PxFilterData fd;
+        if (registry.Has<LayerComponent>(e))
+        {
+            const auto& lc = registry.Get<LayerComponent>(e);
+            uint8_t layer = lc.layer < 32u ? lc.layer : 0u;
+            fd.word0 = 1u << layer;
+            fd.word1 = lc.layerMask;
+        }
+        else
+        {
+            fd.word0 = 1u;           // default: layer 0
+            fd.word1 = 0xFFFFFFFFu;  // interacts with everything
+        }
+        // Store entity id in simulationFilterData so the filter shader and
+        // raycast queries can retrieve it.
+        fd.word2 = static_cast<PxU32>(e);
+        shape->setSimulationFilterData(fd);
+        shape->setQueryFilterData(fd);
     }
 
     return shape;
@@ -586,4 +627,82 @@ void PhysicsSystem::DispatchEvents(Registry& registry)
         fire(raw.entityB, raw.entityA, -raw.normal);
     }
     m_events.clear();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Raycast — cast a ray through the PhysX scene
+// ─────────────────────────────────────────────────────────────────────────────
+RaycastHit PhysicsSystem::Raycast(const glm::vec3& origin,
+                                  const glm::vec3& direction,
+                                  float            maxDistance,
+                                  uint32_t         layerMask) const
+{
+    RaycastHit result;
+    if (!m_initialized || !m_scene) return result;
+
+    // Normalise the direction
+    float len = glm::length(direction);
+    if (len < 1e-6f) return result;
+    glm::vec3 dir = direction / len;
+
+    PxVec3 origin3(origin.x, origin.y, origin.z);
+    PxVec3 dir3(dir.x, dir.y, dir.z);
+
+    // Build a query filter data that carries the caller\u2019s layer mask in word1.
+    // The query filter callback will accept a shape when its layer bit (word0)
+    // is set in the caller\u2019s mask (word1).
+    PxQueryFilterData filterData;
+    filterData.data.word1 = layerMask;
+    filterData.flags      = PxQueryFlag::eSTATIC
+                          | PxQueryFlag::eDYNAMIC
+                          | PxQueryFlag::ePREFILTER;
+
+    // Use an inline pre-filter to apply the layer mask without a separate callback object.
+    struct LayerFilter : public PxQueryFilterCallback
+    {
+        uint32_t callerMask;
+        explicit LayerFilter(uint32_t mask) : callerMask(mask) {}
+
+        PxQueryHitType::Enum preFilter(
+            const PxFilterData& fd,
+            const PxShape*,
+            const PxRigidActor*,
+            PxHitFlags&) override
+        {
+            // Accept only if this shape\u2019s layer bit is in the caller\u2019s mask,
+            // and also if the shape\u2019s own mask includes at least one source layer.
+            if (fd.word0 & callerMask)
+                return PxQueryHitType::eBLOCK;
+            return PxQueryHitType::eNONE;
+        }
+
+        PxQueryHitType::Enum postFilter(
+            const PxFilterData&,
+            const PxQueryHit&,
+            const PxShape*,
+            const PxRigidActor*) override
+        {
+            return PxQueryHitType::eBLOCK;
+        }
+    } filter(layerMask);
+
+    PxRaycastBuffer hit;
+    bool found = m_scene->raycast(origin3, dir3, maxDistance, hit,
+                                  PxHitFlag::eDEFAULT, filterData, &filter);
+
+    if (found && hit.hasBlock)
+    {
+        const PxRaycastHit& block = hit.block;
+        result.hit      = true;
+        result.distance = block.distance;
+        result.position = { block.position.x, block.position.y, block.position.z };
+        result.normal   = { block.normal.x,   block.normal.y,   block.normal.z   };
+
+        // Recover entity from actor userData (set in SyncActors)
+        if (block.actor && block.actor->userData)
+            result.entity = static_cast<Entity>(
+                reinterpret_cast<uintptr_t>(block.actor->userData));
+    }
+
+    return result;
 }

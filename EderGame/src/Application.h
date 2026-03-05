@@ -79,6 +79,18 @@ private:
     void BuildPak(const std::string& outPakPath,
                   const std::string& initialScene,
                   const std::string& gameName);
+
+    // ── Play mode (embedded EderPlayer) ───────────────────────────────────
+    /// Save scene, launch EderPlayer.exe in --preview mode and embed its
+    /// window into the Viewport panel via Win32 SetParent().
+    void StartPlayMode();
+
+    /// Terminate the embedded EderPlayer process and restore editor state.
+    void StopPlayMode();
+
+    /// Called every frame while Playing; repositions the embedded window
+    /// to match the current Viewport content rect.  Also detects process exit.
+    void UpdatePlayerWindowPos();
     // ── Utility ──────────────────────────────────────────────────────────────
     float SceneViewAspect() const;
 
@@ -167,4 +179,10 @@ private:
 
     // ── Background build thread ──────────────────────────────────────────────
     std::thread m_buildThread;
+
+    // ── Play mode (embedded EderPlayer) ──────────────────────────────────────
+    // void* instead of HANDLE/HWND to keep windows.h out of this header.
+    void* m_playerProcess  = nullptr; // HANDLE to the EderPlayer process
+    void* m_playerHWND     = nullptr; // HWND of the EderPlayer window
+    std::string m_tempScenePath;      // path of the auto-saved preview scene
 };

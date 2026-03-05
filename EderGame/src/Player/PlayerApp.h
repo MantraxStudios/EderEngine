@@ -28,14 +28,21 @@
 class PlayerApp
 {
 public:
+    // ── Normal (PAK) mode ────────────────────────────────────────────────────
     // initialScene : relative asset path of the scene to load (e.g. "scenes/main.scene")
     // gameName     : displayed in the window title
     int Run(const std::string& initialScene,
             const std::string& gameName = "EderPlayer");
 
+    // ── Preview mode (editor play mode) ─────────────────────────────────────
+    // scenePath : absolute path to the .scene file to load (written by the editor).
+    // Assets are already initialised with the raw workdir before this is called.
+    int RunPreview(const std::string& scenePath);
+
 private:
     // ── Lifecycle ────────────────────────────────────────────────────────────
     void Init(const std::string& windowTitle, const std::string& initialScene);
+    void InitPreview(const std::string& scenePath);
     void Shutdown();
 
     // ── Per-frame ────────────────────────────────────────────────────────────
@@ -54,9 +61,10 @@ private:
 
     // ═══════════════════════  Members  ══════════════════════════════════════
 
-    SDL_Window* m_window     = nullptr;
-    bool        m_running    = true;
-    bool        m_lookActive = false;
+    SDL_Window* m_window      = nullptr;
+    bool        m_running     = true;
+    bool        m_previewMode = false;   // true when launched from editor play mode
+    bool        m_lookActive  = false;
     float       m_mouseDX    = 0.0f;
     float       m_mouseDY    = 0.0f;
 
