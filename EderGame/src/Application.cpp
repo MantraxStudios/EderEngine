@@ -44,12 +44,16 @@ int Application::Run()
         return -1;
     }
 
-    uint64_t prevTime = SDL_GetTicks();
+    uint64_t prevTime  = SDL_GetTicks();
+    float    physAccum  = 0.f;
+    static constexpr float PHYSICS_DT = 1.f / 60.f;  // fixed physics tick (60 Hz)
+    static constexpr float MAX_DT     = 0.05f;        // clamp: max 50 ms per frame
 
     while (m_running)
     {
         const uint64_t currTime = SDL_GetTicks();
-        const float    dt       = static_cast<float>(currTime - prevTime) / 1000.0f;
+        const float    dt       = std::min(
+            static_cast<float>(currTime - prevTime) / 1000.0f, MAX_DT);
         prevTime = currTime;
 
         PollEvents();
@@ -90,14 +94,25 @@ int Application::Run()
         SyncECSToScene();
         UpdateAnimations(dt);
 
-        // Embedded play: physics + scripting run inline in the editor process
+        // Embedded play: physics + scripting run at a fixed 60 Hz timestep.
+        // physAccum accumulates real elapsed time; we consume it in PHYSICS_DT chunks
+        // so that physics is always stable regardless of render framerate.
         if (m_playingInline && m_editor.GetPlayState() == PlayState::Playing)
         {
-            PhysicsSystem::Get().SyncActors(m_registry);
-            PhysicsSystem::Get().Step(dt);
-            PhysicsSystem::Get().WriteBack(m_registry);
-            PhysicsSystem::Get().DispatchEvents(m_registry);
-            LuaScriptSystem::Get().Update(m_registry, dt);
+            physAccum += dt;
+            while (physAccum >= PHYSICS_DT)
+            {
+                PhysicsSystem::Get().SyncActors(m_registry);
+                PhysicsSystem::Get().Step(PHYSICS_DT);
+                PhysicsSystem::Get().WriteBack(m_registry);
+                PhysicsSystem::Get().DispatchEvents(m_registry);
+                LuaScriptSystem::Get().Update(m_registry, PHYSICS_DT);
+                physAccum -= PHYSICS_DT;
+            }
+        }
+        else
+        {
+            physAccum = 0.f;  // reset accumulator when not playing
         }
 
         // Standalone: watch the external EderPlayer process for exit

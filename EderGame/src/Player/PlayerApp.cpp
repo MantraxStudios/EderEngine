@@ -40,11 +40,15 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
     }
 
     uint64_t prevTime = SDL_GetTicks();
+    float    physAccum = 0.f;
+    static constexpr float PHYSICS_DT = 1.f / 60.f;
+    static constexpr float MAX_DT     = 0.05f;
 
     while (m_running)
     {
         const uint64_t currTime = SDL_GetTicks();
-        const float    dt       = static_cast<float>(currTime - prevTime) / 1000.0f;
+        const float    dt       = std::min(
+            static_cast<float>(currTime - prevTime) / 1000.0f, MAX_DT);
         prevTime = currTime;
 
         PollEvents();
@@ -60,11 +64,16 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
         SyncECSToScene();
         UpdateAnimations(dt);
 
-        PhysicsSystem::Get().SyncActors(m_registry);
-        PhysicsSystem::Get().Step(dt);
-        PhysicsSystem::Get().WriteBack(m_registry);
-        PhysicsSystem::Get().DispatchEvents(m_registry);
-        LuaScriptSystem::Get().Update(m_registry, dt);
+        physAccum += dt;
+        while (physAccum >= PHYSICS_DT)
+        {
+            PhysicsSystem::Get().SyncActors(m_registry);
+            PhysicsSystem::Get().Step(PHYSICS_DT);
+            PhysicsSystem::Get().WriteBack(m_registry);
+            PhysicsSystem::Get().DispatchEvents(m_registry);
+            LuaScriptSystem::Get().Update(m_registry, PHYSICS_DT);
+            physAccum -= PHYSICS_DT;
+        }
 
         RenderShadowPasses(cmd);
         RenderMainPass(cmd);
@@ -164,11 +173,15 @@ int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
     }
 
     uint64_t prevTime = SDL_GetTicks();
+    float    physAccum = 0.f;
+    static constexpr float PHYSICS_DT = 1.f / 60.f;
+    static constexpr float MAX_DT     = 0.05f;
 
     while (m_running)
     {
         const uint64_t currTime = SDL_GetTicks();
-        const float    dt       = static_cast<float>(currTime - prevTime) / 1000.0f;
+        const float    dt       = std::min(
+            static_cast<float>(currTime - prevTime) / 1000.0f, MAX_DT);
         prevTime = currTime;
 
         PollEvents();
@@ -183,11 +196,16 @@ int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
         SyncECSToScene();
         UpdateAnimations(dt);
 
-        PhysicsSystem::Get().SyncActors(m_registry);
-        PhysicsSystem::Get().Step(dt);
-        PhysicsSystem::Get().WriteBack(m_registry);
-        PhysicsSystem::Get().DispatchEvents(m_registry);
-        LuaScriptSystem::Get().Update(m_registry, dt);
+        physAccum += dt;
+        while (physAccum >= PHYSICS_DT)
+        {
+            PhysicsSystem::Get().SyncActors(m_registry);
+            PhysicsSystem::Get().Step(PHYSICS_DT);
+            PhysicsSystem::Get().WriteBack(m_registry);
+            PhysicsSystem::Get().DispatchEvents(m_registry);
+            LuaScriptSystem::Get().Update(m_registry, PHYSICS_DT);
+            physAccum -= PHYSICS_DT;
+        }
 
         RenderShadowPasses(cmd);
         RenderMainPass(cmd);

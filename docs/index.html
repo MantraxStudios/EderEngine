@@ -508,6 +508,7 @@ code {
       <a class="sidebar-link" href="#" onclick="return showPage('script')"><span class="dot"></span>Script</a>
       <a class="sidebar-link" href="#" onclick="return showPage('system')"><span class="dot"></span>System</a>
       <a class="sidebar-link" href="#" onclick="return showPage('physics')"><span class="dot"></span>Physics</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('debug')"><span class="dot"></span>Debug</a>
     </div>
     <div class="sidebar-section">
       <span class="sidebar-label">Examples</span>
@@ -551,6 +552,11 @@ code {
           <div class="qcard-title">System</div>
           <div class="qcard-sub">Files, time, OS</div>
         </a>
+        <a class="qcard" href="#" onclick="return showPage('debug')">
+          <div class="qcard-icon"><i class="fa-solid fa-bug"></i></div>
+          <div class="qcard-title">Debug</div>
+          <div class="qcard-sub">drawLine, drawRay, log</div>
+        </a>
         <a class="qcard" href="#" onclick="return showPage('examples')">
           <div class="qcard-icon"><i class="fa-solid fa-book-open"></i></div>
           <div class="qcard-title">Examples</div>
@@ -577,6 +583,7 @@ code {
           <tr><td><code>Script</code></td><td>Call functions across entity scripts</td></tr>
           <tr><td><code>System</code></td><td>Files, directories, time, OS info</td></tr>
           <tr><td><code>Physics</code></td><td>Raycast scene queries with optional layer mask</td></tr>
+          <tr><td><code>Debug</code></td><td>Draw lines, rays and collider gizmos in the editor viewport</td></tr>
         </tbody>
       </table>
     </section>
@@ -1051,6 +1058,105 @@ code {
     <span class="kw">end</span>
 <span class="kw">end</span></pre>
       </div>
+      <div class="page-nav">
+        <a class="pnav-btn" href="#" onclick="return showPage('layer')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Layer</span></a>
+        <a class="pnav-btn next" href="#" onclick="return showPage('debug')"><span class="pnav-dir">Next →</span><span class="pnav-title">Debug</span></a>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════ DEBUG ═══════════════════════════════════ -->
+    <section class="page" id="page-debug">
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>Debug</span></div>
+      <h2>Debug <span class="badge">Utility</span></h2>
+      <p class="page-desc">Draw temporary lines, rays and collider wireframes directly in the editor viewport.<br>
+        All shapes are rendered via the <strong>VulkanGizmo</strong> LINE_LIST pipeline — zero cost outside the editor.<br>
+        Lines with <code>duration&nbsp;=&nbsp;0</code> are cleared after the frame they are drawn; any positive value keeps them alive.</p>
+
+      <div class="note">Collider wireframes (Box / Sphere / Capsule) are drawn <strong>automatically</strong> for every entity that has a <code>ColliderComponent</code>. No Lua code is needed for those — just add a collider and the gizmo appears in the editor.</div>
+
+      <h3>Functions</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><code>Debug.drawLine(x1,y1,z1,&nbsp;x2,y2,z2&nbsp;[,r,g,b,a&nbsp;[,dur]])</code></td>
+            <td></td>
+            <td>Draw a segment from point A to point B. Color defaults to green <code>(0,1,0,1)</code>. <code>dur</code> = seconds to keep visible; 0 = one frame only.</td>
+          </tr>
+          <tr>
+            <td><code>Debug.drawRay(ox,oy,oz,&nbsp;dx,dy,dz&nbsp;[,r,g,b,a&nbsp;[,dur]])</code></td>
+            <td></td>
+            <td>Draw a ray starting at origin with direction vector <code>(dx,dy,dz)</code>. The magnitude of the direction determines the drawn length. Same color/duration options.</td>
+          </tr>
+          <tr>
+            <td><code>Debug.log(msg)</code></td>
+            <td></td>
+            <td>Prints <code>[Lua] msg</code> to stdout. Convenient shorthand for quick tracing.</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <h3>Color &amp; duration reference</h3>
+      <table class="api-table">
+        <thead><tr><th>Parameter</th><th>Type</th><th>Default</th><th>Notes</th></tr></thead>
+        <tbody>
+          <tr><td><code>r, g, b, a</code></td><td><span class="ret-badge">float</span></td><td><code>0, 1, 0, 1</code></td><td>RGBA in 0–1 range. Alpha controls transparency.</td></tr>
+          <tr><td><code>duration</code></td><td><span class="ret-badge">float</span></td><td><code>0.0</code></td><td>Seconds the line stays alive. <code>0</code> = removed after it is drawn once.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Visualise a raycast hit</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="kw">local</span> pos = <span class="tbl">Transform</span>.getWorldPosition(this_entity)
+    <span class="kw">local</span> h = <span class="tbl">Physics</span>.raycast(pos.x, pos.y, pos.z, <span class="num">0</span>, <span class="num">0</span>, <span class="num">1</span>, <span class="num">10</span>)
+
+    <span class="kw">if</span> h.hit <span class="kw">then</span>
+        <span class="cmt">-- Green: origin → hit point</span>
+        <span class="tbl">Debug</span>.drawLine(pos.x, pos.y, pos.z,
+                         h.x, h.y, h.z,
+                         <span class="num">0</span>, <span class="num">1</span>, <span class="num">0</span>, <span class="num">1</span>)
+        <span class="cmt">-- Red: surface normal (0.5 m)</span>
+        <span class="tbl">Debug</span>.drawRay(h.x, h.y, h.z,
+                        h.nx <span class="op">*</span> <span class="num">0.5</span>, h.ny <span class="op">*</span> <span class="num">0.5</span>, h.nz <span class="op">*</span> <span class="num">0.5</span>,
+                        <span class="num">1</span>, <span class="num">0</span>, <span class="num">0</span>, <span class="num">1</span>)
+    <span class="kw">else</span>
+        <span class="cmt">-- Yellow: ray missed, draw full length</span>
+        <span class="tbl">Debug</span>.drawRay(pos.x, pos.y, pos.z, <span class="num">0</span>, <span class="num">0</span>, <span class="num">10</span>,
+                        <span class="num">1</span>, <span class="num">1</span>, <span class="num">0</span>, <span class="num">1</span>)
+    <span class="kw">end</span>
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Persistent origin axes (3 seconds)</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnStart</span>()
+    <span class="kw">local</span> p = <span class="tbl">Transform</span>.getWorldPosition(this_entity)
+    <span class="cmt">-- X axis — red</span>
+    <span class="tbl">Debug</span>.drawRay(p.x, p.y, p.z,  <span class="num">1</span>, <span class="num">0</span>, <span class="num">0</span>,  <span class="num">1</span>, <span class="num">0</span>, <span class="num">0</span>, <span class="num">1</span>,  <span class="num">3.0</span>)
+    <span class="cmt">-- Y axis — green</span>
+    <span class="tbl">Debug</span>.drawRay(p.x, p.y, p.z,  <span class="num">0</span>, <span class="num">1</span>, <span class="num">0</span>,  <span class="num">0</span>, <span class="num">1</span>, <span class="num">0</span>, <span class="num">1</span>,  <span class="num">3.0</span>)
+    <span class="cmt">-- Z axis — blue</span>
+    <span class="tbl">Debug</span>.drawRay(p.x, p.y, p.z,  <span class="num">0</span>, <span class="num">0</span>, <span class="num">1</span>,  <span class="num">0</span>, <span class="num">0</span>, <span class="num">1</span>, <span class="num">1</span>,  <span class="num">3.0</span>)
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Collider wireframe colors (automatic)</h3>
+      <table class="api-table">
+        <thead><tr><th>Condition</th><th>Color</th><th>RGBA</th></tr></thead>
+        <tbody>
+          <tr><td>Normal collider</td><td><span style="color:#27cc45;font-size:16px">■</span> Green</td><td><code>(0.15, 0.80, 0.15, 0.75)</code></td></tr>
+          <tr><td>Trigger collider</td><td><span style="color:#00e5e5;font-size:16px">■</span> Cyan</td><td><code>(0.00, 0.90, 0.90, 0.75)</code></td></tr>
+          <tr><td>Selected entity</td><td><span style="color:#33ff55;font-size:16px">■</span> Bright green</td><td><code>(0.20, 1.00, 0.20, 1.00)</code></td></tr>
+        </tbody>
+      </table>
+
+      <div class="page-nav">
+        <a class="pnav-btn" href="#" onclick="return showPage('physics')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Physics</span></a>
+        <a class="pnav-btn next" href="#" onclick="return showPage('examples')"><span class="pnav-dir">Next →</span><span class="pnav-title">Examples</span></a>
+      </div>
     </section>
 
     <!-- ══════════════════════════ ENTITY ══════════════════════════════════ -->
@@ -1404,6 +1510,7 @@ const searchIndex = [
   { page:'system',       tag:'Utility',   title:'System',              sub:'readFile writeFile appendFile deleteFile listFiles listDirs createDir exists getTime getDate getComputerName getUserName getEnv getCwd' },
   { page:'layer',        tag:'Component', title:'Layer',               sub:'add remove getLayer setLayer getMask setMask setLayerEnabled isLayerEnabled layer index bitmask collision filter raycast mask' },
   { page:'physics',      tag:'Utility',   title:'Physics',             sub:'raycast hit entity distance position normal layerMask scene query x y z nx ny nz' },
+  { page:'debug',        tag:'Utility',   title:'Debug',               sub:'drawLine drawRay log gizmo collider wireframe line ray color duration visualise axis' },
   { page:'examples',     tag:'Examples',  title:'Code Examples',       sub:'move pulse light animation collision log save config hierarchy damage raycast layer' },
 ];
 
