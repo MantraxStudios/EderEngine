@@ -614,7 +614,8 @@ void Editor::DrawToolbar()
     }
 
     // ── Play / Pause / Stop (center) ─────────────────────────────────────────
-    float centerX = (vp->Size.x - 3.0f * (60.0f + 4.0f)) * 0.5f;
+    // Total width: Play(60) + Pause(60) + Stop(60) + arrow(20) + 4 gaps(4) = 216
+    float centerX = (vp->Size.x - (60.0f + 60.0f + 60.0f + 20.0f + 4.0f * 4.0f)) * 0.5f;
     ImGui::SameLine(centerX);
 
     // Play
@@ -660,6 +661,48 @@ void Editor::DrawToolbar()
         }
         ImGui::EndDisabled();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Stop  [F7]");
+    }
+    ImGui::SameLine();
+
+    // ── Play-target dropdown (▼) ──────────────────────────────────────────────
+    {
+        const bool embedded = (m_playTarget == PlayTarget::Embedded);
+        // Tint the button to indicate the active mode
+        ImGui::PushStyleColor(ImGuiCol_Button,
+            embedded ? ImVec4(0.15f, 0.35f, 0.65f, 1.0f)
+                     : ImVec4(0.40f, 0.20f, 0.60f, 1.0f));
+
+        ImGui::BeginDisabled(playState != PlayState::Stopped);
+        if (ImGui::Button(embedded ? "v" : "^", ImVec2(20, 24)))
+            ImGui::OpenPopup("##PlayTargetMenu");
+        ImGui::EndDisabled();
+
+        ImGui::PopStyleColor();
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip(embedded
+                ? "Play target: Embedded in Viewport\nClick to change"
+                : "Play target: Standalone Window\nClick to change");
+
+        if (ImGui::BeginPopup("##PlayTargetMenu"))
+        {
+            ImGui::TextDisabled("Play Target");
+            ImGui::Separator();
+
+            const bool selEmbed = (m_playTarget == PlayTarget::Embedded);
+            const bool selSolo  = (m_playTarget == PlayTarget::Standalone);
+
+            if (ImGui::MenuItem("  Embedded (Viewport)", nullptr, selEmbed))
+                m_playTarget = PlayTarget::Embedded;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("EderPlayer renders inside the Viewport panel.\nLike Unreal 'Simulate in Editor'.");
+
+            if (ImGui::MenuItem("  Standalone (New Window)", nullptr, selSolo))
+                m_playTarget = PlayTarget::Standalone;
+            if (ImGui::IsItemHovered())
+                ImGui::SetTooltip("EderPlayer opens as a separate OS window.\nGood for multi-monitor or full-screen testing.");
+
+            ImGui::EndPopup();
+        }
     }
 
     ImGui::End();

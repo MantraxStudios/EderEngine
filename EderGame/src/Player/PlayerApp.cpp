@@ -152,9 +152,10 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
 //  path the editor wrote and run the full physics + scripting loop.
 // ─────────────────────────────────────────────────────────────────────────────
 
-int PlayerApp::RunPreview(const std::string& scenePath)
+int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
 {
     m_previewMode = true;
+    m_borderless  = borderless;
     try { InitPreview(scenePath); }
     catch (const std::exception& e)
     {
@@ -202,9 +203,11 @@ void PlayerApp::InitPreview(const std::string& scenePath)
 {
     SDL_Init(SDL_INIT_VIDEO);
 
-    // Create a borderless window; the editor will reparent it into its viewport.
-    m_window = SDL_CreateWindow("EderPreview", 1280, 720,
-        SDL_WINDOW_VULKAN | SDL_WINDOW_BORDERLESS);
+    // Borderless when embedded into the editor viewport; normal window otherwise.
+    const SDL_WindowFlags wflags = m_borderless
+        ? (SDL_WINDOW_VULKAN | SDL_WINDOW_BORDERLESS)
+        : (SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
+    m_window = SDL_CreateWindow("EderPreview", 1280, 720, wflags);
     if (!m_window)
         throw std::runtime_error("SDL_CreateWindow (preview) failed");
 

@@ -38,9 +38,10 @@ public:
     bool WantCaptureMouse()    const;
     bool WantCaptureKeyboard() const;
 
-    PlayState GetPlayState() const { return playState; }
-    GizmoMode GetGizmoMode() const { return gizmoMode; }
-    Entity    GetSelected()  const { return hierarchy.GetSelected(); }
+    PlayState  GetPlayState()  const { return playState;  }
+    GizmoMode  GetGizmoMode()  const { return gizmoMode;  }
+    PlayTarget GetPlayTarget() const { return m_playTarget; }
+    Entity     GetSelected()   const { return hierarchy.GetSelected(); }
 
     // Force the editor back to Stopped state (e.g. when EderPlayer process exits).
     void ForceStop() { playState = PlayState::Stopped; }
@@ -93,8 +94,9 @@ private:
 
     PlayState playState    = PlayState::Stopped;
     GizmoMode gizmoMode    = GizmoMode::Translate;
-    bool      snapEnabled  = false;
-    float     snapValue    = 10.0f;
+    bool        snapEnabled  = false;
+    float       snapValue    = 10.0f;
+    PlayTarget  m_playTarget = PlayTarget::Embedded;
 
     // ── Scene state ─────────────────────────────────────────────────────────────────
     std::string m_currentSceneName     = "Untitled";

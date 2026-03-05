@@ -35,9 +35,11 @@ public:
             const std::string& gameName = "EderPlayer");
 
     // ── Preview mode (editor play mode) ─────────────────────────────────────
-    // scenePath : absolute path to the .scene file to load (written by the editor).
+    // scenePath  : absolute path to the .scene file to load (written by the editor).
+    // borderless : true  → decoration-free window, will be embedded by the editor.
+    //              false → normal resizable window (Standalone target).
     // Assets are already initialised with the raw workdir before this is called.
-    int RunPreview(const std::string& scenePath);
+    int RunPreview(const std::string& scenePath, bool borderless = false);
 
 private:
     // ── Lifecycle ────────────────────────────────────────────────────────────
@@ -64,6 +66,7 @@ private:
     SDL_Window* m_window      = nullptr;
     bool        m_running     = true;
     bool        m_previewMode = false;   // true when launched from editor play mode
+    bool        m_borderless  = false;   // true → embed in editor; false → own window
     bool        m_lookActive  = false;
     float       m_mouseDX    = 0.0f;
     float       m_mouseDY    = 0.0f;

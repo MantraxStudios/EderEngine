@@ -27,6 +27,7 @@ int main(int argc, char* argv[])
 
     // ── Parse command-line arguments ─────────────────────────────────────────
     bool        previewMode = false;
+    bool        borderless  = false;  // set by editor for embedded mode
     std::string workdir;
     std::string scenePath;
 
@@ -36,6 +37,10 @@ int main(int argc, char* argv[])
         if (arg == "--preview")
         {
             previewMode = true;
+        }
+        else if (arg == "--borderless")
+        {
+            borderless = true;
         }
         else if (arg == "--workdir" && i + 1 < argc)
         {
@@ -61,7 +66,7 @@ int main(int argc, char* argv[])
         EG_InitAssets(workdir, false);
 
         PlayerApp app;
-        return app.RunPreview(scenePath);
+        return app.RunPreview(scenePath, borderless);
     }
 
     // ── Normal shipping mode (PAK) ────────────────────────────────────────────

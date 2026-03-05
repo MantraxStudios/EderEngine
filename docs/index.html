@@ -459,17 +459,17 @@ code {
 <!-- ── Navbar ──────────────────────────────────────────────────────────────── -->
 <nav id="navbar">
   <button id="menu-toggle" onclick="toggleSidebar()" aria-label="Menu"><i class="fa-solid fa-bars"></i></button>
-  <a class="nav-logo" href="#" onclick="showPage('home')">
+  <a class="nav-logo" href="#" onclick="return showPage('home')">
     <div class="nav-logo-icon">E</div>
     <span class="nav-logo-text">Eder<span>Engine</span></span>
   </a>
   <div class="nav-divider"></div>
   <ul class="nav-links">
-    <li><a href="#" onclick="showPage('home')" id="nav-home">Home</a></li>
-    <li><a href="#" onclick="showPage('lifecycle')" id="nav-lifecycle">Lifecycle</a></li>
-    <li><a href="#" onclick="showPage('components')" id="nav-components">Components</a></li>
-    <li><a href="#" onclick="showPage('system')" id="nav-system">System</a></li>
-    <li><a href="#" onclick="showPage('examples')" id="nav-examples">Examples</a></li>
+    <li><a href="#" onclick="return showPage('home')" id="nav-home">Home</a></li>
+    <li><a href="#" onclick="return showPage('lifecycle')" id="nav-lifecycle">Lifecycle</a></li>
+    <li><a href="#" onclick="return showPage('components')" id="nav-components">Components</a></li>
+    <li><a href="#" onclick="return showPage('system')" id="nav-system">System</a></li>
+    <li><a href="#" onclick="return showPage('examples')" id="nav-examples">Examples</a></li>
   </ul>
   <div class="search-wrap" style="margin-left:auto">
     <input type="text" id="search-input" placeholder="Search API..." autocomplete="off" oninput="onSearch(this.value)" onfocus="onSearch(this.value)" onblur="setTimeout(()=>closeSearch(),200)"/>
@@ -485,33 +485,33 @@ code {
   <nav id="sidebar">
     <div class="sidebar-section">
       <span class="sidebar-label">Getting Started</span>
-      <a class="sidebar-link" href="#" onclick="showPage('home')"><span class="dot"></span>Overview</a>
-      <a class="sidebar-link" href="#" onclick="showPage('lifecycle')"><span class="dot"></span>Script Lifecycle</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('home')"><span class="dot"></span>Overview</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('lifecycle')"><span class="dot"></span>Script Lifecycle</a>
     </div>
     <div class="sidebar-section">
       <span class="sidebar-label">Components</span>
-      <a class="sidebar-link" href="#" onclick="showPage('transform')"><span class="dot"></span>Transform</a>
-      <a class="sidebar-link" href="#" onclick="showPage('tag')"><span class="dot"></span>Tag</a>
-      <a class="sidebar-link" href="#" onclick="showPage('rigidbody')"><span class="dot"></span>Rigidbody</a>
-      <a class="sidebar-link" href="#" onclick="showPage('collider')"><span class="dot"></span>Collider</a>
-      <a class="sidebar-link" href="#" onclick="showPage('hierarchy')"><span class="dot"></span>Hierarchy</a>
-      <a class="sidebar-link" href="#" onclick="showPage('meshrenderer')"><span class="dot"></span>MeshRenderer</a>
-      <a class="sidebar-link" href="#" onclick="showPage('light')"><span class="dot"></span>Light</a>
-      <a class="sidebar-link" href="#" onclick="showPage('animation')"><span class="dot"></span>Animation</a>
-      <a class="sidebar-link" href="#" onclick="showPage('volumetricfog')"><span class="dot"></span>VolumetricFog</a>
-      <a class="sidebar-link" href="#" onclick="showPage('layer')"><span class="dot"></span>Layer</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('transform')"><span class="dot"></span>Transform</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('tag')"><span class="dot"></span>Tag</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('rigidbody')"><span class="dot"></span>Rigidbody</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('collider')"><span class="dot"></span>Collider</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('hierarchy')"><span class="dot"></span>Hierarchy</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('meshrenderer')"><span class="dot"></span>MeshRenderer</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('light')"><span class="dot"></span>Light</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('animation')"><span class="dot"></span>Animation</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('volumetricfog')"><span class="dot"></span>VolumetricFog</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('layer')"><span class="dot"></span>Layer</a>
     </div>
     <div class="sidebar-section">
       <span class="sidebar-label">Utilities</span>
-      <a class="sidebar-link" href="#" onclick="showPage('entity')"><span class="dot"></span>Entity</a>
-      <a class="sidebar-link" href="#" onclick="showPage('vec3')"><span class="dot"></span>Vec3</a>
-      <a class="sidebar-link" href="#" onclick="showPage('script')"><span class="dot"></span>Script</a>
-      <a class="sidebar-link" href="#" onclick="showPage('system')"><span class="dot"></span>System</a>
-      <a class="sidebar-link" href="#" onclick="showPage('physics')"><span class="dot"></span>Physics</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('entity')"><span class="dot"></span>Entity</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('vec3')"><span class="dot"></span>Vec3</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('script')"><span class="dot"></span>Script</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('system')"><span class="dot"></span>System</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('physics')"><span class="dot"></span>Physics</a>
     </div>
     <div class="sidebar-section">
       <span class="sidebar-label">Examples</span>
-      <a class="sidebar-link" href="#" onclick="showPage('examples')"><span class="dot"></span>Code Examples</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('examples')"><span class="dot"></span>Code Examples</a>
     </div>
   </nav>
 
@@ -526,32 +526,32 @@ code {
         <p>Every entity with a <code>ScriptComponent</code> runs inside an isolated <code>sol::environment</code>. The following global tables are available in every script.</p>
       </div>
       <div class="quick-cards">
-        <a class="qcard" href="#" onclick="showPage('lifecycle')">
+        <a class="qcard" href="#" onclick="return showPage('lifecycle')">
           <div class="qcard-icon"><i class="fa-solid fa-bolt"></i></div>
           <div class="qcard-title">Lifecycle</div>
           <div class="qcard-sub">OnStart, OnUpdate, callbacks</div>
         </a>
-        <a class="qcard" href="#" onclick="showPage('transform')">
+        <a class="qcard" href="#" onclick="return showPage('transform')">
           <div class="qcard-icon"><i class="fa-solid fa-arrows-up-down-left-right"></i></div>
           <div class="qcard-title">Transform</div>
           <div class="qcard-sub">Position, rotation, scale</div>
         </a>
-        <a class="qcard" href="#" onclick="showPage('rigidbody')">
+        <a class="qcard" href="#" onclick="return showPage('rigidbody')">
           <div class="qcard-icon"><i class="fa-solid fa-circle-dot"></i></div>
           <div class="qcard-title">Rigidbody</div>
           <div class="qcard-sub">Physics, velocity, mass</div>
         </a>
-        <a class="qcard" href="#" onclick="showPage('light')">
+        <a class="qcard" href="#" onclick="return showPage('light')">
           <div class="qcard-icon"><i class="fa-solid fa-lightbulb"></i></div>
           <div class="qcard-title">Light</div>
           <div class="qcard-sub">Point, spot, directional</div>
         </a>
-        <a class="qcard" href="#" onclick="showPage('system')">
+        <a class="qcard" href="#" onclick="return showPage('system')">
           <div class="qcard-icon"><i class="fa-solid fa-gear"></i></div>
           <div class="qcard-title">System</div>
           <div class="qcard-sub">Files, time, OS</div>
         </a>
-        <a class="qcard" href="#" onclick="showPage('examples')">
+        <a class="qcard" href="#" onclick="return showPage('examples')">
           <div class="qcard-icon"><i class="fa-solid fa-book-open"></i></div>
           <div class="qcard-title">Examples</div>
           <div class="qcard-sub">Ready-to-use snippets</div>
@@ -584,7 +584,7 @@ code {
     <!-- ══════════════════════════ LIFECYCLE ═══════════════════════════════ -->
     <section class="page" id="page-lifecycle">
       <div class="breadcrumb">
-        <a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Lifecycle</span>
+        <a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>Lifecycle</span>
       </div>
       <h2>Script Lifecycle <span class="badge">Core</span></h2>
       <p class="page-desc">Functions called automatically by the engine each frame or on physics events.</p>
@@ -627,15 +627,15 @@ code {
       </table>
 
       <div class="page-nav">
-        <a class="pnav-btn" href="#" onclick="showPage('home')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Overview</span></a>
-        <a class="pnav-btn next" href="#" onclick="showPage('transform')"><span class="pnav-dir">Next →</span><span class="pnav-title">Transform</span></a>
+        <a class="pnav-btn" href="#" onclick="return showPage('home')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Overview</span></a>
+        <a class="pnav-btn next" href="#" onclick="return showPage('transform')"><span class="pnav-dir">Next →</span><span class="pnav-title">Transform</span></a>
       </div>
     </section>
 
     <!-- ══════════════════════════ TRANSFORM ═══════════════════════════════ -->
     <section class="page" id="page-transform">
       <div class="breadcrumb">
-        <a href="#" onclick="showPage('home')">Home</a><span>/</span><a href="#" onclick="showPage('components')">Components</a><span>/</span><span>Transform</span>
+        <a href="#" onclick="return showPage('home')">Home</a><span>/</span><a href="#" onclick="return showPage('components')">Components</a><span>/</span><span>Transform</span>
       </div>
       <h2>Transform <span class="badge">Component</span></h2>
       <p class="page-desc">Local position, rotation and scale of an entity. Rotation values are in <strong>degrees</strong> (pitch, yaw, roll).</p>
@@ -663,14 +663,14 @@ code {
       </div>
 
       <div class="page-nav">
-        <a class="pnav-btn" href="#" onclick="showPage('lifecycle')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Lifecycle</span></a>
-        <a class="pnav-btn next" href="#" onclick="showPage('rigidbody')"><span class="pnav-dir">Next →</span><span class="pnav-title">Rigidbody</span></a>
+        <a class="pnav-btn" href="#" onclick="return showPage('lifecycle')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Lifecycle</span></a>
+        <a class="pnav-btn next" href="#" onclick="return showPage('rigidbody')"><span class="pnav-dir">Next →</span><span class="pnav-title">Rigidbody</span></a>
       </div>
     </section>
 
     <!-- ═══════════════════════════ TAG ════════════════════════════════════ -->
     <section class="page" id="page-tag">
-      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Tag</span></div>
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>Tag</span></div>
       <h2>Tag <span class="badge">Component</span></h2>
       <p class="page-desc">Read or change the name tag of any entity.</p>
       <table class="api-table">
@@ -684,7 +684,7 @@ code {
 
     <!-- ════════════════════════ RIGIDBODY ═════════════════════════════════ -->
     <section class="page" id="page-rigidbody">
-      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><a href="#" onclick="showPage('components')">Components</a><span>/</span><span>Rigidbody</span></div>
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><a href="#" onclick="return showPage('components')">Components</a><span>/</span><span>Rigidbody</span></div>
       <h2>Rigidbody <span class="badge">Component</span></h2>
       <p class="page-desc">PhysX-backed rigid body. Controls mass, velocity, drag and physics behaviour.</p>
       <table class="api-table">
@@ -707,14 +707,14 @@ code {
         </tbody>
       </table>
       <div class="page-nav">
-        <a class="pnav-btn" href="#" onclick="showPage('transform')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Transform</span></a>
-        <a class="pnav-btn next" href="#" onclick="showPage('collider')"><span class="pnav-dir">Next →</span><span class="pnav-title">Collider</span></a>
+        <a class="pnav-btn" href="#" onclick="return showPage('transform')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Transform</span></a>
+        <a class="pnav-btn next" href="#" onclick="return showPage('collider')"><span class="pnav-dir">Next →</span><span class="pnav-title">Collider</span></a>
       </div>
     </section>
 
     <!-- ═════════════════════════ COLLIDER ═════════════════════════════════ -->
     <section class="page" id="page-collider">
-      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><a href="#" onclick="showPage('components')">Components</a><span>/</span><span>Collider</span></div>
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><a href="#" onclick="return showPage('components')">Components</a><span>/</span><span>Collider</span></div>
       <h2>Collider <span class="badge">Component</span></h2>
       <p class="page-desc">Shape, trigger flag and physics material properties.</p>
       <div class="tag-row">
@@ -747,14 +747,14 @@ code {
         </tbody>
       </table>
       <div class="page-nav">
-        <a class="pnav-btn" href="#" onclick="showPage('rigidbody')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Rigidbody</span></a>
-        <a class="pnav-btn next" href="#" onclick="showPage('hierarchy')"><span class="pnav-dir">Next →</span><span class="pnav-title">Hierarchy</span></a>
+        <a class="pnav-btn" href="#" onclick="return showPage('rigidbody')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Rigidbody</span></a>
+        <a class="pnav-btn next" href="#" onclick="return showPage('hierarchy')"><span class="pnav-dir">Next →</span><span class="pnav-title">Hierarchy</span></a>
       </div>
     </section>
 
     <!-- ═══════════════════════ HIERARCHY ══════════════════════════════════ -->
     <section class="page" id="page-hierarchy">
-      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Hierarchy</span></div>
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>Hierarchy</span></div>
       <h2>Hierarchy <span class="badge">Component</span></h2>
       <p class="page-desc">Navigate the entity parent / child tree.</p>
       <table class="api-table">
@@ -780,7 +780,7 @@ code {
 
     <!-- ═══════════════════════ MESHRENDERER ═══════════════════════════════ -->
     <section class="page" id="page-meshrenderer">
-      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>MeshRenderer</span></div>
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>MeshRenderer</span></div>
       <h2>MeshRenderer <span class="badge">Component</span></h2>
       <p class="page-desc">Control mesh visibility, shadow casting and material.</p>
       <table class="api-table">
@@ -799,7 +799,7 @@ code {
 
     <!-- ════════════════════════ LIGHT ═════════════════════════════════════ -->
     <section class="page" id="page-light">
-      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><a href="#" onclick="showPage('components')">Components</a><span>/</span><span>Light</span></div>
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><a href="#" onclick="return showPage('components')">Components</a><span>/</span><span>Light</span></div>
       <h2>Light <span class="badge">Component</span></h2>
       <p class="page-desc">Directional, Point and Spot lights with volumetric and sun-shafts support.</p>
       <div class="tag-row">
@@ -868,14 +868,14 @@ code {
 <span class="kw">end</span></pre>
       </div>
       <div class="page-nav">
-        <a class="pnav-btn" href="#" onclick="showPage('meshrenderer')"><span class="pnav-dir">← Previous</span><span class="pnav-title">MeshRenderer</span></a>
-        <a class="pnav-btn next" href="#" onclick="showPage('animation')"><span class="pnav-dir">Next →</span><span class="pnav-title">Animation</span></a>
+        <a class="pnav-btn" href="#" onclick="return showPage('meshrenderer')"><span class="pnav-dir">← Previous</span><span class="pnav-title">MeshRenderer</span></a>
+        <a class="pnav-btn next" href="#" onclick="return showPage('animation')"><span class="pnav-dir">Next →</span><span class="pnav-title">Animation</span></a>
       </div>
     </section>
 
     <!-- ═══════════════════════ ANIMATION ══════════════════════════════════ -->
     <section class="page" id="page-animation">
-      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Animation</span></div>
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>Animation</span></div>
       <h2>Animation <span class="badge">Component</span></h2>
       <p class="page-desc">Clip index is 0-based and maps to the clips embedded in the mesh asset.</p>
       <table class="api-table">
@@ -899,7 +899,7 @@ code {
 
     <!-- ══════════════════════ VOLUMETRICFOG ═══════════════════════════════ -->
     <section class="page" id="page-volumetricfog">
-      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>VolumetricFog</span></div>
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>VolumetricFog</span></div>
       <h2>VolumetricFog <span class="badge">Component</span></h2>
       <p class="page-desc">Post-process volumetric fog applied to the full scene.</p>
       <table class="api-table">
@@ -922,7 +922,7 @@ code {
 
     <!-- ══════════════════════════ LAYER ══════════════════════════════════ -->
     <section class="page" id="page-layer">
-      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Layer</span></div>
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>Layer</span></div>
       <h2>Layer <span class="badge">Component</span></h2>
       <p class="page-desc">Assigns an entity to one of 32 collision/rendering layers and controls which other layers it interacts with. The layer system drives both PhysX collision filtering and <code>Physics.raycast</code> queries.</p>
 
@@ -980,7 +980,7 @@ code {
 
     <!-- ══════════════════════════ PHYSICS ══════════════════════════════════ -->
     <section class="page" id="page-physics">
-      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Physics</span></div>
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>Physics</span></div>
       <h2>Physics <span class="badge">Utility</span></h2>
       <p class="page-desc">Scene-query utilities built on top of PhysX. Exposes raycast queries with optional layer filtering.</p>
 
@@ -1055,7 +1055,7 @@ code {
 
     <!-- ══════════════════════════ ENTITY ══════════════════════════════════ -->
     <section class="page" id="page-entity">
-      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Entity</span></div>
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>Entity</span></div>
       <h2>Entity <span class="badge">Utility</span></h2>
       <p class="page-desc">Create and destroy entities at runtime.</p>
       <table class="api-table">
@@ -1070,7 +1070,7 @@ code {
 
     <!-- ═══════════════════════════ VEC3 ═══════════════════════════════════ -->
     <section class="page" id="page-vec3">
-      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Vec3</span></div>
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>Vec3</span></div>
       <h2>Vec3 <span class="badge">Utility</span></h2>
       <p class="page-desc">Stateless math helpers operating on plain <code>{x, y, z}</code> tables.</p>
       <table class="api-table">
@@ -1086,7 +1086,7 @@ code {
 
     <!-- ══════════════════════════ SCRIPT ══════════════════════════════════ -->
     <section class="page" id="page-script">
-      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>Script</span></div>
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>Script</span></div>
       <h2>Script <span class="badge">Utility</span></h2>
       <p class="page-desc">Call functions and read/write variables across entity script environments.</p>
       <table class="api-table">
@@ -1126,7 +1126,7 @@ code {
 
     <!-- ══════════════════════════ SYSTEM ══════════════════════════════════ -->
     <section class="page" id="page-system">
-      <div class="breadcrumb"><a href="#" onclick="showPage('home')">Home</a><span>/</span><span>System</span></div>
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>System</span></div>
       <h2>System <span class="badge">Utility</span></h2>
       <p class="page-desc">Operating system utilities: files, directories, time and machine info.</p>
 
@@ -1197,16 +1197,16 @@ code {
       <h2>Components <span class="badge">Reference</span></h2>
       <p class="page-desc">All ECS components accessible from Lua. Click any card to open its reference.</p>
       <div class="quick-cards" style="margin-top:0">
-        <a class="qcard" href="#" onclick="showPage('transform')"><div class="qcard-icon"><i class="fa-solid fa-arrows-up-down-left-right"></i></div><div class="qcard-title">Transform</div></a>
-        <a class="qcard" href="#" onclick="showPage('tag')"><div class="qcard-icon"><i class="fa-solid fa-tag"></i></div><div class="qcard-title">Tag</div></a>
-        <a class="qcard" href="#" onclick="showPage('rigidbody')"><div class="qcard-icon"><i class="fa-solid fa-circle-dot"></i></div><div class="qcard-title">Rigidbody</div></a>
-        <a class="qcard" href="#" onclick="showPage('collider')"><div class="qcard-icon"><i class="fa-solid fa-shield-halved"></i></div><div class="qcard-title">Collider</div></a>
-        <a class="qcard" href="#" onclick="showPage('hierarchy')"><div class="qcard-icon"><i class="fa-solid fa-sitemap"></i></div><div class="qcard-title">Hierarchy</div></a>
-        <a class="qcard" href="#" onclick="showPage('meshrenderer')"><div class="qcard-icon"><i class="fa-solid fa-cube"></i></div><div class="qcard-title">MeshRenderer</div></a>
-        <a class="qcard" href="#" onclick="showPage('light')"><div class="qcard-icon"><i class="fa-solid fa-lightbulb"></i></div><div class="qcard-title">Light</div></a>
-        <a class="qcard" href="#" onclick="showPage('animation')"><div class="qcard-icon"><i class="fa-solid fa-film"></i></div><div class="qcard-title">Animation</div></a>
-        <a class="qcard" href="#" onclick="showPage('volumetricfog')"><div class="qcard-icon"><i class="fa-solid fa-wind"></i></div><div class="qcard-title">VolumetricFog</div></a>
-        <a class="qcard" href="#" onclick="showPage('layer')"><div class="qcard-icon"><i class="fa-solid fa-layer-group"></i></div><div class="qcard-title">Layer</div></a>
+        <a class="qcard" href="#" onclick="return showPage('transform')"><div class="qcard-icon"><i class="fa-solid fa-arrows-up-down-left-right"></i></div><div class="qcard-title">Transform</div></a>
+        <a class="qcard" href="#" onclick="return showPage('tag')"><div class="qcard-icon"><i class="fa-solid fa-tag"></i></div><div class="qcard-title">Tag</div></a>
+        <a class="qcard" href="#" onclick="return showPage('rigidbody')"><div class="qcard-icon"><i class="fa-solid fa-circle-dot"></i></div><div class="qcard-title">Rigidbody</div></a>
+        <a class="qcard" href="#" onclick="return showPage('collider')"><div class="qcard-icon"><i class="fa-solid fa-shield-halved"></i></div><div class="qcard-title">Collider</div></a>
+        <a class="qcard" href="#" onclick="return showPage('hierarchy')"><div class="qcard-icon"><i class="fa-solid fa-sitemap"></i></div><div class="qcard-title">Hierarchy</div></a>
+        <a class="qcard" href="#" onclick="return showPage('meshrenderer')"><div class="qcard-icon"><i class="fa-solid fa-cube"></i></div><div class="qcard-title">MeshRenderer</div></a>
+        <a class="qcard" href="#" onclick="return showPage('light')"><div class="qcard-icon"><i class="fa-solid fa-lightbulb"></i></div><div class="qcard-title">Light</div></a>
+        <a class="qcard" href="#" onclick="return showPage('animation')"><div class="qcard-icon"><i class="fa-solid fa-film"></i></div><div class="qcard-title">Animation</div></a>
+        <a class="qcard" href="#" onclick="return showPage('volumetricfog')"><div class="qcard-icon"><i class="fa-solid fa-wind"></i></div><div class="qcard-title">VolumetricFog</div></a>
+        <a class="qcard" href="#" onclick="return showPage('layer')"><div class="qcard-icon"><i class="fa-solid fa-layer-group"></i></div><div class="qcard-title">Layer</div></a>
       </div>
     </section>
 
