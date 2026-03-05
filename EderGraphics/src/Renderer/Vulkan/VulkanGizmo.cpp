@@ -4,6 +4,7 @@
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/ColliderComponent.h"
+#include "ECS/Components/CharacterControllerComponent.h"
 #include <IO/AssetManager.h>
 #include <IO/DebugDraw.h>
 #include <fstream>
@@ -434,7 +435,32 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
             calls.push_back({start, count, color});
     }
 
-    // ── Lua / C++ debug lines (Debug.drawRay etc.) ─────────────────────────
+    // ── CharacterController wireframes ─────────────────────────────────────
+    for (Entity e : registry.GetEntities())
+    {
+        if (!registry.Has<CharacterControllerComponent>(e)) continue;
+        if (!registry.Has<TransformComponent>(e))           continue;
+
+        const auto& t  = registry.Get<TransformComponent>(e);
+        const auto& cc = registry.Get<CharacterControllerComponent>(e);
+
+        bool      isSel = (e == selectedEntity);
+        glm::vec4 color = isSel
+            ? glm::vec4(1.0f, 0.75f, 0.10f, 1.00f)  // bright orange when selected
+            : glm::vec4(1.0f, 0.55f, 0.10f, 0.75f);  // muted orange
+
+        glm::mat4    world    = t.GetMatrix();
+        float        halfHgt  = std::max((cc.height * 0.5f) - cc.radius, 0.0f);
+        uint32_t     startIdx = static_cast<uint32_t>(verts.size());
+
+        AddCapsule(verts, world, cc.radius, halfHgt, cc.center, 24);
+
+        uint32_t cnt = static_cast<uint32_t>(verts.size()) - startIdx;
+        if (cnt > 0)
+            calls.push_back({startIdx, cnt, color});
+    }
+
+    // ── Lua / C++ debug lines (Debug.drawRay etc.) ───────────────────────────────
     for (const auto& line : Krayon::DebugDraw::Get().GetLines())
     {
         uint32_t start = static_cast<uint32_t>(verts.size());

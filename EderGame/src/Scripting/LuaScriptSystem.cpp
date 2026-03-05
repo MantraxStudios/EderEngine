@@ -24,10 +24,13 @@ namespace fs = std::filesystem;
 #include "ECS/Components/VolumetricFogComponent.h"
 #include "ECS/Components/LayerComponent.h"
 #include "ECS/Components/CameraComponent.h"
+#include "ECS/Components/CharacterControllerComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 #include <IO/AssetManager.h>
 #include <IO/DebugDraw.h>
 #include "Physics/PhysicsSystem.h"
+#include <SDL3/SDL.h>
+#include <cstring>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Singleton
@@ -90,6 +93,7 @@ void LuaScriptSystem::Update(Registry& registry, float dt)
 
     // Update the registry pointer used by all Lua API bindings this frame
     m_lua["__set_registry"](static_cast<void*>(&registry));
+    m_lua["__update_input"]();
 
     registry.Each<ScriptComponent>([&](Entity e, ScriptComponent& sc)
     {
@@ -1267,4 +1271,235 @@ void LuaScriptSystem::BindAPI()
         if (s_reg && s_reg->Has<CameraComponent>((Entity)e))
             s_reg->Get<CameraComponent>((Entity)e).farPlane = v;
     };
+
+    // ── CharacterController table ────────────────────────────────────────────────
+    // Capsule-based kinematic character controller.
+    // Call CharacterController.move(e, dx, dy, dz) every frame to move an entity.
+    sol::table CC = m_lua.create_named_table("CharacterController");
+
+    CC["has"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<CharacterControllerComponent>((Entity)e);
+    };
+
+    // add(e) — attach a CharacterControllerComponent with default values
+    CC["add"] = [](int e) {
+        if (s_reg && !s_reg->Has<CharacterControllerComponent>((Entity)e))
+            s_reg->Add<CharacterControllerComponent>((Entity)e);
+    };
+
+    // remove(e) — detach the CharacterControllerComponent
+    CC["remove"] = [](int e) {
+        if (s_reg && s_reg->Has<CharacterControllerComponent>((Entity)e))
+        {
+            s_reg->Remove<CharacterControllerComponent>((Entity)e);
+            PhysicsSystem::Get().MarkDirty((Entity)e);
+        }
+    };
+
+    // move(e, dx, dy, dz) — sweep-move the capsule controller by a world-space displacement
+    //   dx/dy/dz are in metres (apply gravity + jump + speed * dt yourself)
+    //   Writes back position to TransformComponent and updates isGrounded.
+    CC["move"] = [](int e, float dx, float dy, float dz) {
+        if (!s_reg) return;
+        PhysicsSystem::Get().MoveController((Entity)e, {dx, dy, dz}, 1.0f / 60.0f);
+        // WriteBackControllers is called each fixed-step in the game loop,
+        // but calling it here too ensures Lua sees position immediately.
+        PhysicsSystem::Get().WriteBackControllers(*s_reg);
+    };
+
+    // isGrounded(e) — returns true when the controller is touching the ground
+    CC["isGrounded"] = [](int e) -> bool {
+        if (!s_reg || !s_reg->Has<CharacterControllerComponent>((Entity)e)) return false;
+        return s_reg->Get<CharacterControllerComponent>((Entity)e).isGrounded;
+    };
+
+    // getVelocity(e) — returns last-frame displacement as {x,y,z}
+    CC["getVelocity"] = [](int e) -> std::tuple<float,float,float> {
+        if (!s_reg || !s_reg->Has<CharacterControllerComponent>((Entity)e))
+            return {0.f, 0.f, 0.f};
+        const auto& v = s_reg->Get<CharacterControllerComponent>((Entity)e).velocity;
+        return {v.x, v.y, v.z};
+    };
+
+    CC["getRadius"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<CharacterControllerComponent>((Entity)e)) return 0.3f;
+        return s_reg->Get<CharacterControllerComponent>((Entity)e).radius;
+    };
+    CC["setRadius"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<CharacterControllerComponent>((Entity)e))
+        {
+            s_reg->Get<CharacterControllerComponent>((Entity)e).radius = v;
+            PhysicsSystem::Get().MarkDirty((Entity)e);
+        }
+    };
+
+    CC["getHeight"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<CharacterControllerComponent>((Entity)e)) return 1.8f;
+        return s_reg->Get<CharacterControllerComponent>((Entity)e).height;
+    };
+    CC["setHeight"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<CharacterControllerComponent>((Entity)e))
+        {
+            s_reg->Get<CharacterControllerComponent>((Entity)e).height = v;
+            PhysicsSystem::Get().MarkDirty((Entity)e);
+        }
+    };
+
+    CC["getSlopeLimit"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<CharacterControllerComponent>((Entity)e)) return 45.f;
+        return s_reg->Get<CharacterControllerComponent>((Entity)e).slopeLimit;
+    };
+    CC["setSlopeLimit"] = [](int e, float deg) {
+        if (s_reg && s_reg->Has<CharacterControllerComponent>((Entity)e))
+        {
+            s_reg->Get<CharacterControllerComponent>((Entity)e).slopeLimit = deg;
+            PhysicsSystem::Get().MarkDirty((Entity)e);
+        }
+    };
+
+    CC["getStepOffset"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<CharacterControllerComponent>((Entity)e)) return 0.3f;
+        return s_reg->Get<CharacterControllerComponent>((Entity)e).stepOffset;
+    };
+    CC["setStepOffset"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<CharacterControllerComponent>((Entity)e))
+        {
+            s_reg->Get<CharacterControllerComponent>((Entity)e).stepOffset = v;
+            PhysicsSystem::Get().MarkDirty((Entity)e);
+        }
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // Input — keyboard, mouse buttons, mouse motion
+    // Updated once per frame via __update_input() before any OnUpdate call.
+    // ─────────────────────────────────────────────────────────────────────────
+    static bool     s_keysPrev[SDL_SCANCODE_COUNT] = {};
+    static bool     s_keysCurr[SDL_SCANCODE_COUNT] = {};
+    static uint32_t s_mousePrev = 0;
+    static uint32_t s_mouseCurr = 0;
+    static float    s_mouseX    = 0.f, s_mouseY  = 0.f;
+    static float    s_mouseDX   = 0.f, s_mouseDY = 0.f;
+
+    m_lua["__update_input"] = []() {
+        std::memcpy(s_keysPrev, s_keysCurr, sizeof(s_keysCurr));
+        s_mousePrev = s_mouseCurr;
+        int numKeys = 0;
+        const bool* keys = SDL_GetKeyboardState(&numKeys);
+        int n = (numKeys < SDL_SCANCODE_COUNT) ? numKeys : SDL_SCANCODE_COUNT;
+        std::memcpy(s_keysCurr, keys, static_cast<std::size_t>(n) * sizeof(bool));
+        s_mouseCurr = SDL_GetMouseState(&s_mouseX, &s_mouseY);
+        SDL_GetRelativeMouseState(&s_mouseDX, &s_mouseDY);
+    };
+
+    sol::table Inp = m_lua.create_named_table("Input");
+
+    // ── Keyboard ──────────────────────────────────────────────────────────────
+    // getKey(scancode)     — true while key is held
+    Inp["getKey"] = [](int sc) -> bool {
+        return (sc >= 0 && sc < SDL_SCANCODE_COUNT) && s_keysCurr[sc];
+    };
+    // getKeyDown(scancode) — true only on the first frame the key goes down
+    Inp["getKeyDown"] = [](int sc) -> bool {
+        return (sc >= 0 && sc < SDL_SCANCODE_COUNT) && s_keysCurr[sc] && !s_keysPrev[sc];
+    };
+    // getKeyUp(scancode)   — true only on the first frame the key is released
+    Inp["getKeyUp"] = [](int sc) -> bool {
+        return (sc >= 0 && sc < SDL_SCANCODE_COUNT) && !s_keysCurr[sc] && s_keysPrev[sc];
+    };
+
+    // ── Mouse ─────────────────────────────────────────────────────────────────
+    // getMouseButton(btn)     — btn: 1=left 2=middle 3=right; true while held
+    Inp["getMouseButton"] = [](int btn) -> bool {
+        if (btn < 1 || btn > 5) return false;
+        return (s_mouseCurr & SDL_BUTTON_MASK(btn)) != 0;
+    };
+    // getMouseButtonDown(btn) — true only on the frame it was first pressed
+    Inp["getMouseButtonDown"] = [](int btn) -> bool {
+        if (btn < 1 || btn > 5) return false;
+        uint32_t mask = SDL_BUTTON_MASK(btn);
+        return (s_mouseCurr & mask) != 0 && (s_mousePrev & mask) == 0;
+    };
+    // getMouseButtonUp(btn)   — true only on the frame it was released
+    Inp["getMouseButtonUp"] = [](int btn) -> bool {
+        if (btn < 1 || btn > 5) return false;
+        uint32_t mask = SDL_BUTTON_MASK(btn);
+        return (s_mouseCurr & mask) == 0 && (s_mousePrev & mask) != 0;
+    };
+    // getMousePosition() — cursor x, y in window pixels (two return values)
+    Inp["getMousePosition"] = []() -> std::tuple<float, float> {
+        return { s_mouseX, s_mouseY };
+    };
+    // getMouseDelta() — relative motion since last frame, dx, dy (two values)
+    Inp["getMouseDelta"] = []() -> std::tuple<float, float> {
+        return { s_mouseDX, s_mouseDY };
+    };
+
+    // ── Axis helpers ──────────────────────────────────────────────────────────
+    // getAxis("Horizontal") — A/Left=-1 .. D/Right=+1
+    // getAxis("Vertical")   — S/Down=-1 .. W/Up=+1
+    Inp["getAxis"] = [](const std::string& axis) -> float {
+        if (axis == "Horizontal") {
+            float v = 0.f;
+            if (s_keysCurr[SDL_SCANCODE_D] || s_keysCurr[SDL_SCANCODE_RIGHT]) v += 1.f;
+            if (s_keysCurr[SDL_SCANCODE_A] || s_keysCurr[SDL_SCANCODE_LEFT])  v -= 1.f;
+            return v;
+        }
+        if (axis == "Vertical") {
+            float v = 0.f;
+            if (s_keysCurr[SDL_SCANCODE_W] || s_keysCurr[SDL_SCANCODE_UP])   v += 1.f;
+            if (s_keysCurr[SDL_SCANCODE_S] || s_keysCurr[SDL_SCANCODE_DOWN]) v -= 1.f;
+            return v;
+        }
+        return 0.f;
+    };
+
+    // ── Named key constants ───────────────────────────────────────────────────
+    // Letters
+    Inp["KEY_A"] = (int)SDL_SCANCODE_A;  Inp["KEY_B"] = (int)SDL_SCANCODE_B;
+    Inp["KEY_C"] = (int)SDL_SCANCODE_C;  Inp["KEY_D"] = (int)SDL_SCANCODE_D;
+    Inp["KEY_E"] = (int)SDL_SCANCODE_E;  Inp["KEY_F"] = (int)SDL_SCANCODE_F;
+    Inp["KEY_G"] = (int)SDL_SCANCODE_G;  Inp["KEY_H"] = (int)SDL_SCANCODE_H;
+    Inp["KEY_I"] = (int)SDL_SCANCODE_I;  Inp["KEY_J"] = (int)SDL_SCANCODE_J;
+    Inp["KEY_K"] = (int)SDL_SCANCODE_K;  Inp["KEY_L"] = (int)SDL_SCANCODE_L;
+    Inp["KEY_M"] = (int)SDL_SCANCODE_M;  Inp["KEY_N"] = (int)SDL_SCANCODE_N;
+    Inp["KEY_O"] = (int)SDL_SCANCODE_O;  Inp["KEY_P"] = (int)SDL_SCANCODE_P;
+    Inp["KEY_Q"] = (int)SDL_SCANCODE_Q;  Inp["KEY_R"] = (int)SDL_SCANCODE_R;
+    Inp["KEY_S"] = (int)SDL_SCANCODE_S;  Inp["KEY_T"] = (int)SDL_SCANCODE_T;
+    Inp["KEY_U"] = (int)SDL_SCANCODE_U;  Inp["KEY_V"] = (int)SDL_SCANCODE_V;
+    Inp["KEY_W"] = (int)SDL_SCANCODE_W;  Inp["KEY_X"] = (int)SDL_SCANCODE_X;
+    Inp["KEY_Y"] = (int)SDL_SCANCODE_Y;  Inp["KEY_Z"] = (int)SDL_SCANCODE_Z;
+    // Numbers
+    Inp["KEY_0"] = (int)SDL_SCANCODE_0;  Inp["KEY_1"] = (int)SDL_SCANCODE_1;
+    Inp["KEY_2"] = (int)SDL_SCANCODE_2;  Inp["KEY_3"] = (int)SDL_SCANCODE_3;
+    Inp["KEY_4"] = (int)SDL_SCANCODE_4;  Inp["KEY_5"] = (int)SDL_SCANCODE_5;
+    Inp["KEY_6"] = (int)SDL_SCANCODE_6;  Inp["KEY_7"] = (int)SDL_SCANCODE_7;
+    Inp["KEY_8"] = (int)SDL_SCANCODE_8;  Inp["KEY_9"] = (int)SDL_SCANCODE_9;
+    // Special
+    Inp["KEY_SPACE"]     = (int)SDL_SCANCODE_SPACE;
+    Inp["KEY_RETURN"]    = (int)SDL_SCANCODE_RETURN;
+    Inp["KEY_ESCAPE"]    = (int)SDL_SCANCODE_ESCAPE;
+    Inp["KEY_BACKSPACE"] = (int)SDL_SCANCODE_BACKSPACE;
+    Inp["KEY_TAB"]       = (int)SDL_SCANCODE_TAB;
+    Inp["KEY_LSHIFT"]    = (int)SDL_SCANCODE_LSHIFT;
+    Inp["KEY_RSHIFT"]    = (int)SDL_SCANCODE_RSHIFT;
+    Inp["KEY_LCTRL"]     = (int)SDL_SCANCODE_LCTRL;
+    Inp["KEY_RCTRL"]     = (int)SDL_SCANCODE_RCTRL;
+    Inp["KEY_LALT"]      = (int)SDL_SCANCODE_LALT;
+    Inp["KEY_RALT"]      = (int)SDL_SCANCODE_RALT;
+    // Arrow keys
+    Inp["KEY_UP"]        = (int)SDL_SCANCODE_UP;
+    Inp["KEY_DOWN"]      = (int)SDL_SCANCODE_DOWN;
+    Inp["KEY_LEFT"]      = (int)SDL_SCANCODE_LEFT;
+    Inp["KEY_RIGHT"]     = (int)SDL_SCANCODE_RIGHT;
+    // Function keys
+    Inp["KEY_F1"]  = (int)SDL_SCANCODE_F1;  Inp["KEY_F2"]  = (int)SDL_SCANCODE_F2;
+    Inp["KEY_F3"]  = (int)SDL_SCANCODE_F3;  Inp["KEY_F4"]  = (int)SDL_SCANCODE_F4;
+    Inp["KEY_F5"]  = (int)SDL_SCANCODE_F5;  Inp["KEY_F6"]  = (int)SDL_SCANCODE_F6;
+    Inp["KEY_F7"]  = (int)SDL_SCANCODE_F7;  Inp["KEY_F8"]  = (int)SDL_SCANCODE_F8;
+    Inp["KEY_F9"]  = (int)SDL_SCANCODE_F9;  Inp["KEY_F10"] = (int)SDL_SCANCODE_F10;
+    Inp["KEY_F11"] = (int)SDL_SCANCODE_F11; Inp["KEY_F12"] = (int)SDL_SCANCODE_F12;
+    // Mouse button constants
+    Inp["MB_LEFT"]   = 1;
+    Inp["MB_MIDDLE"] = 2;
+    Inp["MB_RIGHT"]  = 3;
 }

@@ -510,6 +510,8 @@ code {
       <a class="sidebar-link" href="#" onclick="return showPage('physics')"><span class="dot"></span>Physics</a>
       <a class="sidebar-link" href="#" onclick="return showPage('debug')"><span class="dot"></span>Debug</a>
       <a class="sidebar-link" href="#" onclick="return showPage('camera')"><span class="dot"></span>Camera</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('charcontroller')"><span class="dot"></span>CharacterController</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('input')"><span class="dot"></span>Input</a>
     </div>
     <div class="sidebar-section">
       <span class="sidebar-label">Examples</span>
@@ -563,6 +565,16 @@ code {
           <div class="qcard-title">Camera</div>
           <div class="qcard-sub">FOV, near/far, setActive</div>
         </a>
+        <a class="qcard" href="#" onclick="return showPage('charcontroller')">
+          <div class="qcard-icon"><i class="fa-solid fa-person-running"></i></div>
+          <div class="qcard-title">CharacterController</div>
+          <div class="qcard-sub">move, isGrounded, slope, step</div>
+        </a>
+        <a class="qcard" href="#" onclick="return showPage('input')">
+          <div class="qcard-icon"><i class="fa-solid fa-keyboard"></i></div>
+          <div class="qcard-title">Input</div>
+          <div class="qcard-sub">getKey, mouse, axes</div>
+        </a>
         <a class="qcard" href="#" onclick="return showPage('examples')">
           <div class="qcard-icon"><i class="fa-solid fa-book-open"></i></div>
           <div class="qcard-title">Examples</div>
@@ -591,6 +603,8 @@ code {
           <tr><td><code>Physics</code></td><td>Raycast scene queries with optional layer mask</td></tr>
           <tr><td><code>Debug</code></td><td>Draw lines, rays and collider gizmos in the editor viewport</td></tr>
           <tr><td><code>Camera</code></td><td>Attach, activate and configure game cameras driven by TransformComponent</td></tr>
+          <tr><td><code>CharacterController</code></td><td>Capsule-based kinematic sweep controller — move, grounded detection, step/slope config</td></tr>
+          <tr><td><code>Input</code></td><td>Keyboard polling, mouse buttons, relative motion and virtual axes</td></tr>
         </tbody>
       </table>
     </section>
@@ -1277,6 +1291,184 @@ code {
 
       <div class="page-nav">
         <a class="pnav-btn" href="#" onclick="return showPage('debug')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Debug</span></a>
+        <a class="pnav-btn next" href="#" onclick="return showPage('charcontroller')"><span class="pnav-dir">Next →</span><span class="pnav-title">CharacterController</span></a>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════ CHARACTER CONTROLLER ══════════════════════════════════ -->
+    <section class="page" id="page-charcontroller">
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>CharacterController</span></div>
+      <h2>CharacterController <span class="badge">Component</span></h2>
+      <p class="page-desc">A <strong>capsule-based kinematic controller</strong> built on PhysX sweep collision. It slides along surfaces, climbs steps and respects slope limits without requiring a <code>Rigidbody</code>.<br>
+        Call <code>CharacterController.move(e, dx, dy, dz)</code> every frame with your computed displacement (gravity + input multiplied by <code>dt</code>). The engine performs a sweep, resolves contacts and writes the final position back to the entity's <code>TransformComponent</code>.</p>
+
+      <div class="note">A <code>CharacterControllerComponent</code> is <strong>mutually exclusive</strong> with <code>ColliderComponent</code> + <code>RigidbodyComponent</code> on the same entity. Add it in the Inspector or via <code>CharacterController.add(e)</code>.</div>
+
+      <h3>Functions</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>CharacterController.has(e)</code></td><td><span class="ret-badge">bool</span></td><td>Entity has a CharacterControllerComponent.</td></tr>
+          <tr><td><code>CharacterController.add(e)</code></td><td></td><td>Attach with default values (radius 0.3, height 1.8, step 0.3, slope 45°).</td></tr>
+          <tr><td><code>CharacterController.remove(e)</code></td><td></td><td>Detach and release the PhysX controller.</td></tr>
+          <tr><td><code>CharacterController.move(e, dx, dy, dz)</code></td><td></td><td>Sweep-move by a world-space displacement. Writes back position &amp; grounded state.</td></tr>
+          <tr><td><code>CharacterController.isGrounded(e)</code></td><td><span class="ret-badge">bool</span></td><td>True when the bottom of the capsule is touching a surface.</td></tr>
+          <tr><td><code>CharacterController.getVelocity(e)</code></td><td><span class="ret-badge">x,y,z</span></td><td>Last-frame displacement (three floats).</td></tr>
+          <tr><td><code>CharacterController.getRadius(e)</code></td><td><span class="ret-badge">float</span></td><td>Capsule radius in metres.</td></tr>
+          <tr><td><code>CharacterController.setRadius(e, v)</code></td><td></td><td>Resize capsule radius (rebuilds PhysX controller).</td></tr>
+          <tr><td><code>CharacterController.getHeight(e)</code></td><td><span class="ret-badge">float</span></td><td>Total capsule height in metres.</td></tr>
+          <tr><td><code>CharacterController.setHeight(e, v)</code></td><td></td><td>Resize capsule height (rebuilds PhysX controller).</td></tr>
+          <tr><td><code>CharacterController.getSlopeLimit(e)</code></td><td><span class="ret-badge">float°</span></td><td>Maximum walkable slope angle in degrees.</td></tr>
+          <tr><td><code>CharacterController.setSlopeLimit(e, deg)</code></td><td></td><td>Set slope limit (0–89).</td></tr>
+          <tr><td><code>CharacterController.getStepOffset(e)</code></td><td><span class="ret-badge">float</span></td><td>Maximum step height the controller auto-climbs.</td></tr>
+          <tr><td><code>CharacterController.setStepOffset(e, v)</code></td><td></td><td>Set step offset in metres.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="warn"><strong>Gravity is your responsibility.</strong> The engine does <em>not</em> apply gravity automatically. Accumulate a downward velocity each frame (<code>vy = vy + (-9.81) * dt</code>) and pass it as the <code>dy</code> argument to <code>move</code>.</div>
+
+      <h3>Basic first-person movement</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">local</span> vy      = <span class="num">0</span>      <span class="cmt">-- vertical velocity (gravity accumulator)</span>
+<span class="kw">local</span> speed   = <span class="num">5</span>      <span class="cmt">-- m/s horizontal speed</span>
+<span class="kw">local</span> jumpSpd = <span class="num">6</span>      <span class="cmt">-- m/s jump impulse</span>
+GRAVITY = <span class="num">-9.81</span>
+
+<span class="kw">function</span> <span class="fn">OnStart</span>()
+    <span class="tbl">CharacterController</span>.add(this_entity)
+<span class="kw">end</span>
+
+<span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="kw">local</span> grounded = <span class="tbl">CharacterController</span>.isGrounded(this_entity)
+    <span class="kw">if</span> grounded <span class="kw">then</span> vy = <span class="num">0</span> <span class="kw">end</span>
+    vy = vy + GRAVITY * dt
+
+    <span class="kw">local</span> dx, dz = <span class="num">0</span>, <span class="num">0</span>
+    <span class="kw">if</span> <span class="tbl">Input</span>.isKeyHeld(<span class="str">"W"</span>) <span class="kw">then</span> dz = dz + speed * dt <span class="kw">end</span>
+    <span class="kw">if</span> <span class="tbl">Input</span>.isKeyHeld(<span class="str">"S"</span>) <span class="kw">then</span> dz = dz - speed * dt <span class="kw">end</span>
+    <span class="kw">if</span> <span class="tbl">Input</span>.isKeyHeld(<span class="str">"A"</span>) <span class="kw">then</span> dx = dx - speed * dt <span class="kw">end</span>
+    <span class="kw">if</span> <span class="tbl">Input</span>.isKeyHeld(<span class="str">"D"</span>) <span class="kw">then</span> dx = dx + speed * dt <span class="kw">end</span>
+
+    <span class="kw">if</span> grounded <span class="kw">and</span> <span class="tbl">Input</span>.isKeyPressed(<span class="str">"Space"</span>) <span class="kw">then</span>
+        vy = jumpSpd
+    <span class="kw">end</span>
+
+    <span class="tbl">CharacterController</span>.move(this_entity, dx, vy * dt, dz)
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Coyote time &amp; jump buffer</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">local</span> vy          = <span class="num">0</span>
+<span class="kw">local</span> coyoteTimer = <span class="num">0</span>
+<span class="kw">local</span> COYOTE_TIME = <span class="num">0.12</span>  <span class="cmt">-- seconds of grace after walking off a ledge</span>
+
+<span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="kw">if</span> <span class="tbl">CharacterController</span>.isGrounded(this_entity) <span class="kw">then</span>
+        vy = <span class="num">0</span>
+        coyoteTimer = COYOTE_TIME
+    <span class="kw">else</span>
+        coyoteTimer = coyoteTimer - dt
+    <span class="kw">end</span>
+    vy = vy + (<span class="num">-9.81</span>) * dt
+
+    <span class="kw">local</span> canJump = coyoteTimer &gt; <span class="num">0</span>
+    <span class="kw">if</span> canJump <span class="kw">and</span> <span class="tbl">Input</span>.isKeyPressed(<span class="str">"Space"</span>) <span class="kw">then</span>
+        vy = <span class="num">7</span>
+        coyoteTimer = <span class="num">0</span>
+    <span class="kw">end</span>
+
+    <span class="tbl">CharacterController</span>.move(this_entity, <span class="num">0</span>, vy * dt, <span class="num">0</span>)
+<span class="kw">end</span></pre>
+      </div>
+
+      <div class="page-nav">
+        <a class="pnav-btn" href="#" onclick="return showPage('camera')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Camera</span></a>
+        <a class="pnav-btn next" href="#" onclick="return showPage('input')"><span class="pnav-dir">Next →</span><span class="pnav-title">Input</span></a>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════════ INPUT ═════════════════════════════ -->
+    <section class="page" id="page-input">
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>Input</span></div>
+      <h2>Input <span class="badge">Utility</span></h2>
+      <p class="page-desc">Poll keyboard and mouse state from any script. The snapshot is updated once per frame before <code>OnUpdate</code> runs, so every entity sees the same values.</p>
+
+      <h3>Keyboard</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Input.getKey(scancode)</code></td><td><span class="ret-badge">bool</span></td><td>True every frame the key is held down</td></tr>
+          <tr><td><code>Input.getKeyDown(scancode)</code></td><td><span class="ret-badge">bool</span></td><td>True only on the first frame the key is pressed</td></tr>
+          <tr><td><code>Input.getKeyUp(scancode)</code></td><td><span class="ret-badge">bool</span></td><td>True only on the first frame the key is released</td></tr>
+          <tr><td><code>Input.getAxis(name)</code></td><td><span class="ret-badge">float −1..1</span></td><td><code>&quot;Horizontal&quot;</code> (A/D or ←/→) &nbsp;•&nbsp; <code>&quot;Vertical&quot;</code> (S/W or ↓/↑)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Mouse</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Input.getMouseButton(btn)</code></td><td><span class="ret-badge">bool</span></td><td>True while button is held &nbsp;•&nbsp; <code>MB_LEFT</code>=1, <code>MB_MIDDLE</code>=2, <code>MB_RIGHT</code>=3</td></tr>
+          <tr><td><code>Input.getMouseButtonDown(btn)</code></td><td><span class="ret-badge">bool</span></td><td>True only on the first frame a button is pressed</td></tr>
+          <tr><td><code>Input.getMouseButtonUp(btn)</code></td><td><span class="ret-badge">bool</span></td><td>True only on the first frame a button is released</td></tr>
+          <tr><td><code>Input.getMousePosition()</code></td><td><span class="ret-badge">x, y</span></td><td>Cursor position in window pixels (two return values)</td></tr>
+          <tr><td><code>Input.getMouseDelta()</code></td><td><span class="ret-badge">dx, dy</span></td><td>Relative motion since last frame (two return values)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Key constants</h3>
+      <p>Use the named constants instead of raw scancode numbers for readable scripts.</p>
+      <table class="api-table">
+        <thead><tr><th>Constant</th><th>Constant</th><th>Constant</th><th>Constant</th></tr></thead>
+        <tbody>
+          <tr><td><code>Input.KEY_A</code> – <code>KEY_Z</code></td><td><code>Input.KEY_0</code> – <code>KEY_9</code></td><td><code>Input.KEY_F1</code> – <code>KEY_F12</code></td><td><code>Input.MB_LEFT / MB_MIDDLE / MB_RIGHT</code></td></tr>
+          <tr><td><code>Input.KEY_SPACE</code></td><td><code>Input.KEY_RETURN</code></td><td><code>Input.KEY_ESCAPE</code></td><td><code>Input.KEY_BACKSPACE</code></td></tr>
+          <tr><td><code>Input.KEY_LSHIFT / KEY_RSHIFT</code></td><td><code>Input.KEY_LCTRL / KEY_RCTRL</code></td><td><code>Input.KEY_LALT / KEY_RALT</code></td><td><code>Input.KEY_TAB</code></td></tr>
+          <tr><td><code>Input.KEY_UP</code></td><td><code>Input.KEY_DOWN</code></td><td><code>Input.KEY_LEFT</code></td><td><code>Input.KEY_RIGHT</code></td></tr>
+        </tbody>
+      </table>
+
+      <h3>Example — WASD movement with jump</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">local</span> speed  = <span class="num">5</span>
+<span class="kw">local</span> jumpVel = <span class="num">8</span>
+<span class="kw">local</span> gravity = <span class="num">-20</span>
+<span class="kw">local</span> vy      = <span class="num">0</span>
+
+<span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="kw">local</span> h = <span class="tbl">Input</span>.getAxis(<span class="str">&quot;Horizontal&quot;</span>)   <span class="cmt">-- A/D</span>
+    <span class="kw">local</span> v = <span class="tbl">Input</span>.getAxis(<span class="str">&quot;Vertical&quot;</span>)     <span class="cmt">-- W/S</span>
+
+    <span class="kw">if</span> <span class="tbl">CharacterController</span>.isGrounded(this_entity) <span class="kw">then</span>
+        vy = <span class="num">0</span>
+        <span class="kw">if</span> <span class="tbl">Input</span>.getKeyDown(<span class="tbl">Input</span>.KEY_SPACE) <span class="kw">then</span>
+            vy = jumpVel
+        <span class="kw">end</span>
+    <span class="kw">else</span>
+        vy = vy + gravity * dt
+    <span class="kw">end</span>
+
+    <span class="tbl">CharacterController</span>.move(this_entity, h * speed * dt, vy * dt, v * speed * dt)
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Example — shoot on left-click (once per click)</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="kw">if</span> <span class="tbl">Input</span>.getMouseButtonDown(<span class="tbl">Input</span>.MB_LEFT) <span class="kw">then</span>
+        <span class="kw">local</span> dx, dy = <span class="tbl">Input</span>.getMouseDelta()
+        log(<span class="str">&quot;Shoot! mouse moved: &quot;</span> .. dx .. <span class="str">&quot;, &quot;</span> .. dy)
+    <span class="kw">end</span>
+<span class="kw">end</span></pre>
+      </div>
+
+      <div class="page-nav">
+        <a class="pnav-btn" href="#" onclick="return showPage('charcontroller')"><span class="pnav-dir">← Previous</span><span class="pnav-title">CharacterController</span></a>
         <a class="pnav-btn next" href="#" onclick="return showPage('examples')"><span class="pnav-dir">Next →</span><span class="pnav-title">Examples</span></a>
       </div>
     </section>
@@ -1635,6 +1827,8 @@ const searchIndex = [
   { page:'physics',      tag:'Utility',   title:'Physics',             sub:'raycast hit entity distance position normal layerMask scene query x y z nx ny nz' },
   { page:'debug',        tag:'Utility',   title:'Debug',               sub:'drawLine drawRay log gizmo collider wireframe line ray color duration visualise axis' },
   { page:'camera',       tag:'Component', title:'Camera',              sub:'setActive getActive hasCamera add remove setFOV getFOV setNear setFar nearPlane farPlane isActive follow zoom cut' },
+  { page:'charcontroller',tag:'Component', title:'CharacterController', sub:'move isGrounded getVelocity add remove has setRadius setHeight setSlopeLimit setStepOffset capsule kinematic sweep physics grounded jump' },
+  { page:'input',        tag:'Utility',   title:'Input',               sub:'getKey getKeyDown getKeyUp getMouseButton getMouseButtonDown getMouseButtonUp getMousePosition getMouseDelta getAxis Horizontal Vertical KEY_W KEY_A KEY_S KEY_D KEY_SPACE MB_LEFT MB_RIGHT keyboard mouse scancode' },
   { page:'examples',     tag:'Examples',  title:'Code Examples',       sub:'move pulse light animation collision log save config hierarchy damage raycast layer' },
 ];
 

@@ -69,8 +69,10 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
         while (physAccum >= PHYSICS_DT)
         {
             PhysicsSystem::Get().SyncActors(m_registry);
+            PhysicsSystem::Get().SyncControllers(m_registry);
             PhysicsSystem::Get().Step(PHYSICS_DT);
             PhysicsSystem::Get().WriteBack(m_registry);
+            PhysicsSystem::Get().WriteBackControllers(m_registry);
             PhysicsSystem::Get().DispatchEvents(m_registry);
             LuaScriptSystem::Get().Update(m_registry, PHYSICS_DT);
             physAccum -= PHYSICS_DT;
@@ -201,8 +203,10 @@ int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
         while (physAccum >= PHYSICS_DT)
         {
             PhysicsSystem::Get().SyncActors(m_registry);
+            PhysicsSystem::Get().SyncControllers(m_registry);
             PhysicsSystem::Get().Step(PHYSICS_DT);
             PhysicsSystem::Get().WriteBack(m_registry);
+            PhysicsSystem::Get().WriteBackControllers(m_registry);
             PhysicsSystem::Get().DispatchEvents(m_registry);
             LuaScriptSystem::Get().Update(m_registry, PHYSICS_DT);
             physAccum -= PHYSICS_DT;

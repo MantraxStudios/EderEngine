@@ -24,6 +24,7 @@ private:
     void DrawAnimationComponent();
     void DrawRigidbodyComponent();
     void DrawColliderComponent();
+    void DrawCharacterControllerComponent();
     void DrawScriptComponent();
     void DrawAddComponent();
 

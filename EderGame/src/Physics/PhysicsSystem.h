@@ -1,5 +1,6 @@
 #pragma once
 #include <physx/PxPhysicsAPI.h>
+#include <physx/characterkinematic/PxCapsuleController.h>
 #include <glm/glm.hpp>
 #include <unordered_map>
 #include <vector>
@@ -7,6 +8,7 @@
 #include "ECS/Registry.h"
 #include "ECS/Entity.h"
 #include "ECS/Components/CollisionCallbackComponent.h"
+#include "ECS/Components/CharacterControllerComponent.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RaycastHit — result returned by PhysicsSystem::Raycast
@@ -32,16 +34,24 @@ public:
     void Shutdown();
 
     // Called every game frame:
-    //   SyncActors     — creates / recreates / destroys PxActors to match ECS
-    //   Step           — advances simulation by dt seconds
-    //   WriteBack      — copies dynamic actor poses → TransformComponent
-    //   DispatchEvents — fires CollisionCallbackComponent callbacks
-    void SyncActors     (Registry& registry);
-    void Step           (float dt);
-    void WriteBack      (Registry& registry);
-    void DispatchEvents (Registry& registry);
+    //   SyncActors        — creates / recreates / destroys PxActors to match ECS
+    //   SyncControllers   — creates / destroys PxControllers to match ECS
+    //   Step              — advances simulation by dt seconds
+    //   WriteBack         — copies dynamic actor poses → TransformComponent
+    //   WriteBackControllers — copies controller positions → TransformComponent
+    //   DispatchEvents    — fires CollisionCallbackComponent callbacks
+    void SyncActors          (Registry& registry);
+    void SyncControllers     (Registry& registry);
+    void Step                (float dt);
+    void WriteBack           (Registry& registry);
+    void WriteBackControllers(Registry& registry);
+    void DispatchEvents      (Registry& registry);
 
-    // Call when an entity is destroyed so its actor gets cleaned up
+    // Move a character controller by a world-space displacement vector.
+    // Updates isGrounded and velocity fields on the component.
+    void MoveController(Entity e, const glm::vec3& displacement, float dt);
+
+    // Call when an entity is destroyed so its actor / controller gets cleaned up
     void RemoveEntity(Entity e);
     // Call when an entity's ColliderComponent or RigidbodyComponent is removed
     void MarkDirty   (Entity e);
@@ -102,24 +112,31 @@ private:
     };
 
     // ── Helpers ──────────────────────────────────────────────────────────────
-    physx::PxShape*    CreateShape  (Registry& registry, Entity e);
-    physx::PxTransform EntityPose   (Registry& registry, Entity e);
-    uint32_t           ShapeHash    (Registry& registry, Entity e) const;
-    void               DestroyActor (Entity e);
+    physx::PxShape*    CreateShape       (Registry& registry, Entity e);
+    physx::PxTransform EntityPose        (Registry& registry, Entity e);
+    uint32_t           ShapeHash         (Registry& registry, Entity e) const;
+    void               DestroyActor      (Entity e);
+    void               DestroyController (Entity e);
 
     // ── PhysX objects ────────────────────────────────────────────────────────
     physx::PxDefaultAllocator      m_allocator;
     physx::PxDefaultErrorCallback  m_errorCallback;
-    physx::PxFoundation*           m_foundation  = nullptr;
-    physx::PxPhysics*              m_physics     = nullptr;
-    physx::PxDefaultCpuDispatcher* m_dispatcher  = nullptr;
-    physx::PxScene*                m_scene       = nullptr;
-    physx::PxMaterial*             m_defaultMat  = nullptr;
+    physx::PxFoundation*           m_foundation         = nullptr;
+    physx::PxPhysics*              m_physics            = nullptr;
+    physx::PxDefaultCpuDispatcher* m_dispatcher         = nullptr;
+    physx::PxScene*                m_scene              = nullptr;
+    physx::PxMaterial*             m_defaultMat         = nullptr;
+    physx::PxControllerManager*    m_controllerManager  = nullptr;
 
     ContactCallback              m_contactCallback;
     std::vector<RawEvent>        m_events;
 
-    std::unordered_map<Entity, ActorState> m_actors;
+    std::unordered_map<Entity, ActorState>           m_actors;
+    std::unordered_map<Entity, physx::PxController*> m_controllers;
+
+    // Per-frame write-back caches for MoveController → WriteBackControllers
+    std::unordered_map<Entity, bool>      m_controllerGrounded;
+    std::unordered_map<Entity, glm::vec3> m_controllerVelocity;
 
     bool m_initialized = false;
 };

@@ -104,8 +104,10 @@ int Application::Run()
             while (physAccum >= PHYSICS_DT)
             {
                 PhysicsSystem::Get().SyncActors(m_registry);
+                PhysicsSystem::Get().SyncControllers(m_registry);
                 PhysicsSystem::Get().Step(PHYSICS_DT);
                 PhysicsSystem::Get().WriteBack(m_registry);
+                PhysicsSystem::Get().WriteBackControllers(m_registry);
                 PhysicsSystem::Get().DispatchEvents(m_registry);
                 LuaScriptSystem::Get().Update(m_registry, PHYSICS_DT);
                 physAccum -= PHYSICS_DT;

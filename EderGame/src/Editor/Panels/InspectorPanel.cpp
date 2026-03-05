@@ -9,6 +9,7 @@
 #include "ECS/Components/RigidbodyComponent.h"
 #include "ECS/Components/ColliderComponent.h"
 #include "ECS/Components/ScriptComponent.h"
+#include "ECS/Components/CharacterControllerComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 #include "Physics/PhysicsSystem.h"
 #include "Scripting/LuaScriptSystem.h"
@@ -184,6 +185,7 @@ void InspectorPanel::OnDraw()
     DrawAnimationComponent();
     DrawRigidbodyComponent();
     DrawColliderComponent();
+    DrawCharacterControllerComponent();
     DrawScriptComponent();
 
     ImGui::Spacing();
@@ -700,6 +702,78 @@ void InspectorPanel::DrawColliderComponent()
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+void InspectorPanel::DrawCharacterControllerComponent()
+{
+    if (!registry->Has<CharacterControllerComponent>(selected)) return;
+
+    if (ComponentHeader<CharacterControllerComponent>("Character Controller", registry, selected,
+            ImVec4(1.0f, 0.55f, 0.1f, 1.0f)))
+    {
+        auto& cc = registry->Get<CharacterControllerComponent>(selected);
+
+        const float prevRadius     = cc.radius;
+        const float prevHeight     = cc.height;
+        const float prevStepOffset = cc.stepOffset;
+        const float prevSlopeLimit = cc.slopeLimit;
+        const float prevSkinWidth  = cc.skinWidth;
+        const glm::vec3 prevCenter = cc.center;
+
+        ImGui::Columns(2, "cc_cols", false);
+        ImGui::SetColumnWidth(0, 130.0f);
+
+        ImGui::Text("Radius"); ImGui::NextColumn();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##cc_rad", &cc.radius, 0.01f, 0.01f, 10.0f, "%.3f");
+        ImGui::NextColumn();
+
+        ImGui::Text("Height"); ImGui::NextColumn();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##cc_hgt", &cc.height, 0.01f, 0.01f, 10.0f, "%.3f");
+        ImGui::NextColumn();
+
+        ImGui::Text("Step Offset"); ImGui::NextColumn();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##cc_step", &cc.stepOffset, 0.01f, 0.0f, 3.0f, "%.3f");
+        ImGui::NextColumn();
+
+        ImGui::Text("Slope Limit"); ImGui::NextColumn();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##cc_slope", &cc.slopeLimit, 0.5f, 0.0f, 89.9f, "%.1f°");
+        ImGui::NextColumn();
+
+        ImGui::Text("Skin Width"); ImGui::NextColumn();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat("##cc_skin", &cc.skinWidth, 0.001f, 0.001f, 1.0f, "%.3f");
+        ImGui::NextColumn();
+
+        ImGui::Text("Center"); ImGui::NextColumn();
+        ImGui::SetNextItemWidth(-1);
+        ImGui::DragFloat3("##cc_ctr", &cc.center.x, 0.01f, -10.0f, 10.0f, "%.3f");
+        ImGui::NextColumn();
+
+        // Runtime info (read-only)
+        ImGui::Separator();
+        ImGui::Text("Grounded"); ImGui::NextColumn();
+        ImGui::TextDisabled("%s", cc.isGrounded ? "yes" : "no");
+        ImGui::NextColumn();
+
+        ImGui::Columns(1);
+        ImGui::Spacing();
+
+        if (cc.radius     != prevRadius     ||
+            cc.height     != prevHeight     ||
+            cc.stepOffset != prevStepOffset ||
+            cc.slopeLimit != prevSlopeLimit ||
+            cc.skinWidth  != prevSkinWidth  ||
+            cc.center     != prevCenter)
+        {
+            PhysicsSystem::Get().MarkDirty(selected);
+        }
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 void InspectorPanel::DrawScriptComponent()
 {
     if (!registry->Has<ScriptComponent>(selected)) return;
@@ -751,10 +825,11 @@ void InspectorPanel::DrawAddComponent()
     const bool canAddAnim         = !registry->Has<AnimationComponent>(selected);
     const bool canAddRigidbody    = !registry->Has<RigidbodyComponent>(selected);
     const bool canAddCollider     = !registry->Has<ColliderComponent>(selected);
+    const bool canAddCC           = !registry->Has<CharacterControllerComponent>(selected);
     const bool canAddScript       = !registry->Has<ScriptComponent>(selected);
     const bool anyAvailable       = canAddTransform || canAddMeshRenderer || canAddLight
                                  || canAddFog || canAddAnim || canAddRigidbody || canAddCollider
-                                 || canAddScript;
+                                 || canAddCC || canAddScript;
 
     float btnW = ImGui::GetContentRegionAvail().x;
     ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
@@ -784,6 +859,11 @@ void InspectorPanel::DrawAddComponent()
         {
             registry->Add<ColliderComponent>(selected);
             PhysicsSystem::Get().MarkDirty(selected); // rebuild shapeless->shaped if rigidbody exists
+        }
+        if (canAddCC && ImGui::MenuItem("   Character Controller"))
+        {
+            registry->Add<CharacterControllerComponent>(selected);
+            PhysicsSystem::Get().MarkDirty(selected);
         }
         if (canAddScript && ImGui::MenuItem("   Script"))
             registry->Add<ScriptComponent>(selected);

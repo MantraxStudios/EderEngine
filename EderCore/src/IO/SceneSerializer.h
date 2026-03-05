@@ -31,6 +31,7 @@
 #include "ECS/Components/ColliderComponent.h"
 #include "ECS/Components/RigidbodyComponent.h"
 #include "ECS/Components/ScriptComponent.h"
+#include "ECS/Components/CharacterControllerComponent.h"
 
 #include <fstream>
 #include <sstream>
@@ -196,7 +197,17 @@ public:
                 f << "script.guid=" << buf << "\n";
                 f << "script.path=" << Escape(sc.scriptPath) << "\n";
             }
-
+            // ── CharacterControllerComponent ──────────────────────────────────
+            if (reg.Has<CharacterControllerComponent>(e))
+            {
+                const auto& cc = reg.Get<CharacterControllerComponent>(e);
+                f << "cc.radius="     << cc.radius     << "\n";
+                f << "cc.height="     << cc.height     << "\n";
+                f << "cc.stepOffset=" << cc.stepOffset << "\n";
+                f << "cc.slopeLimit=" << cc.slopeLimit << "\n";
+                f << "cc.skinWidth="  << cc.skinWidth  << "\n";
+                f << "cc.center="     << Vec3Str(cc.center) << "\n";
+            }
             // ── VolumetricFogComponent ────────────────────────────────────────
             if (reg.Has<VolumetricFogComponent>(e))
             {
@@ -432,6 +443,18 @@ private:
                 try { sc.scriptGuid = std::stoull(kv.at("script.guid"), nullptr, 16); } catch (...) {}
                 if (kv.count("script.path")) sc.scriptPath = Unescape(kv.at("script.path"));
                 sc.started = false; // always re-run OnStart after load
+            }
+
+            // CharacterControllerComponent
+            if (kv.count("cc.radius"))
+            {
+                auto& cc = reg.Add<CharacterControllerComponent>(e);
+                cc.radius     = std::stof(kv.at("cc.radius"));
+                if (kv.count("cc.height"))     cc.height     = std::stof(kv.at("cc.height"));
+                if (kv.count("cc.stepOffset")) cc.stepOffset = std::stof(kv.at("cc.stepOffset"));
+                if (kv.count("cc.slopeLimit")) cc.slopeLimit = std::stof(kv.at("cc.slopeLimit"));
+                if (kv.count("cc.skinWidth"))  cc.skinWidth  = std::stof(kv.at("cc.skinWidth"));
+                if (kv.count("cc.center"))     cc.center     = ParseVec3(kv.at("cc.center"));
             }
 
             // VolumetricFogComponent

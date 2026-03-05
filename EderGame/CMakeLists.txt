@@ -105,6 +105,7 @@ if (WIN32)
         ${PHYSX_LIB_DIR}/PhysXCommon_64.lib
         ${PHYSX_LIB_DIR}/PhysXFoundation_64.lib
         ${PHYSX_LIB_DIR}/PhysXExtensions_static_64.lib
+        ${PHYSX_LIB_DIR}/PhysXCharacterKinematic_static_64.lib
         ${PHYSX_LIB_DIR}/PhysXPvdSDK_static_64.lib
         ${PHYSX_LIB_DIR}/PhysXCooking_64.lib
         ${PHYSX_LIB_DIR}/lua54.lib
@@ -199,6 +200,7 @@ if (WIN32)
         ${PHYSX_LIB_DIR}/PhysXCommon_64.lib
         ${PHYSX_LIB_DIR}/PhysXFoundation_64.lib
         ${PHYSX_LIB_DIR}/PhysXExtensions_static_64.lib
+        ${PHYSX_LIB_DIR}/PhysXCharacterKinematic_static_64.lib
         ${PHYSX_LIB_DIR}/PhysXPvdSDK_static_64.lib
         ${PHYSX_LIB_DIR}/PhysXCooking_64.lib
         ${PHYSX_LIB_DIR}/lua54.lib

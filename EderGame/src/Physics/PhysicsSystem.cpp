@@ -5,7 +5,10 @@
 #include "ECS/Components/RigidbodyComponent.h"
 #include "ECS/Components/CollisionCallbackComponent.h"
 #include "ECS/Components/LayerComponent.h"
+#include "ECS/Components/CharacterControllerComponent.h"
 #include "ECS/Systems/TransformSystem.h"
+
+#include <physx/characterkinematic/PxCapsuleController.h>
 
 #include <glm/gtx/matrix_decompose.hpp>
 #include <glm/gtx/quaternion.hpp>
@@ -155,6 +158,8 @@ void PhysicsSystem::Init()
 
     m_defaultMat = m_physics->createMaterial(0.5f, 0.5f, 0.3f);
 
+    m_controllerManager = PxCreateControllerManager(*m_scene);
+
     m_initialized = true;
 }
 
@@ -173,11 +178,19 @@ void PhysicsSystem::Shutdown()
     }
     m_actors.clear();
 
-    if (m_defaultMat)   { m_defaultMat->release();   m_defaultMat   = nullptr; }
-    if (m_scene)        { m_scene->release();         m_scene        = nullptr; }
-    if (m_dispatcher)   { m_dispatcher->release();    m_dispatcher   = nullptr; }
-    if (m_physics)      { m_physics->release();       m_physics      = nullptr; }
-    if (m_foundation)   { m_foundation->release();    m_foundation   = nullptr; }
+    // Release all character controllers
+    for (auto& [e, ctrl] : m_controllers)
+    {
+        if (ctrl) ctrl->release();
+    }
+    m_controllers.clear();
+
+    if (m_controllerManager) { m_controllerManager->release(); m_controllerManager = nullptr; }
+    if (m_defaultMat)        { m_defaultMat->release();        m_defaultMat        = nullptr; }
+    if (m_scene)             { m_scene->release();             m_scene             = nullptr; }
+    if (m_dispatcher)        { m_dispatcher->release();        m_dispatcher        = nullptr; }
+    if (m_physics)           { m_physics->release();           m_physics           = nullptr; }
+    if (m_foundation)        { m_foundation->release();        m_foundation        = nullptr; }
 
     m_initialized = false;
 }
@@ -604,6 +617,7 @@ void PhysicsSystem::WriteBack(Registry& registry)
 void PhysicsSystem::RemoveEntity(Entity e)
 {
     DestroyActor(e);
+    DestroyController(e);
 }
 
 void PhysicsSystem::MarkDirty(Entity e)
@@ -611,6 +625,137 @@ void PhysicsSystem::MarkDirty(Entity e)
     auto it = m_actors.find(e);
     if (it != m_actors.end())
         it->second.shapeHash = 0; // force recreation on next SyncActors
+
+    // Force controller recreation
+    DestroyController(e);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// DestroyController
+// ─────────────────────────────────────────────────────────────────────────────
+void PhysicsSystem::DestroyController(Entity e)
+{
+    auto it = m_controllers.find(e);
+    if (it == m_controllers.end()) return;
+    if (it->second) it->second->release();
+    m_controllers.erase(it);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SyncControllers — create / destroy PxControllers to match ECS state
+// ─────────────────────────────────────────────────────────────────────────────
+void PhysicsSystem::SyncControllers(Registry& registry)
+{
+    if (!m_initialized || !m_controllerManager) return;
+
+    // Remove controllers whose entity no longer has the component
+    std::vector<Entity> toRemove;
+    for (auto& [e, ctrl] : m_controllers)
+    {
+        if (!registry.Has<CharacterControllerComponent>(e))
+            toRemove.push_back(e);
+    }
+    for (Entity e : toRemove)
+        DestroyController(e);
+
+    // Create controllers for entities that need them
+    registry.Each<CharacterControllerComponent>([&](Entity e, CharacterControllerComponent& cc)
+    {
+        if (m_controllers.count(e)) return; // already exists
+        if (!registry.Has<TransformComponent>(e)) return;
+
+        const auto& tr = registry.Get<TransformComponent>(e);
+        glm::mat4 world = TransformSystem::GetWorldMatrix(e, registry);
+        glm::vec3 worldPos = glm::vec3(world[3]) + cc.center;
+
+        float halfHeight = std::max((cc.height * 0.5f) - cc.radius, 0.01f);
+
+        PxCapsuleControllerDesc desc;
+        desc.material      = m_defaultMat;
+        desc.radius        = std::max(cc.radius,  0.01f);
+        desc.height        = halfHeight * 2.0f; // PxCapsuleControllerDesc::height is the cylindrical section height
+        desc.stepOffset    = std::max(cc.stepOffset, 0.0f);
+        desc.slopeLimit    = std::cos(glm::radians(cc.slopeLimit));
+        desc.contactOffset = std::max(cc.skinWidth, 0.001f);
+        desc.upDirection   = PxVec3(0.0f, 1.0f, 0.0f);
+        desc.position      = PxExtendedVec3(worldPos.x, worldPos.y, worldPos.z);
+        desc.userData      = reinterpret_cast<void*>(static_cast<uintptr_t>(e));
+
+        if (!desc.isValid())
+        {
+            // Fallback: clamp to safe values
+            desc.radius = 0.3f;
+            desc.height = 1.0f;
+        }
+
+        PxController* ctrl = m_controllerManager->createController(desc);
+        if (ctrl)
+            m_controllers[e] = ctrl;
+    });
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// MoveController — sweep-move a capsule controller by a world displacement
+// ─────────────────────────────────────────────────────────────────────────────
+void PhysicsSystem::MoveController(Entity e, const glm::vec3& displacement, float dt)
+{
+    if (!m_initialized) return;
+
+    auto it = m_controllers.find(e);
+    if (it == m_controllers.end()) return;
+    if (!it->second) return;
+
+    PxVec3 disp(displacement.x, displacement.y, displacement.z);
+
+    PxControllerFilters filters;
+    PxControllerCollisionFlags flags = it->second->move(disp, 0.001f, dt, filters);
+
+    if (!m_initialized) return;
+    if (!m_controllers.count(e)) return;
+
+    // Store grounded state and displacement in per-frame caches.
+    // WriteBackControllers() reads these and applies them to the component.
+    bool grounded = static_cast<bool>(flags & PxControllerCollisionFlag::eCOLLISION_DOWN);
+    m_controllerGrounded[e] = grounded;
+    m_controllerVelocity[e] = displacement;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WriteBackControllers — sync PxController positions → TransformComponent
+// ─────────────────────────────────────────────────────────────────────────────
+void PhysicsSystem::WriteBackControllers(Registry& registry)
+{
+    if (!m_initialized) return;
+
+    for (auto& [e, ctrl] : m_controllers)
+    {
+        if (!ctrl) continue;
+        if (!registry.Has<TransformComponent>(e)) continue;
+        if (!registry.Has<CharacterControllerComponent>(e)) continue;
+
+        PxExtendedVec3 p = ctrl->getPosition();
+
+        auto& tr = registry.Get<TransformComponent>(e);
+        auto& cc = registry.Get<CharacterControllerComponent>(e);
+
+        // Subtract center offset to get pivot position
+        tr.position = glm::vec3(
+            static_cast<float>(p.x) - cc.center.x,
+            static_cast<float>(p.y) - cc.center.y,
+            static_cast<float>(p.z) - cc.center.z);
+
+        // Propagate grounded + velocity from cache
+        if (m_controllerGrounded.count(e))
+        {
+            cc.isGrounded = m_controllerGrounded[e];
+            m_controllerGrounded.erase(e);
+        }
+        if (m_controllerVelocity.count(e))
+        {
+            cc.velocity = m_controllerVelocity[e];
+            m_controllerVelocity.erase(e);
+        }
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
