@@ -151,11 +151,19 @@ float StarField(vec3 rd, float density)
 
 void main()
 {
+    // Reconstruct view-space ray direction from the full-screen UV.
+    // Step 1: UV → NDC clip space (w=1 so inverseProj gives a view-space direction)
     vec4 clipPos  = vec4(inUVs.x * 2.0 - 1.0, inUVs.y * 2.0 - 1.0, 1.0, 1.0);
-    vec4 viewPos  = camData.inverseProj * clipPos;
-    viewPos      /= viewPos.w;
-    vec4 worldPos = camData.inverseView * viewPos;
-    vec3 rd       = normalize(worldPos.xyz - camData.cameraPosition);
+
+    // Step 2: Unproject to view space.
+    //         Do NOT do a perspective divide here — that would fold the
+    //         aspect-ratio correction back in and stretch the sky.
+    //         We only need the xyz direction, so we zero w before going to world.
+    vec4 viewDir  = camData.inverseProj * clipPos;
+    viewDir.w     = 0.0;   // direction, not position
+
+    // Step 3: Rotate into world space (no translation).
+    vec3 rd = normalize((camData.inverseView * viewDir).xyz);
     rd.x = -rd.x;
 
     vec3  sun  = normalize(sunDir.xyz);

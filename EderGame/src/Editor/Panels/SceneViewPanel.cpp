@@ -3,9 +3,16 @@
 #include <imgui/imgui_internal.h>
 #include <imgui/ImGuizmo.h>
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtc/matrix_inverse.hpp>
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/HierarchyComponent.h"
+#include "ECS/Components/MeshRendererComponent.h"
 #include "ECS/Systems/TransformSystem.h"
+#include "Core/MeshManager.h"
+#include "Renderer/Vulkan/VulkanMesh.h"
+#include <cmath>
+#include <cfloat>
+#include <algorithm>
 
 void SceneViewPanel::SetFramebuffer(VulkanFramebuffer* fb)
 {
@@ -42,6 +49,9 @@ void SceneViewPanel::OnDraw(GizmoMode gizmoMode, bool snap, float snapValue,
                              const glm::mat4& view, const glm::mat4& proj,
                              Registry* registry, Entity selected)
 {
+    // Cache matrices for ray picking
+    m_lastView = view;
+    m_lastProj = proj;
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
 
     ImGuiWindowFlags flags =
@@ -67,6 +77,36 @@ void SceneViewPanel::OnDraw(GizmoMode gizmoMode, bool snap, float snapValue,
         // the EderPlayer preview window on top of this exact rectangle.
         contentScreenPos  = ImGui::GetItemRectMin();
         contentScreenSize = ImGui::GetItemRectSize();
+
+        // ── Click-to-select picking ──────────────────────────────────────────
+        if (registry &&
+            ImGui::IsItemHovered() &&
+            ImGui::IsMouseClicked(ImGuiMouseButton_Left) &&
+            !ImGuizmo::IsOver())
+        {
+            ImVec2 mouse = ImGui::GetMousePos();
+            float  vpW   = contentScreenSize.x;
+            float  vpH   = contentScreenSize.y;
+            if (vpW > 0.0f && vpH > 0.0f)
+            {
+                // Screen → NDC  (-1..+1 each axis)
+                float ndcX =  (mouse.x - contentScreenPos.x) / vpW * 2.0f - 1.0f;
+                float ndcY =  (mouse.y - contentScreenPos.y) / vpH * 2.0f - 1.0f;
+
+                // Unproject: clip → eye → world
+                glm::mat4 invProj = glm::inverse(m_lastProj);
+                glm::mat4 invView = glm::inverse(m_lastView);
+
+                glm::vec4 rayEye = invProj * glm::vec4(ndcX, ndcY, -1.0f, 1.0f);
+                rayEye = glm::vec4(rayEye.x, rayEye.y, -1.0f, 0.0f);  // direction, not position
+
+                glm::vec3 rayDir  = glm::normalize(glm::vec3(invView * rayEye));
+                glm::vec3 rayOrig = glm::vec3(invView[3]);
+
+                m_pickedEntity = DoRayPick(*registry, rayOrig, rayDir);
+                m_hasPick = true;
+            }
+        }
     }
     else
     {
@@ -136,7 +176,12 @@ void SceneViewPanel::OnDraw(GizmoMode gizmoMode, bool snap, float snapValue,
     }
 
     // ── Gizmo mode overlay (top-left corner) ─────────────────────────────────
-    const ImVec2 vpMin  = ImGui::GetWindowPos();
+    // Use contentScreenPos so the overlay is anchored to the rendered image,
+    // not to GetWindowPos() which includes the title bar and would place items
+    // outside the content region (triggering ImGui's SetCursorPos assertion).
+    if (contentScreenPos.x > 0.0f || contentScreenPos.y > 0.0f)
+    {
+    const ImVec2 vpMin  = contentScreenPos;
     const float  pad    = 8.0f;
     const float  btnSz  = 26.0f;
     ImVec2       cursor = ImVec2(vpMin.x + pad, vpMin.y + pad);
@@ -164,10 +209,10 @@ void SceneViewPanel::OnDraw(GizmoMode gizmoMode, bool snap, float snapValue,
     (void)GizmoBtn("R", GizmoMode::Rotate,    ImVec4(0.85f, 0.25f, 0.25f, 1.0f));
     (void)GizmoBtn("S", GizmoMode::Scale,     ImVec4(0.85f, 0.25f, 0.25f, 1.0f));
 
-    // Snap indicator
-    ImGui::SetCursorScreenPos(cursor);
+    // Snap indicator — SetCursorScreenPos only when we actually submit an item
     if (snap)
     {
+        ImGui::SetCursorScreenPos(cursor);
         ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.25f, 0.25f, 1.0f));
         char snapLabel[16];
         snprintf(snapLabel, sizeof(snapLabel), "%.4g###snap", snapValue);
@@ -175,7 +220,91 @@ void SceneViewPanel::OnDraw(GizmoMode gizmoMode, bool snap, float snapValue,
         ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Snap ON: %.4g", snapValue);
     }
+    } // end overlay guard
 
     ImGui::PopStyleVar();
     ImGui::End();
+}
+
+// ─── Ray picking ──────────────────────────────────────────────────────────────
+// Slab-method ray-AABB test in local space.
+// Returns true and sets tHit to the entry distance along the ray (>= 0).
+static bool RayAABB(const glm::vec3& orig, const glm::vec3& dir,
+                    const glm::vec3& bmin, const glm::vec3& bmax, float& tHit)
+{
+    float tmin = 0.0f, tmax = FLT_MAX;
+    for (int i = 0; i < 3; i++)
+    {
+        if (std::abs(dir[i]) < 1e-7f)
+        {
+            if (orig[i] < bmin[i] || orig[i] > bmax[i]) return false;
+        }
+        else
+        {
+            float t1 = (bmin[i] - orig[i]) / dir[i];
+            float t2 = (bmax[i] - orig[i]) / dir[i];
+            if (t1 > t2) std::swap(t1, t2);
+            tmin = std::max(tmin, t1);
+            tmax = std::min(tmax, t2);
+            if (tmin > tmax) return false;
+        }
+    }
+    tHit = tmin;
+    return true;
+}
+
+Entity SceneViewPanel::DoRayPick(Registry& registry,
+                                  const glm::vec3& rayOrig,
+                                  const glm::vec3& rayDir) const
+{
+    Entity closest = NULL_ENTITY;
+    float  minDist = FLT_MAX;
+
+    registry.Each<TransformComponent>([&](Entity e, TransformComponent& /*tr*/)
+    {
+        // World matrix of this entity
+        glm::mat4 world    = TransformSystem::GetWorldMatrix(e, registry);
+        glm::mat4 invWorld = glm::inverse(world);
+
+        // Transform ray into local (object) space
+        glm::vec3 localOrig = glm::vec3(invWorld * glm::vec4(rayOrig, 1.0f));
+        glm::vec3 localDir  = glm::vec3(invWorld * glm::vec4(rayDir,  0.0f));
+        // Normalize the local direction — non-uniform scale changes its length
+        float localDirLen = glm::length(localDir);
+        if (localDirLen < 1e-7f) return;
+        localDir /= localDirLen;
+
+        // ── AABB from mesh, or fall back to a unit-cube bounding box ─────────
+        glm::vec3 bmin(-0.5f), bmax(0.5f);   // unit-cube fallback
+
+        if (registry.Has<MeshRendererComponent>(e))
+        {
+            const auto& mr = registry.Get<MeshRendererComponent>(e);
+            const std::string& path = mr.meshPath;
+            if (!path.empty() && MeshManager::Get().Has(path))
+            {
+                VulkanMesh& mesh = MeshManager::Get().Load(path);
+                bmin = mesh.GetBoundsMin();
+                bmax = mesh.GetBoundsMax();
+            }
+        }
+
+        // ── Ray-OBB slab test ────────────────────────────────────────────────
+        float tLocal = 0.0f;
+        if (!RayAABB(localOrig, localDir, bmin, bmax, tLocal)) return;
+
+        // Convert the local-space hit point back to world space for a
+        // world-space distance comparison that is scale-invariant.
+        glm::vec3 localHit = localOrig + tLocal * localDir;
+        glm::vec3 worldHit = glm::vec3(world * glm::vec4(localHit, 1.0f));
+        float worldDist    = glm::length(worldHit - rayOrig);
+
+        if (worldDist < minDist)
+        {
+            minDist = worldDist;
+            closest = e;
+        }
+    });
+
+    return closest;
 }

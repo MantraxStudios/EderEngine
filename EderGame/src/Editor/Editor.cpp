@@ -7,6 +7,8 @@
 #include "Renderer/Vulkan/VulkanInstance.h"
 #include "Renderer/Vulkan/VulkanSwapchain.h"
 #include <IO/AssetManager.h>
+#include <Events/EventBus.h>
+#include <Events/Events.h>
 #include <cstring>
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -256,6 +258,14 @@ void Editor::Draw(Camera& cam, Registry& registry, float dt)
         sceneView.OnDraw(gizmoMode, snapEnabled, snapValue,
                          cam.GetView(), cam.GetProjection(svAspect),
                          &registry, hierarchy.GetSelected());
+
+        // ── Viewport click → selection ──────────────────────────────────
+        if (sceneView.HasPick())
+        {
+            Entity picked = sceneView.ConsumePick();
+            hierarchy.SetSelected(picked);
+            EventBus<EntitySelectedEvent>::Emit({ picked });
+        }
     }
     if (showDemo)         ImGui::ShowDemoWindow(&showDemo);
     DrawBuildGameModal();

@@ -7,6 +7,7 @@
 #include <vulkan/vulkan.h>
 #include <imgui/imgui.h>
 #include <glm/glm.hpp>
+#include <utility>
 
 class SceneViewPanel : public Panel
 {
@@ -35,11 +36,28 @@ public:
     ImVec2 GetContentScreenPos()  const { return contentScreenPos;  }
     ImVec2 GetContentScreenSize() const { return contentScreenSize; }
 
+    // ── Ray picking ─────────────────────────────────────────────────
+    /// True for the one frame in which a left-click pick occurred.
+    bool   HasPick()    const { return m_hasPick; }
+    /// Consume the pick result (resets flag). Returns NULL_ENTITY if miss.
+    Entity ConsumePick() { m_hasPick = false; return std::exchange(m_pickedEntity, NULL_ENTITY); }
+
 private:
+    // ── Framebuffer / texture ──────────────────────────────────────────────
     VulkanFramebuffer* framebuffer      = nullptr;
     VkDescriptorSet    texDS            = VK_NULL_HANDLE;
     VkImageView        lastView         = VK_NULL_HANDLE;
     ImVec2             desiredSize      = { 0.0f, 0.0f };
     ImVec2             contentScreenPos  = { 0.0f, 0.0f };
     ImVec2             contentScreenSize = { 0.0f, 0.0f };
+
+    // ── Picking state ─────────────────────────────────────────────────
+    glm::mat4 m_lastView     = glm::mat4(1.0f);
+    glm::mat4 m_lastProj     = glm::mat4(1.0f);
+    Entity    m_pickedEntity = NULL_ENTITY;
+    bool      m_hasPick      = false;
+
+    Entity DoRayPick(Registry& registry,
+                     const glm::vec3& rayOrig,
+                     const glm::vec3& rayDir) const;
 };

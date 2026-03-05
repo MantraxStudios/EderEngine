@@ -2,6 +2,7 @@
 #include "ImportCore.h"
 #include "VulkanBuffer.h"
 #include "../../Core/Vertex.h"
+#include <cfloat>
 #include <assimp/Importer.hpp>
 #include <assimp/scene.h>
 #include <assimp/postprocess.h>
@@ -62,7 +63,11 @@ public:
     uint32_t GetIndexCount()  const { return indexCount; }
     uint32_t GetVertexCount() const { return vertexCount; }
 
-    // ── Animation queries ──────────────────────────────────────────────────
+    // ── Animation queries ──────────────────────────────────────────────────    // ── Bounds (local space, set during load) ─────────────────────────────
+    /// Returns the axis-aligned bounding box in local/object space.
+    /// For static meshes the mesh is normalised to [-0.5, +0.5] per axis.
+    glm::vec3 GetBoundsMin() const { return m_boundsMin; }
+    glm::vec3 GetBoundsMax() const { return m_boundsMax; }
     uint32_t    GetBoneCount      () const { return static_cast<uint32_t>(boneInfos.size()); }
     uint32_t    GetAnimationCount () const { return static_cast<uint32_t>(animations.size()); }
     std::string GetAnimationName  (uint32_t idx) const
@@ -106,4 +111,8 @@ private:
     uint32_t                         rootNodeIndex = 0;
     std::map<std::string, uint32_t>  nodeNameToIndex;
     glm::mat4                        globalInverseTransform = glm::mat4(1.0f);
+
+    // ── AABB ───────────────────────────────────────────────────────────────
+    glm::vec3 m_boundsMin = glm::vec3( FLT_MAX);
+    glm::vec3 m_boundsMax = glm::vec3(-FLT_MAX);
 };

@@ -62,6 +62,8 @@ void VulkanMesh::LoadFromMemory(const uint8_t* data, size_t size, const std::str
     boneNameToIndex.clear(); boneInfos.clear();
     animations.clear(); nodes.clear(); nodeNameToIndex.clear();
     rootNodeIndex = 0;
+    m_boundsMin =  glm::vec3(FLT_MAX);
+    m_boundsMax = -glm::vec3(FLT_MAX);
 
     Assimp::Importer importer;
 
@@ -85,6 +87,22 @@ void VulkanMesh::LoadFromMemory(const uint8_t* data, size_t size, const std::str
     ProcessNode(scene->mRootNode, scene, aiMatrix4x4()); // identity — nodeTransform is accumulated top-down
     BuildNodeTree(scene->mRootNode, UINT32_MAX);
     LoadAnimations(scene);
+
+    // ── Normalize static mesh to unit cube so scale=1 ≅ 1 unit ──────────────────
+    if (boneInfos.empty() && m_boundsMin.x < m_boundsMax.x)
+    {
+        glm::vec3 center = (m_boundsMin + m_boundsMax) * 0.5f;
+        glm::vec3 sz     = m_boundsMax - m_boundsMin;
+        float     maxDim = std::max({sz.x, sz.y, sz.z});
+        if (maxDim > 1e-6f)
+        {
+            float s = 1.0f / maxDim;
+            for (auto& v : vertices)
+                v.position = (v.position - center) * s;
+            m_boundsMin = (m_boundsMin - center) * s;
+            m_boundsMax = (m_boundsMax - center) * s;
+        }
+    }
 
     vertexCount = static_cast<uint32_t>(vertices.size());
     indexCount  = static_cast<uint32_t>(indices.size());
@@ -119,6 +137,8 @@ void VulkanMesh::_LoadFromPath(const std::string& path)
     boneNameToIndex.clear(); boneInfos.clear();
     animations.clear(); nodes.clear(); nodeNameToIndex.clear();
     rootNodeIndex = 0;
+    m_boundsMin =  glm::vec3(FLT_MAX);
+    m_boundsMax = -glm::vec3(FLT_MAX);
 
     Assimp::Importer importer;
 
@@ -140,6 +160,22 @@ void VulkanMesh::_LoadFromPath(const std::string& path)
     ProcessNode(scene->mRootNode, scene, aiMatrix4x4()); // identity — nodeTransform is accumulated top-down
     BuildNodeTree(scene->mRootNode, UINT32_MAX);
     LoadAnimations(scene);
+
+    // ── Normalize static mesh to unit cube so scale=1 ≅ 1 unit ──────────────────
+    if (boneInfos.empty() && m_boundsMin.x < m_boundsMax.x)
+    {
+        glm::vec3 center = (m_boundsMin + m_boundsMax) * 0.5f;
+        glm::vec3 sz     = m_boundsMax - m_boundsMin;
+        float     maxDim = std::max({sz.x, sz.y, sz.z});
+        if (maxDim > 1e-6f)
+        {
+            float s = 1.0f / maxDim;
+            for (auto& v : vertices)
+                v.position = (v.position - center) * s;
+            m_boundsMin = (m_boundsMin - center) * s;
+            m_boundsMax = (m_boundsMax - center) * s;
+        }
+    }
 
     vertexCount = static_cast<uint32_t>(vertices.size());
     indexCount  = static_cast<uint32_t>(indices.size());
@@ -232,6 +268,8 @@ void VulkanMesh::ProcessMesh(aiMesh* mesh, const aiScene* /*scene*/, const aiMat
         v.uv        = mesh->mTextureCoords[0] ? glm::vec2(mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y) : glm::vec2(0);
         v.color     = { 1.0f, 1.0f, 1.0f, 1.0f };
         // boneIndices / boneWeights are zero-initialised by default — filled below
+        m_boundsMin = glm::min(m_boundsMin, v.position);
+        m_boundsMax = glm::max(m_boundsMax, v.position);
         vertices.push_back(v);
     }
 

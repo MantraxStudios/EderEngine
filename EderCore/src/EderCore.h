@@ -18,6 +18,10 @@
 #include "ECS/Systems/System.h"
 #include "ECS/Systems/TransformSystem.h"
 
+// ── Events ───────────────────────────────────────────────────────────────────
+#include "Events/EventBus.h"
+#include "Events/Events.h"
+
 // ── Scene ─────────────────────────────────────────────────────────────────────
 #include "Scene/Scene.h"
 #include "Scene/SceneManager.h"

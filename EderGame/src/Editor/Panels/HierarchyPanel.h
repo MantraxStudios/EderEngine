@@ -11,6 +11,7 @@ public:
 
     void   SetRegistry(Registry* r) { registry = r; }
     Entity GetSelected()  const     { return selected; }
+    void   SetSelected(Entity e)    { selected = e; }
 
 private:
     void DrawEntityNode(Entity e);
