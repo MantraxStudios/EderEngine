@@ -1,0 +1,4 @@
+guid=ee20a5e58927c385
+type=Shader
+name=fog.frag
+path=shaders/fog.frag.spv

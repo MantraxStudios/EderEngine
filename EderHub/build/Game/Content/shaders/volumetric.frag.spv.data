@@ -1,0 +1,4 @@
+guid=8739044a2f5f7685
+type=Shader
+name=volumetric.frag
+path=shaders/volumetric.frag.spv

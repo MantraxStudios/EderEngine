@@ -145,7 +145,8 @@ void Application::Init()
 {
     SDL_Init(SDL_INIT_VIDEO);
 
-    m_window = SDL_CreateWindow("EderGraphics", 800, 600,
+    m_window = SDL_CreateWindow(
+        ("EderEngine — " + m_projectName).c_str(), 800, 600,
         SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
     if (!m_window)
         throw std::runtime_error("SDL_CreateWindow failed");
@@ -1098,9 +1099,13 @@ void Application::SyncECSToScene()
                                 Krayon::AssetManager::Get().FindByGuid(matAsset.albedoTexGuid);
                             if (texMeta)
                             {
-                                VulkanTexture& tex = TextureManager::Get().Load(texMeta->path);
-                                rMat.BindTexture(0, tex);
-                                lastTex = matAsset.albedoTexGuid;
+                                try
+                                {
+                                    VulkanTexture& tex = TextureManager::Get().Load(texMeta->path);
+                                    rMat.BindTexture(0, tex);
+                                    lastTex = matAsset.albedoTexGuid;
+                                }
+                                catch (const std::exception&) { /* ya logueado en TextureManager */ }
                             }
                         }
                     }
@@ -1124,8 +1129,11 @@ void Application::SyncECSToScene()
         if (existingObj && !meshChanged) return;
 
         // Load (or re-use cached) mesh
-        Material&   mat  = MaterialManager::Get().Get(mr.materialName);
-        VulkanMesh& mesh = MeshManager::Get().Load(loadPath);
+        Material& mat = MaterialManager::Get().Get(mr.materialName);
+        VulkanMesh* meshPtr = nullptr;
+        try { meshPtr = &MeshManager::Get().Load(loadPath); }
+        catch (const std::exception&) { return; /* ya logueado en MeshManager */ }
+        VulkanMesh& mesh = *meshPtr;
         m_lastMeshGuid[e]     = trackGuid;
         m_lastMaterialName[e] = mr.materialName;
 

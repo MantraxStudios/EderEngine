@@ -1,0 +1,4 @@
+guid=40cc819f8ca549
+type=Shader
+name=debug
+path=shaders/debug.frag

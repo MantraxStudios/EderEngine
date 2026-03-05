@@ -1,0 +1,4 @@
+guid=b3c1501046cda9cb
+type=Shader
+name=gizmo.frag
+path=shaders/gizmo.frag.spv

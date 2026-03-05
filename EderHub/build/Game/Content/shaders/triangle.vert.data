@@ -1,0 +1,4 @@
+guid=abfcd1ad3f41466f
+type=Shader
+name=triangle
+path=shaders/triangle.vert

@@ -2,6 +2,7 @@
 #include "Renderer/Vulkan/VulkanTexture.h"
 #include "DLLHeader.h"
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <string>
 
@@ -16,6 +17,8 @@ public:
     static TextureManager& Get();
 
     /// Load a texture from disk (or return cached instance).
+    /// Throws std::runtime_error if loading fails (prints to console on first
+    /// attempt; subsequent attempts with the same bad path rethrow silently).
     VulkanTexture& Load(const std::string& path);
 
     bool Has(const std::string& path) const;
@@ -29,4 +32,5 @@ private:
     TextureManager& operator=(const TextureManager&) = delete;
 
     std::unordered_map<std::string, std::unique_ptr<VulkanTexture>> textures;
+    std::unordered_set<std::string>                                 failedPaths;
 };

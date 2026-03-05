@@ -1,5 +1,6 @@
 #include "MeshManager.h"
 #include <stdexcept>
+#include <iostream>
 
 MeshManager& MeshManager::Get()
 {
@@ -13,8 +14,21 @@ VulkanMesh& MeshManager::Load(const std::string& path)
     if (it != meshes.end())
         return *it->second;
 
+    // Already known-bad path — rethrow silently (no repeated console spam)
+    if (failedPaths.count(path))
+        throw std::runtime_error("[MeshManager] Not found: " + path);
+
     auto mesh = std::make_unique<VulkanMesh>();
-    mesh->Load(path);
+    try
+    {
+        mesh->Load(path);
+    }
+    catch (const std::exception& e)
+    {
+        failedPaths.insert(path);
+        std::cerr << "[MeshManager] No se encontro el modelo '" << path << "': " << e.what() << "\n";
+        throw;
+    }
     VulkanMesh* ptr = mesh.get();
     meshes[path] = std::move(mesh);
     return *ptr;

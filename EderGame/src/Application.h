@@ -44,6 +44,9 @@ public:
     // Entry point — blocks until the user closes the window, returns exit code.
     int Run();
 
+    // Set the project name shown in the editor title bar (call before Run()).
+    void SetProjectName(const std::string& name) { m_projectName = name; }
+
 private:
     // ── Lifecycle ────────────────────────────────────────────────────────────
     void Init();
@@ -96,8 +99,9 @@ private:
     // ═════════════════════════  Members  ════════════════════════════════════
 
     // ── Window / input ───────────────────────────────────────────────────────
-    SDL_Window* m_window     = nullptr;
-    bool        m_running    = true;
+    SDL_Window* m_window      = nullptr;
+    bool        m_running     = true;
+    std::string m_projectName = "EderEngine";
     bool        m_lookActive = false;
     float       m_mouseDX    = 0.0f;
     float       m_mouseDY    = 0.0f;

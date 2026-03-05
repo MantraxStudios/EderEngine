@@ -1,0 +1,4 @@
+guid=a2803b0b54dc69f2
+type=Shader
+name=shadow.vert
+path=shaders/shadow.vert.spv

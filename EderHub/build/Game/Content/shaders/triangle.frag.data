@@ -1,0 +1,4 @@
+guid=69b85b29691c3aa0
+type=Shader
+name=triangle
+path=shaders/triangle.frag

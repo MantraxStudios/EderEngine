@@ -1,0 +1,4 @@
+guid=7c805bce816ba185
+type=Shader
+name=occlusion.vert
+path=shaders/occlusion.vert.spv

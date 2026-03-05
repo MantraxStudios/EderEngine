@@ -2,6 +2,7 @@
 #include "Renderer/Vulkan/VulkanMesh.h"
 #include "DLLHeader.h"
 #include <unordered_map>
+#include <unordered_set>
 #include <memory>
 #include <string>
 
@@ -15,7 +16,8 @@ public:
     static MeshManager& Get();
 
     // Load a mesh from disk (if not already cached) and return a reference.
-    // Throws std::runtime_error if loading fails.
+    // Throws std::runtime_error if loading fails (prints to console on first
+    // attempt; subsequent attempts with the same bad path rethrow silently).
     VulkanMesh& Load(const std::string& path);
 
     // Returns true if the mesh has been loaded already.
@@ -30,4 +32,5 @@ private:
     MeshManager& operator=(const MeshManager&) = delete;
 
     std::unordered_map<std::string, std::unique_ptr<VulkanMesh>> meshes;
+    std::unordered_set<std::string>                              failedPaths;
 };

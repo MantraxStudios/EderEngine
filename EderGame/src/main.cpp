@@ -2,11 +2,12 @@
 #include "Core/AssetBridge.h"
 #include <IO/AssetManager.h>
 #include <filesystem>
+#include <string>
 #ifdef _WIN32
 #include <windows.h>
 #endif
 
-int main()
+int main(int argc, char* argv[])
 {
     // Ensure CWD = directory containing the executable (where shaders/, assets/ live)
 #ifdef _WIN32
@@ -15,14 +16,30 @@ int main()
     std::filesystem::current_path(std::filesystem::path(exePath).parent_path());
 #endif
 
-    // exe and EderGraphics.dll each have their own static singleton 
+    // ── Parse command-line arguments ─────────────────────────────────────────
+    // --workdir <path>  : project Content directory (absolute or relative to CWD)
+    // --project <name>  : project name shown in the title bar
+    std::string workdir     = "Game/Content";
+    std::string projectName = "EderEngine";
+
+    for (int i = 1; i < argc; ++i)
+    {
+        const std::string arg = argv[i];
+        if (arg == "--workdir" && i + 1 < argc)
+            workdir = argv[++i];
+        else if (arg == "--project" && i + 1 < argc)
+            projectName = argv[++i];
+    }
+
+    // exe and EderGraphics.dll each have their own static singleton
     // Both must be initialised separately.
     //   • exe singleton  → used by Editor panels (AssetBrowserPanel, etc.)
     //   • dll singleton  → used by VulkanTexture, VulkanMesh, LoadSpv, etc.
-    Krayon::AssetManager::Get().Init("Game/Content", false);
-    EG_InitAssets("Game/Content", false);
+    Krayon::AssetManager::Get().Init(workdir, false);
+    EG_InitAssets(workdir.c_str(), false);
 
     Application app;
+    app.SetProjectName(projectName);
     return app.Run();
 }
 

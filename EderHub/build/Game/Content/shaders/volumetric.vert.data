@@ -1,0 +1,4 @@
+guid=ee0fabe2fb95896f
+type=Shader
+name=volumetric
+path=shaders/volumetric.vert

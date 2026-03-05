@@ -1,0 +1,4 @@
+guid=1cdea4369efadbf2
+type=Shader
+name=occlusion.frag
+path=shaders/occlusion.frag.spv
