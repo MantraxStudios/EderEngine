@@ -1,0 +1,4 @@
+guid=552962c7578b2f05
+type=Script
+name=PlayerController
+path=scripts/playercontroller.lua
