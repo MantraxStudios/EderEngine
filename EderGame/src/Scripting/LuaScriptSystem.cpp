@@ -23,6 +23,7 @@ namespace fs = std::filesystem;
 #include "ECS/Components/AnimationComponent.h"
 #include "ECS/Components/VolumetricFogComponent.h"
 #include "ECS/Components/LayerComponent.h"
+#include "ECS/Components/CameraComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 #include <IO/AssetManager.h>
 #include <IO/DebugDraw.h>
@@ -1187,5 +1188,83 @@ void LuaScriptSystem::BindAPI()
     // Prints a message to stdout prefixed with "[Lua]".
     Debug["log"] = [](const std::string& msg) {
         std::cout << "[Lua] " << msg << '\n';
+    };
+
+    // ── Camera table ──────────────────────────────────────────────────────────
+    // Controls per-entity game cameras.  Position/orientation come from the
+    // entity's TransformComponent; only the entity with isActive=true drives
+    // the renderer's main camera each frame.
+    sol::table Cam = m_lua.create_named_table("Camera");
+
+    Cam["hasCamera"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<CameraComponent>((Entity)e);
+    };
+
+    // add(e) — attach a CameraComponent with default values (fov=45, near=0.1, far=500, inactive)
+    Cam["add"] = [](int e) {
+        if (s_reg && !s_reg->Has<CameraComponent>((Entity)e))
+            s_reg->Add<CameraComponent>((Entity)e);
+    };
+
+    // remove(e) — detach the CameraComponent
+    Cam["remove"] = [](int e) {
+        if (s_reg && s_reg->Has<CameraComponent>((Entity)e))
+            s_reg->Remove<CameraComponent>((Entity)e);
+    };
+
+    // setActive(e) — make e the active camera, deactivate all others
+    Cam["setActive"] = [](int e) {
+        if (!s_reg) return;
+        s_reg->Each<CameraComponent>([&](Entity ent, CameraComponent& c) {
+            c.isActive = ((int)ent == e);
+        });
+        // Auto-add component if the entity doesn't have one yet
+        if (s_reg && !s_reg->Has<CameraComponent>((Entity)e))
+        {
+            s_reg->Add<CameraComponent>((Entity)e);
+            s_reg->Get<CameraComponent>((Entity)e).isActive = true;
+        }
+    };
+
+    // getActive() — returns entity id of the active camera, or 0 if none
+    Cam["getActive"] = []() -> int {
+        if (!s_reg) return 0;
+        int active = 0;
+        s_reg->Each<CameraComponent>([&](Entity e, CameraComponent& c) {
+            if (c.isActive) active = (int)e;
+        });
+        return active;
+    };
+
+    Cam["isActive"] = [](int e) -> bool {
+        if (!s_reg || !s_reg->Has<CameraComponent>((Entity)e)) return false;
+        return s_reg->Get<CameraComponent>((Entity)e).isActive;
+    };
+
+    Cam["getFOV"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<CameraComponent>((Entity)e)) return 45.0f;
+        return s_reg->Get<CameraComponent>((Entity)e).fov;
+    };
+    Cam["setFOV"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<CameraComponent>((Entity)e))
+            s_reg->Get<CameraComponent>((Entity)e).fov = v;
+    };
+
+    Cam["getNear"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<CameraComponent>((Entity)e)) return 0.1f;
+        return s_reg->Get<CameraComponent>((Entity)e).nearPlane;
+    };
+    Cam["setNear"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<CameraComponent>((Entity)e))
+            s_reg->Get<CameraComponent>((Entity)e).nearPlane = v;
+    };
+
+    Cam["getFar"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<CameraComponent>((Entity)e)) return 500.0f;
+        return s_reg->Get<CameraComponent>((Entity)e).farPlane;
+    };
+    Cam["setFar"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<CameraComponent>((Entity)e))
+            s_reg->Get<CameraComponent>((Entity)e).farPlane = v;
     };
 }

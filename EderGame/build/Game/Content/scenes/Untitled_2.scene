@@ -4,17 +4,39 @@ name=Untitled_2
 [entity]
 id=1
 tag.name=Entity
-transform.pos=0.000078 18.256870 0.000158
-transform.rot=-0.000103 -0.009610 0.000247
-transform.scale=0.100000 0.100000 0.100000
-mesh.guid=0
-mesh.path=assets/Capoeira.fbx
+transform.pos=0.000000 -9.348919 0.000000
+transform.rot=-0.000000 0.000000 0.000000
+transform.scale=1.000000 1.000000 1.000000
+collider.shape=0
+collider.boxHalfExtents=25.000000 4.220000 25.000000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.5
+collider.dynFric=0.5
+collider.restitution=0.3
+collider.isTrigger=1
+rb.mass=1
+rb.isKinematic=1
+rb.useGravity=0
+rb.linearDrag=0.01
+rb.angularDrag=0.05
+[/entity]
+
+[entity]
+id=2
+tag.name=Entity
+transform.pos=-25.154606 0.801163 0.000000
+transform.rot=-0.000000 0.000000 0.000000
+transform.scale=0.010000 0.010000 0.010000
+mesh.guid=f3d724d4377d941c
+mesh.path=assets/box.fbx
 mesh.matGuid=0
 mesh.matName=default
 mesh.castShadow=1
 mesh.visible=1
 collider.shape=0
-collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.boxHalfExtents=25.000000 25.000000 25.000000
 collider.radius=0.5
 collider.capsuleHalfH=0.5
 collider.center=0.000000 0.000000 0.000000
@@ -27,38 +49,5 @@ rb.isKinematic=0
 rb.useGravity=1
 rb.linearDrag=0.01
 rb.angularDrag=0.05
-[/entity]
-
-[entity]
-id=2
-tag.name=Entity
-transform.pos=0.000000 0.000000 0.000000
-transform.rot=0.000000 0.000000 0.000000
-transform.scale=1.000000 1.000000 1.000000
-mesh.guid=0
-mesh.path=assets/Capoeira.fbx
-mesh.matGuid=0
-mesh.matName=default
-mesh.castShadow=1
-mesh.visible=1
-collider.shape=0
-collider.boxHalfExtents=2.960000 1.530000 3.770000
-collider.radius=0.5
-collider.capsuleHalfH=0.5
-collider.center=0.000000 0.000000 0.000000
-collider.staticFric=0.5
-collider.dynFric=0.5
-collider.restitution=0.3
-collider.isTrigger=0
-[/entity]
-
-[entity]
-id=3
-tag.name=Entity
-transform.pos=0.000000 0.000000 0.000000
-transform.rot=0.000000 0.000000 0.000000
-transform.scale=1.000000 1.000000 1.000000
-script.guid=ea21448ae92a9f84
-script.path=scripts/test.lua
 [/entity]
 

@@ -509,6 +509,7 @@ code {
       <a class="sidebar-link" href="#" onclick="return showPage('system')"><span class="dot"></span>System</a>
       <a class="sidebar-link" href="#" onclick="return showPage('physics')"><span class="dot"></span>Physics</a>
       <a class="sidebar-link" href="#" onclick="return showPage('debug')"><span class="dot"></span>Debug</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('camera')"><span class="dot"></span>Camera</a>
     </div>
     <div class="sidebar-section">
       <span class="sidebar-label">Examples</span>
@@ -557,6 +558,11 @@ code {
           <div class="qcard-title">Debug</div>
           <div class="qcard-sub">drawLine, drawRay, log</div>
         </a>
+        <a class="qcard" href="#" onclick="return showPage('camera')">
+          <div class="qcard-icon"><i class="fa-solid fa-video"></i></div>
+          <div class="qcard-title">Camera</div>
+          <div class="qcard-sub">FOV, near/far, setActive</div>
+        </a>
         <a class="qcard" href="#" onclick="return showPage('examples')">
           <div class="qcard-icon"><i class="fa-solid fa-book-open"></i></div>
           <div class="qcard-title">Examples</div>
@@ -584,6 +590,7 @@ code {
           <tr><td><code>System</code></td><td>Files, directories, time, OS info</td></tr>
           <tr><td><code>Physics</code></td><td>Raycast scene queries with optional layer mask</td></tr>
           <tr><td><code>Debug</code></td><td>Draw lines, rays and collider gizmos in the editor viewport</td></tr>
+          <tr><td><code>Camera</code></td><td>Attach, activate and configure game cameras driven by TransformComponent</td></tr>
         </tbody>
       </table>
     </section>
@@ -1155,6 +1162,121 @@ code {
 
       <div class="page-nav">
         <a class="pnav-btn" href="#" onclick="return showPage('physics')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Physics</span></a>
+        <a class="pnav-btn next" href="#" onclick="return showPage('camera')"><span class="pnav-dir">Next →</span><span class="pnav-title">Camera</span></a>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════ CAMERA ══════════════════════════════════ -->
+    <section class="page" id="page-camera">
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>Camera</span></div>
+      <h2>Camera <span class="badge">Component</span></h2>
+      <p class="page-desc">Marks any entity as a game camera. <strong>Position and orientation</strong> are driven automatically from the entity's <code>TransformComponent</code> — move or rotate the entity and the view follows.<br>
+        Only the entity with <code>isActive&nbsp;=&nbsp;true</code> overrides the renderer's main camera each frame. Switching between cameras is instant: just call <code>Camera.setActive(e)</code> on the desired camera entity.</p>
+
+      <div class="note">A <code>CameraComponent</code> is attached by <code>Camera.add(e)</code> or automatically by <code>Camera.setActive(e)</code>. In the Player runtime the component is read every frame — no restart required.</div>
+
+      <h3>Functions</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Camera.hasCamera(e)</code></td><td><span class="ret-badge">bool</span></td><td>Entity has a CameraComponent</td></tr>
+          <tr><td><code>Camera.add(e)</code></td><td></td><td>Attach a CameraComponent (fov=45, near=0.1, far=500, inactive). No-op if already present.</td></tr>
+          <tr><td><code>Camera.remove(e)</code></td><td></td><td>Detach the CameraComponent.</td></tr>
+          <tr><td><code>Camera.setActive(e)</code></td><td></td><td>Make <code>e</code> the active camera and deactivate all others. Auto-adds the component if missing.</td></tr>
+          <tr><td><code>Camera.getActive()</code></td><td><span class="ret-badge">entity id</span></td><td>Entity id of the active camera, or <code>0</code> if none.</td></tr>
+          <tr><td><code>Camera.isActive(e)</code></td><td><span class="ret-badge">bool</span></td><td>Is this entity the active camera?</td></tr>
+          <tr><td><code>Camera.getFOV(e)</code></td><td><span class="ret-badge">float°</span></td><td>Vertical field-of-view in degrees.</td></tr>
+          <tr><td><code>Camera.setFOV(e, deg)</code></td><td></td><td>Set vertical FOV (e.g., 45–120 degrees).</td></tr>
+          <tr><td><code>Camera.getNear(e)</code></td><td><span class="ret-badge">float</span></td><td>Near clipping plane in metres.</td></tr>
+          <tr><td><code>Camera.setNear(e, v)</code></td><td></td><td>Set near clip (minimum ~0.01 m).</td></tr>
+          <tr><td><code>Camera.getFar(e)</code></td><td><span class="ret-badge">float</span></td><td>Far clipping plane in metres.</td></tr>
+          <tr><td><code>Camera.setFar(e, v)</code></td><td></td><td>Set far clip.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="warn">Camera <strong>position and look direction</strong> come entirely from the entity's <code>TransformComponent</code>. To move or rotate the camera, use <code>Transform.setPosition</code> / <code>Transform.setRotation</code> on the camera entity — not any Camera function.</div>
+
+      <h3>Setup — attach camera on start</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnStart</span>()
+    <span class="cmt">-- This entity IS the camera: add the component and activate it</span>
+    <span class="tbl">Camera</span>.add(this_entity)
+    <span class="tbl">Camera</span>.setFOV(this_entity, <span class="num">75</span>)
+    <span class="tbl">Camera</span>.setNear(this_entity, <span class="num">0.1</span>)
+    <span class="tbl">Camera</span>.setFar(this_entity,  <span class="num">1000</span>)
+    <span class="tbl">Camera</span>.setActive(this_entity)
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Third-person follow camera</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua — camera_follow.lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>target = <span class="num">0</span>             <span class="cmt">-- set this to the player entity id from another script</span>
+<span class="kw">local</span> offset = { x=<span class="num">0</span>, y=<span class="num">3</span>, z=<span class="num">-8</span> }
+
+<span class="kw">function</span> <span class="fn">OnStart</span>()
+    <span class="tbl">Camera</span>.add(this_entity)
+    <span class="tbl">Camera</span>.setFOV(this_entity, <span class="num">70</span>)
+    <span class="tbl">Camera</span>.setActive(this_entity)
+<span class="kw">end</span>
+
+<span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="kw">if</span> target == <span class="num">0</span> <span class="kw">or</span> <span class="kw">not</span> <span class="tbl">Entity</span>.isValid(target) <span class="kw">then</span> <span class="kw">return</span> <span class="kw">end</span>
+    <span class="kw">local</span> tp = <span class="tbl">Transform</span>.getWorldPosition(target)
+    <span class="tbl">Transform</span>.setPosition(this_entity,
+        tp.x + offset.x,
+        tp.y + offset.y,
+        tp.z + offset.z)
+    <span class="cmt">-- Point the camera at the target</span>
+    <span class="kw">local</span> dx = tp.x - (tp.x + offset.x)
+    <span class="kw">local</span> dz = tp.z - (tp.z + offset.z)
+    <span class="kw">local</span> yaw = math.deg(math.atan(dx, -dz))
+    <span class="tbl">Transform</span>.setRotation(this_entity, <span class="num">15</span>, yaw, <span class="num">0</span>)
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Switch cameras on trigger</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre>cinematicCam = <span class="num">0</span>   <span class="cmt">-- entity id of the cinematic camera (set via Script.set)</span>
+
+<span class="kw">function</span> <span class="fn">OnTriggerEnter</span>(other)
+    <span class="kw">if</span> cinematicCam ~= <span class="num">0</span> <span class="kw">then</span>
+        <span class="tbl">Camera</span>.setActive(cinematicCam)
+    <span class="kw">end</span>
+<span class="kw">end</span>
+
+<span class="kw">function</span> <span class="fn">OnTriggerExit</span>(other)
+    <span class="tbl">Camera</span>.setActive(this_entity)   <span class="cmt">-- return to player camera</span>
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>FOV zoom effect</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">local</span> normalFOV  = <span class="num">70</span>
+<span class="kw">local</span> zoomFOV    = <span class="num">20</span>
+<span class="kw">local</span> isZooming  = <span class="kw">false</span>
+<span class="kw">local</span> currentFOV = normalFOV
+
+<span class="kw">function</span> <span class="fn">OnStart</span>()
+    <span class="tbl">Camera</span>.add(this_entity)
+    <span class="tbl">Camera</span>.setActive(this_entity)
+<span class="kw">end</span>
+
+<span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="kw">local</span> targetFOV = isZooming <span class="kw">and</span> zoomFOV <span class="kw">or</span> normalFOV
+    currentFOV = currentFOV + (targetFOV - currentFOV) * math.min(dt * <span class="num">8</span>, <span class="num">1</span>)
+    <span class="tbl">Camera</span>.setFOV(this_entity, currentFOV)
+<span class="kw">end</span>
+
+<span class="kw">function</span> <span class="fn">StartZoom</span>()  isZooming = <span class="kw">true</span>  <span class="kw">end</span>
+<span class="kw">function</span> <span class="fn">StopZoom</span>()   isZooming = <span class="kw">false</span> <span class="kw">end</span></pre>
+      </div>
+
+      <div class="page-nav">
+        <a class="pnav-btn" href="#" onclick="return showPage('debug')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Debug</span></a>
         <a class="pnav-btn next" href="#" onclick="return showPage('examples')"><span class="pnav-dir">Next →</span><span class="pnav-title">Examples</span></a>
       </div>
     </section>
@@ -1313,6 +1435,7 @@ code {
         <a class="qcard" href="#" onclick="return showPage('animation')"><div class="qcard-icon"><i class="fa-solid fa-film"></i></div><div class="qcard-title">Animation</div></a>
         <a class="qcard" href="#" onclick="return showPage('volumetricfog')"><div class="qcard-icon"><i class="fa-solid fa-wind"></i></div><div class="qcard-title">VolumetricFog</div></a>
         <a class="qcard" href="#" onclick="return showPage('layer')"><div class="qcard-icon"><i class="fa-solid fa-layer-group"></i></div><div class="qcard-title">Layer</div></a>
+        <a class="qcard" href="#" onclick="return showPage('camera')"><div class="qcard-icon"><i class="fa-solid fa-video"></i></div><div class="qcard-title">Camera</div></a>
       </div>
     </section>
 
@@ -1511,6 +1634,7 @@ const searchIndex = [
   { page:'layer',        tag:'Component', title:'Layer',               sub:'add remove getLayer setLayer getMask setMask setLayerEnabled isLayerEnabled layer index bitmask collision filter raycast mask' },
   { page:'physics',      tag:'Utility',   title:'Physics',             sub:'raycast hit entity distance position normal layerMask scene query x y z nx ny nz' },
   { page:'debug',        tag:'Utility',   title:'Debug',               sub:'drawLine drawRay log gizmo collider wireframe line ray color duration visualise axis' },
+  { page:'camera',       tag:'Component', title:'Camera',              sub:'setActive getActive hasCamera add remove setFOV getFOV setNear setFar nearPlane farPlane isActive follow zoom cut' },
   { page:'examples',     tag:'Examples',  title:'Code Examples',       sub:'move pulse light animation collision log save config hierarchy damage raycast layer' },
 ];
 

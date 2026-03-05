@@ -15,6 +15,7 @@
 #include "Core/TextureManager.h"
 #include "ECS/Components/VolumetricFogComponent.h"
 #include "ECS/Components/AnimationComponent.h"
+#include "ECS/Components/CameraComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 #include "Renderer/VulkanRenderer.h"
 #include "Renderer/Vulkan/VulkanInstance.h"
@@ -703,6 +704,24 @@ void PlayerApp::SyncECSToScene()
                           ? obj.material->alphaCutoff : 0.0f;
         obj.material->SetFloat("alphaThreshold", threshold);
     }
+
+    // Active CameraComponent entity → m_camera
+    m_registry.Each<CameraComponent>([&](Entity e, CameraComponent& cam)
+    {
+        if (!cam.isActive) return;
+        if (!m_registry.Has<TransformComponent>(e)) return;
+        glm::mat4 world = TransformSystem::GetWorldMatrix(e, m_registry);
+        glm::vec3 pos   = glm::vec3(world[3]);
+        float sz        = glm::length(glm::vec3(world[2]));
+        glm::vec3 fwd   = (sz > 0.f) ? (-glm::vec3(world[2]) / sz) : glm::vec3(0, 0, -1);
+        m_camera.fpsMode   = true;
+        m_camera.fpsPos    = pos;
+        m_camera.fov       = cam.fov;
+        m_camera.nearPlane = cam.nearPlane;
+        m_camera.farPlane  = cam.farPlane;
+        m_camera.SetOrientation(std::atan2(fwd.x, -fwd.z),
+                                std::asin(glm::clamp(fwd.y, -1.0f, 1.0f)));
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

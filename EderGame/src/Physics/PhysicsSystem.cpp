@@ -137,6 +137,17 @@ void PhysicsSystem::Init()
     sceneDesc.cpuDispatcher  = m_dispatcher;
     sceneDesc.filterShader   = ContactFilterShader;
 
+    // Raise the minimum relative velocity required to trigger a bounce.
+    // Keeps objects from bouncing when they are resting on surfaces.
+    sceneDesc.bounceThresholdVelocity = 2.0f;
+
+    // Friction offset: contacts whose separation is below this generate
+    // friction even before full contact — helps sliding off edges cleanly.
+    sceneDesc.frictionOffsetThreshold = 0.04f;
+
+    // Must be set at scene level to allow per-actor CCD flags to take effect.
+    sceneDesc.flags |= PxSceneFlag::eENABLE_CCD;
+
     m_contactCallback.events = &m_events;
     sceneDesc.simulationEventCallback = &m_contactCallback;
 
@@ -306,6 +317,14 @@ PxShape* PhysicsSystem::CreateShape(Registry& registry, Entity e)
 
     if (shape)
     {
+        // Tune contact/rest offsets:
+        //   contactOffset  – distance at which contacts are generated (slightly larger
+        //                    than the shape so PhysX sees edges early enough to resolve them)
+        //   restOffset     – target separation at rest (must be < contactOffset)
+        // Keeping both small prevents ghost contacts and edge-sticking.
+        shape->setContactOffset(0.02f);
+        shape->setRestOffset   (0.005f);
+
         if (col.isTrigger)
         {
             shape->setFlag(PxShapeFlag::eSIMULATION_SHAPE, false);
@@ -427,6 +446,16 @@ void PhysicsSystem::SyncActors(Registry& registry)
             dyn->setActorFlag(PxActorFlag::eDISABLE_GRAVITY, !rb.useGravity);
             if (rb.isKinematic)
                 dyn->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
+
+            // More solver iterations: 8 position / 4 velocity.
+            // Default (4/1) leaves too much penetration error at sharp edges,
+            // causing the "stuck on rim" freeze.  8/4 resolves it cleanly.
+            dyn->setSolverIterationCounts(8, 4);
+
+            // Continuous Collision Detection — prevents tunnelling and
+            // reduces edge-lock artefacts at higher velocities.
+            dyn->setRigidBodyFlag(PxRigidBodyFlag::eENABLE_CCD, true);
+
             dyn->userData = reinterpret_cast<void*>(static_cast<uintptr_t>(e));
             m_scene->addActor(*dyn);
 
@@ -516,8 +545,6 @@ void PhysicsSystem::SyncActors(Registry& registry)
 void PhysicsSystem::Step(float dt)
 {
     if (!m_initialized || !m_scene) return;
-    // Clamp delta to avoid instability on first frame / breakpoints
-    dt = std::min(dt, 0.05f);
     if (dt <= 0.0f) return;
 
     m_events.clear();
