@@ -16,7 +16,8 @@ public:
               vk::ImageView     depthView,
               vk::Sampler       depthSampler,
               glm::vec2         sunUV,
-              float             sunRadius);
+              float             sunRadius,
+              float             aspect = 1.0f);
 
     vk::ImageView GetView()    const { return *occView;    }
     vk::Sampler   GetSampler() const { return *occSampler; }
@@ -25,9 +26,10 @@ public:
 private:
     struct PushData
     {
-        glm::vec2 sunUV;      // offset 0
-        float     sunRadius;  // offset 8
-    };
+        glm::vec2 sunUV;      // offset  0  (8)
+        float     sunRadius;  // offset  8  (4)
+        float     aspect;     // offset 12  (4) — viewport width/height
+    };  // total: 16 bytes
 
     void     CreateImages (uint32_t w, uint32_t h);
     void     DestroyImages();

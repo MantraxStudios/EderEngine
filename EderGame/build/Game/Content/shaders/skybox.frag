@@ -151,19 +151,24 @@ float StarField(vec3 rd, float density)
 
 void main()
 {
-    // Reconstruct view-space ray direction from the full-screen UV.
-    // Step 1: UV → NDC clip space (w=1 so inverseProj gives a view-space direction)
-    vec4 clipPos  = vec4(inUVs.x * 2.0 - 1.0, inUVs.y * 2.0 - 1.0, 1.0, 1.0);
+    // Build the view-space ray direction using ONLY the diagonal x/y scale
+    // factors of inverseProj (which encode FOV + aspect ratio).  We hardcode
+    // z = -1 (view-space forward) instead of sampling z from the full matrix
+    // multiply, because GLM_FORCE_DEPTH_ZERO_TO_ONE changes the z/w rows of
+    // the inverse projection and would make the z contribution vary per-pixel,
+    // distorting the sun disk differently at each aspect ratio.
+    //   inverseProj[col][row] in GLSL (column-major):
+    //     [0][0]  =  a/f   (a = aspect, f = cot(fov/2))
+    //     [1][1]  = ±1/f   (sign from the Vulkan Y-flip in GetProjection)
+    vec2 ndc = inUVs * 2.0 - 1.0;
+    vec3 viewRay = vec3(
+        camData.inverseProj[0][0] * ndc.x,  // horizontal: accounts for aspect + FOV
+        camData.inverseProj[1][1] * ndc.y,  // vertical:   accounts for FOV + Vulkan flip
+        -1.0                                 // view-space forward (-Z)
+    );
 
-    // Step 2: Unproject to view space.
-    //         Do NOT do a perspective divide here — that would fold the
-    //         aspect-ratio correction back in and stretch the sky.
-    //         We only need the xyz direction, so we zero w before going to world.
-    vec4 viewDir  = camData.inverseProj * clipPos;
-    viewDir.w     = 0.0;   // direction, not position
-
-    // Step 3: Rotate into world space (no translation).
-    vec3 rd = normalize((camData.inverseView * viewDir).xyz);
+    // Rotate to world space (w = 0 → translation is NOT applied — direction only).
+    vec3 rd = normalize((camData.inverseView * vec4(viewRay, 0.0)).xyz);
     rd.x = -rd.x;
 
     vec3  sun  = normalize(sunDir.xyz);

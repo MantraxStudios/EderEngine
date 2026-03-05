@@ -268,7 +268,8 @@ void VulkanSunShafts::Draw(vk::CommandBuffer cmd,
                             float decay,      float weight,
                             float exposure,
                             const glm::vec3& tint,
-                            float            sunHeight)
+                            float            sunHeight,
+                            float            aspect)
 {
     UpdateDescriptor(sceneView, sceneSampler, occlusionView, depthView);
 
@@ -296,6 +297,7 @@ void VulkanSunShafts::Draw(vk::CommandBuffer cmd,
     push.bloomScale = bloomScale;
     push.sunHeight  = sunHeight;
     push.tint       = tint;
+    push.aspect     = aspect;
     cmd.pushConstants(*pipelineLayout,
         vk::ShaderStageFlagBits::eFragment,
         0, sizeof(PushData), &push);

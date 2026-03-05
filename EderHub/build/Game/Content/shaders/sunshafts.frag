@@ -17,6 +17,7 @@ layout(push_constant) uniform Push
     layout(offset = 24) float bloomScale;
     layout(offset = 28) float sunHeight;
     layout(offset = 32) vec3  tint;
+    layout(offset = 44) float aspect;  // viewport width / height
 };
 
 #define NUM_SAMPLES 100
@@ -57,9 +58,10 @@ void main()
     // Normalize only against samples that were actually in-bounds
     float shaftsNorm = (validDecaySum > 0.001) ? shafts / validDecaySum : 0.0;
 
-    // Radial proximity to the sun — shafts are strongest near the light source and
-    // fade outward. Quadratic makes the center bright and the edges barely visible.
-    float distFromSun = length(fragUV - sunUV);
+    // Radial proximity to the sun — aspect-corrected so it's circular on screen.
+    vec2  dToSun    = fragUV - sunUV;
+    dToSun.x       *= aspect;
+    float distFromSun = length(dToSun);
     float proxFactor  = clamp(1.0 - distFromSun * 0.7, 0.0, 1.0);
     proxFactor *= proxFactor;
 

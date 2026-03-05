@@ -1518,7 +1518,7 @@ void Application::RenderPostProcess(vk::CommandBuffer cmd)
 
             m_occlusionPass.Draw(cmd,
                 m_debugFb.GetDepthView(), m_debugFb.GetSampler(),
-                sunUV, shaftsComp->shaftsSunRadius);
+                sunUV, shaftsComp->shaftsSunRadius, aspect);
 
             m_sunShafts.Draw(cmd,
                 m_postFb->GetColorView(),  m_postFb->GetSampler(),
@@ -1527,7 +1527,7 @@ void Application::RenderPostProcess(vk::CommandBuffer cmd)
                 shaftsComp->shaftsDensity,    shaftsComp->shaftsBloomScale,
                 shaftsComp->shaftsDecay,      shaftsComp->shaftsWeight,
                 shaftsComp->shaftsExposure,   shaftsComp->shaftsTint,
-                sunHeight);
+                sunHeight, aspect);
 
             m_sunShafts.GetOutput().TransitionToShaderRead(cmd);
             m_editor.SetSceneViewFramebuffer(&m_sunShafts.GetOutput());
@@ -1541,35 +1541,12 @@ void Application::RenderPostProcess(vk::CommandBuffer cmd)
 
 void Application::RenderMainPass(vk::CommandBuffer cmd)
 {
-    auto& sc     = VulkanSwapchain::Get();
-    float aspect = static_cast<float>(sc.GetExtent().width) /
-                   static_cast<float>(sc.GetExtent().height);
-
+    // The scene is rendered to m_debugFb in RenderSceneView and displayed
+    // inside the ImGui scene-view panel.  This pass only needs to start the
+    // swapchain render-pass and draw any overlay on top of it; re-drawing the
+    // full scene here would produce a second (wrong-aspect) skybox behind the
+    // ImGui panels causing the "double / stretched skybox" artifact.
     VulkanRenderer::Get().BeginMainPass();
-
-    // Opaque geometry
-    m_pipeline.Bind(cmd);
-    m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
-    m_scene.Draw(cmd, m_pipeline, m_camera, aspect, m_lights);
-
-    // Skinned objects
-    m_pipeline.Bind(cmd);
-    m_scene.DrawSkinned(cmd, m_pipeline, m_camera, aspect, m_lights,
-        [this, &cmd](uint32_t entityId)
-        {
-            auto it = m_entityBoneMatrices.find(entityId);
-            if (it != m_entityBoneMatrices.end())
-                m_boneSSBO.Upload(it->second);
-            m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
-        });
-
-    // Skybox
-    m_skybox.Draw(cmd, m_camera.GetView(), m_camera.GetProjection(aspect), -m_activeDirDir);
-
-    // Transparents
-    m_pipeline.BindTransparent(cmd);
-    m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
-    m_scene.DrawTransparent(cmd, m_pipeline, m_camera, aspect, m_lights);
 
     m_debugOverlay.Draw(cmd, m_debugFb, m_shadowMap);
 }

@@ -9,6 +9,7 @@ layout(push_constant) uniform Push
 {
     layout(offset = 0) vec2  sunUV;
     layout(offset = 8) float sunRadius;
+    layout(offset = 12) float aspect;  // viewport width / height
 };
 
 void main()
@@ -18,7 +19,12 @@ void main()
     // Si hay geometria → negro (bloquea rayos). Si es cielo → fuente de luz.
     float isSky = step(0.9999, depth);
 
-    float dist = length(fragUV - sunUV);
+    // Aspect-correct UV distance so the sun disk appears circular on screen.
+    // UV.x spans 'width' pixels; UV.y spans 'height' pixels.
+    // Multiplying delta.x by aspect converts both axes to height-normalised units.
+    vec2 delta = fragUV - sunUV;
+    delta.x   *= aspect;
+    float dist  = length(delta);
 
     // Disco visual del sol (controlado por sunRadius).
     // Sin exp falloff por distancia: cuando el sol esta fuera de pantalla

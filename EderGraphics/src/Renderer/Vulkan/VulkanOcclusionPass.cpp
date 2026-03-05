@@ -284,7 +284,8 @@ void VulkanOcclusionPass::Draw(vk::CommandBuffer cmd,
                                 vk::ImageView     depthView,
                                 vk::Sampler       depthSampler,
                                 glm::vec2         sunUV,
-                                float             sunRadius)
+                                float             sunRadius,
+                                float             aspect)
 {
     UpdateDescriptor(depthView, depthSampler);
 
@@ -338,7 +339,7 @@ void VulkanOcclusionPass::Draw(vk::CommandBuffer cmd,
     cmd.setViewport(0, vp);
     cmd.setScissor(0, vk::Rect2D{ {0, 0}, extent });
 
-    PushData push{ sunUV, sunRadius };
+    PushData push{ sunUV, sunRadius, aspect };
     cmd.pushConstants(*pipelineLayout, vk::ShaderStageFlagBits::eFragment,
                       0, sizeof(PushData), &push);
     cmd.draw(3, 1, 0, 0);

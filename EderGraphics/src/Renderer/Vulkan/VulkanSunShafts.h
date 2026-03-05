@@ -24,7 +24,8 @@ public:
               float decay,      float weight,
               float exposure,
               const glm::vec3& tint,
-              float            sunHeight = 1.0f);
+              float            sunHeight = 1.0f,
+              float            aspect    = 1.0f);
 
     VulkanFramebuffer& GetOutput() { return outputFb; }
 
@@ -36,10 +37,11 @@ private:
         float     weight;            // offset 12  (4)
         float     exposure;          // offset 16  (4)
         float     density;           // offset 20  (4)
-        float     bloomScale = 1.0f; // offset 24  (4)  — glare-only multiplier
+        float     bloomScale = 1.0f; // offset 24  (4)
         float     sunHeight  = 1.0f; // offset 28  (4)
         glm::vec3 tint;              // offset 32 (12)
-    };  // total: 44 bytes
+        float     aspect     = 1.0f; // offset 44  (4) — viewport width/height
+    };  // total: 48 bytes
 
     void BuildPipeline(vk::Format colorFormat);
     void UpdateDescriptor(vk::ImageView sceneView, vk::Sampler sampler,

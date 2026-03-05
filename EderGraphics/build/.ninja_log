@@ -17,8 +17,8 @@
 12053	21760	7942722562858087	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSwapchain.cpp.obj	142be88f12bb8d77
 35	14021	7942722442682339	CMakeFiles/EderGraphics.dir/src/Core/LightBuffer.cpp.obj	72bbb399cf37b30
 79	10880	7943533830327700	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanTexture.cpp.obj	860f15e8db1cce90
-7938	8232	7944528725670107	EderGraphics.dll	4ad11f744948c776
-7938	8232	7944528725670107	EderGraphics.lib	4ad11f744948c776
+7288	7744	7944548474541044	EderGraphics.dll	4ad11f744948c776
+7288	7744	7944548474541044	EderGraphics.lib	4ad11f744948c776
 62	10853	7943533830162128	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSkybox.cpp.obj	537d9a14bed5778b
 11702	21671	7942722559348439	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSpotShadowMap.cpp.obj	e64ba34a65c86078
 49	10907	7943533830031775	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanPointShadowPipeline.cpp.obj	e96087152e2e5602
@@ -28,8 +28,8 @@
 75	13148	7942722443078911	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/BoneSSBO.cpp.obj	b22c3f594480fc7f
 8	6087	7944528644996231	CMakeFiles/EderGraphics.dir/src/Core/MeshManager.cpp.obj	d65dd66c0e44e4ff
 20	6155	7944476979808631	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanGizmo.cpp.obj	8e3181e1dc14f442
-39	10882	7943533829924338	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanOcclusionPass.cpp.obj	4f6e592eaf0d335c
-72	10921	7943533830262498	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSunShafts.cpp.obj	b4138694a13946ee
+9	7288	7944548399108826	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanOcclusionPass.cpp.obj	4f6e592eaf0d335c
+13	7262	7944548399153909	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanSunShafts.cpp.obj	b4138694a13946ee
 87	10919	7943533830407950	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanVolumetricFog.cpp.obj	b4a682e4a1a5f1a
 94	10948	7943533830483228	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanVolumetricLight.cpp.obj	97f3e3d8dc4ea339
 15	4270	7943533829691700	CMakeFiles/EderGraphics.dir/src/Core/AssetBridge.cpp.obj	66031e7b67c83266
