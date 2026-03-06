@@ -34,3 +34,9 @@
 94	10948	7943533830483228	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanVolumetricLight.cpp.obj	97f3e3d8dc4ea339
 15	4270	7943533829691700	CMakeFiles/EderGraphics.dir/src/Core/AssetBridge.cpp.obj	66031e7b67c83266
 14	4865	7944508386068865	CMakeFiles/EderGraphics.dir/src/Core/TextureManager.cpp.obj	af9849db3b3caf11
+9	6956	7944566119487765	CMakeFiles/EderGraphics.dir/src/Core/MeshManager.cpp.obj	d65dd66c0e44e4ff
+14	7595	7944566119532833	CMakeFiles/EderGraphics.dir/src/Core/Scene.cpp.obj	34b01ea6c7563828
+23	8816	7944566119618126	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanMesh.cpp.obj	4f6a980d3dbfd535
+19	9188	7944566119578073	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanGizmo.cpp.obj	8e3181e1dc14f442
+9188	9529	7944566212882475	EderGraphics.dll	4ad11f744948c776
+9188	9529	7944566212882475	EderGraphics.lib	4ad11f744948c776

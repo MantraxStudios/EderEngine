@@ -284,7 +284,11 @@ void InspectorPanel::DrawTransformComponent()
             ImGui::TableSetupColumn("value", ImGuiTableColumnFlags_WidthStretch);
             ImGui::TableSetupColumn("reset", ImGuiTableColumnFlags_WidthFixed,  26.0f);
             Vec3Row("Location", &t.position.x, 0.05f, -FLT_MAX, FLT_MAX, 0.0f);
-            Vec3Row("Rotation", &t.rotation.x, 0.5f,  -FLT_MAX, FLT_MAX, 0.0f);
+            {
+                glm::vec3 prevRot = t.rotation;
+                Vec3Row("Rotation", &t.rotation.x, 0.5f, -FLT_MAX, FLT_MAX, 0.0f);
+                if (t.rotation != prevRot) t.usePhysicsQuat = false;
+            }
             Vec3Row("Scale",    &t.scale.x,    0.01f,  0.001f,   100.0f,  1.0f);
             ImGui::EndTable();
         }
@@ -550,6 +554,9 @@ void InspectorPanel::DrawRigidbodyComponent()
         const float prevAngularDrag = rb.angularDrag;
         const bool  prevUseGravity  = rb.useGravity;
         const bool  prevKinematic   = rb.isKinematic;
+        const bool  prevFreezeX     = rb.freezeRotationX;
+        const bool  prevFreezeY     = rb.freezeRotationY;
+        const bool  prevFreezeZ     = rb.freezeRotationZ;
 
         ImGui::Columns(2, "rb_cols", false);
         ImGui::SetColumnWidth(0, 130.0f);
@@ -577,6 +584,14 @@ void InspectorPanel::DrawRigidbodyComponent()
         ImGui::Checkbox("##rb_kin", &rb.isKinematic);
         ImGui::NextColumn();
 
+        ImGui::Text("Freeze Rotation"); ImGui::NextColumn();
+        ImGui::PushID("rb_freeze");
+        ImGui::Checkbox("X", &rb.freezeRotationX); ImGui::SameLine();
+        ImGui::Checkbox("Y", &rb.freezeRotationY); ImGui::SameLine();
+        ImGui::Checkbox("Z", &rb.freezeRotationZ);
+        ImGui::PopID();
+        ImGui::NextColumn();
+
         ImGui::Columns(1);
 
         // Read-only velocity
@@ -588,12 +603,15 @@ void InspectorPanel::DrawRigidbodyComponent()
 
         ImGui::Spacing();
 
-        // Apply changes to PhysX if any field was modified
+        // Apply changes to physics if any field was modified
         if (rb.mass        != prevMass        ||
             rb.linearDrag  != prevLinearDrag  ||
             rb.angularDrag != prevAngularDrag ||
             rb.useGravity  != prevUseGravity  ||
-            rb.isKinematic != prevKinematic)
+            rb.isKinematic != prevKinematic   ||
+            rb.freezeRotationX != prevFreezeX ||
+            rb.freezeRotationY != prevFreezeY ||
+            rb.freezeRotationZ != prevFreezeZ)
         {
             PhysicsSystem::Get().MarkDirty(selected);
         }
@@ -620,11 +638,11 @@ void InspectorPanel::DrawColliderComponent()
         const bool          prevTrigger    = col.isTrigger;
 
         // Shape selector
-        const char* shapes[] = { "Box", "Sphere", "Capsule" };
+        const char* shapes[] = { "Box", "Sphere", "Capsule", "Mesh" };
         int shapeIdx = static_cast<int>(col.shape);
         ImGui::Text("Shape"); ImGui::SameLine(130.0f);
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::Combo("##col_shape", &shapeIdx, shapes, 3))
+        if (ImGui::Combo("##col_shape", &shapeIdx, shapes, 4))
             col.shape = static_cast<ColliderShape>(shapeIdx);
 
         ImGui::Columns(2, "col_cols", false);
@@ -644,7 +662,7 @@ void InspectorPanel::DrawColliderComponent()
             ImGui::DragFloat("##col_rad", &col.radius, 0.01f, 0.001f, 999.0f, "%.3f");
             ImGui::NextColumn();
         }
-        else // Capsule
+        else if (col.shape == ColliderShape::Capsule)
         {
             ImGui::Text("Radius"); ImGui::NextColumn();
             ImGui::SetNextItemWidth(-1);
@@ -654,6 +672,13 @@ void InspectorPanel::DrawColliderComponent()
             ImGui::Text("Half Height"); ImGui::NextColumn();
             ImGui::SetNextItemWidth(-1);
             ImGui::DragFloat("##col_chh", &col.capsuleHalfHeight, 0.01f, 0.001f, 999.0f, "%.3f");
+            ImGui::NextColumn();
+        }
+        else // Mesh
+        {
+            ImGui::TextDisabled("Uses MeshRenderer mesh.");
+            ImGui::NextColumn();
+            ImGui::TextDisabled("(Static actors only)");
             ImGui::NextColumn();
         }
 
@@ -684,7 +709,7 @@ void InspectorPanel::DrawColliderComponent()
         ImGui::Columns(1);
         ImGui::Spacing();
 
-        // Apply changes to PhysX if any field was modified
+        // Apply changes to physics if any field was modified
         if (col.shape            != prevShape       ||
             col.boxHalfExtents   != prevHalfExt     ||
             col.radius           != prevRadius      ||
@@ -870,3 +895,4 @@ void InspectorPanel::DrawAddComponent()
         ImGui::EndPopup();
     }
 }
+

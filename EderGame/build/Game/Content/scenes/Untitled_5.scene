@@ -1,0 +1,59 @@
+version=1
+name=Untitled_5
+
+[entity]
+id=1
+tag.name=Entity
+transform.pos=0.000000 0.000000 0.000000
+transform.rot=0.000000 0.000000 0.000000
+transform.scale=1.000000 1.000000 1.000000
+mesh.guid=0
+mesh.path=assets/Capoeira.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=25.000000 0.500000 25.000000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.5
+collider.dynFric=0.5
+collider.restitution=0.3
+collider.isTrigger=0
+rb.mass=1
+rb.isKinematic=1
+rb.useGravity=1
+rb.linearDrag=0.01
+rb.angularDrag=0.05
+[/entity]
+
+[entity]
+id=2
+tag.name=Entity
+transform.pos=-7.302780 0.966362 25.259121
+transform.rot=-0.000000 0.000000 0.000000
+transform.scale=1.000000 1.000000 1.000000
+mesh.guid=f3d724d4377d941c
+mesh.path=assets/box.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.5
+collider.dynFric=0.5
+collider.restitution=0.3
+collider.isTrigger=0
+rb.mass=1
+rb.isKinematic=0
+rb.useGravity=1
+rb.linearDrag=0.01
+rb.angularDrag=0.05
+[/entity]
+

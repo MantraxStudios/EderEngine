@@ -333,11 +333,16 @@ void LuaScriptSystem::BindAPI()
         }
     };
     RB["getVelocity"] = [](int e) -> sol::table {
-        if (!s_reg || !s_reg->Has<RigidbodyComponent>((Entity)e)) return sol::nil;
-        auto& rb = s_reg->Get<RigidbodyComponent>((Entity)e);
+        glm::vec3 v = PhysicsSystem::Get().GetVelocity((Entity)e);
         sol::table r = LuaScriptSystem::Get().GetState().create_table();
-        r["x"] = rb.linearVelocity.x; r["y"] = rb.linearVelocity.y; r["z"] = rb.linearVelocity.z;
+        r["x"] = v.x; r["y"] = v.y; r["z"] = v.z;
         return r;
+    };
+    RB["addForce"] = [](int e, float x, float y, float z) {
+        PhysicsSystem::Get().AddForce((Entity)e, {x, y, z});
+    };
+    RB["addImpulse"] = [](int e, float x, float y, float z) {
+        PhysicsSystem::Get().AddImpulse((Entity)e, {x, y, z});
     };
     RB["isKinematic"] = [](int e) -> bool {
         return s_reg && s_reg->Has<RigidbodyComponent>((Entity)e) &&
@@ -357,6 +362,7 @@ void LuaScriptSystem::BindAPI()
             s_reg->Get<RigidbodyComponent>((Entity)e).useGravity = v;
     };
     RB["setVelocity"] = [](int e, float x, float y, float z) {
+        PhysicsSystem::Get().SetVelocity((Entity)e, {x, y, z});
         if (s_reg && s_reg->Has<RigidbodyComponent>((Entity)e))
             s_reg->Get<RigidbodyComponent>((Entity)e).linearVelocity = {x, y, z};
     };
@@ -1302,9 +1308,6 @@ void LuaScriptSystem::BindAPI()
     CC["move"] = [](int e, float dx, float dy, float dz) {
         if (!s_reg) return;
         PhysicsSystem::Get().MoveController((Entity)e, {dx, dy, dz}, 1.0f / 60.0f);
-        // WriteBackControllers is called each fixed-step in the game loop,
-        // but calling it here too ensures Lua sees position immediately.
-        PhysicsSystem::Get().WriteBackControllers(*s_reg);
     };
 
     // isGrounded(e) — returns true when the controller is touching the ground
@@ -1388,7 +1391,7 @@ void LuaScriptSystem::BindAPI()
         int n = (numKeys < SDL_SCANCODE_COUNT) ? numKeys : SDL_SCANCODE_COUNT;
         std::memcpy(s_keysCurr, keys, static_cast<std::size_t>(n) * sizeof(bool));
         s_mouseCurr = SDL_GetMouseState(&s_mouseX, &s_mouseY);
-        SDL_GetRelativeMouseState(&s_mouseDX, &s_mouseDY);
+        s_mouseDX = 0.f; s_mouseDY = 0.f;
     };
 
     sol::table Inp = m_lua.create_named_table("Input");

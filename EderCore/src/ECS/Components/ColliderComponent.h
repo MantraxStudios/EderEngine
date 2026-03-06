@@ -1,7 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 
-enum class ColliderShape { Box, Sphere, Capsule };
+enum class ColliderShape { Box, Sphere, Capsule, Mesh };
 
 struct ColliderComponent
 {
@@ -20,8 +20,8 @@ struct ColliderComponent
     glm::vec3     center         = { 0.0f, 0.0f, 0.0f };
 
     // Material
-    float         staticFriction  = 0.5f;
-    float         dynamicFriction = 0.5f;
+    float         staticFriction  = 0.3f;
+    float         dynamicFriction = 0.3f;
     float         restitution     = 0.3f;
 
     bool          isTrigger       = false;

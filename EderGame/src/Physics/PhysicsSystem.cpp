@@ -6,18 +6,190 @@
 #include "ECS/Components/CollisionCallbackComponent.h"
 #include "ECS/Components/LayerComponent.h"
 #include "ECS/Components/CharacterControllerComponent.h"
+#include "ECS/Components/MeshRendererComponent.h"
 #include "ECS/Systems/TransformSystem.h"
+#include "Core/MeshManager.h"
 
-#include <physx/characterkinematic/PxCapsuleController.h>
+// ── Jolt ──────────────────────────────────────────────────────────────────────
+#include <Jolt/RegisterTypes.h>
+#include <Jolt/Core/Factory.h>
+#include <Jolt/Physics/Collision/Shape/BoxShape.h>
+#include <Jolt/Physics/Collision/Shape/SphereShape.h>
+#include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
+#include <Jolt/Physics/Collision/Shape/MeshShape.h>
+#include <Jolt/Physics/Collision/RayCast.h>
+#include <Jolt/Physics/Collision/CastResult.h>
+#include <Jolt/Physics/Collision/BroadPhase/BroadPhaseQuery.h>
 
 #include <glm/gtx/matrix_decompose.hpp>
 #include <glm/gtx/quaternion.hpp>
+#include <glm/gtx/euler_angles.hpp>
 #include <glm/gtc/type_ptr.hpp>
 
 #include <cstring>
 #include <cmath>
+#include <iostream>
+#include <thread>
 
-using namespace physx;
+// ─────────────────────────────────────────────────────────────────────────────
+// Helpers
+// ─────────────────────────────────────────────────────────────────────────────
+static inline JPH::Vec3  ToJolt (const glm::vec3& v) { return { v.x, v.y, v.z }; }
+static inline JPH::RVec3 ToJoltR(const glm::vec3& v) { return JPH::RVec3(v.x, v.y, v.z); }
+static inline JPH::Quat  ToJolt (const glm::quat& q) { return { q.x, q.y, q.z, q.w }; }
+
+// Single template handles both Vec3 and RVec3 (same type in single-precision builds)
+template<typename T>
+static inline glm::vec3  ToGlm(const T& v) { return { (float)v.GetX(), (float)v.GetY(), (float)v.GetZ() }; }
+static inline glm::quat  ToGlm(const JPH::Quat& q) { return { q.GetW(), q.GetX(), q.GetY(), q.GetZ() }; }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Simple "accept all" filters used by CharacterVirtual::Update
+// ─────────────────────────────────────────────────────────────────────────────
+class AllBroadPhaseLayerFilter : public JPH::BroadPhaseLayerFilter {
+public:
+    bool ShouldCollide(JPH::BroadPhaseLayer) const override { return true; }
+};
+
+class AllObjectLayerFilter : public JPH::ObjectLayerFilter {
+public:
+    bool ShouldCollide(JPH::ObjectLayer) const override { return true; }
+};
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BPLayerInterfaceImpl
+// ─────────────────────────────────────────────────────────────────────────────
+uint32_t PhysicsSystem::BPLayerInterfaceImpl::GetNumBroadPhaseLayers() const
+{
+    return BroadPhaseLayers::NUM_LAYERS;
+}
+
+JPH::BroadPhaseLayer PhysicsSystem::BPLayerInterfaceImpl::GetBroadPhaseLayer(JPH::ObjectLayer layer) const
+{
+    switch (layer)
+    {
+    case PhysicsLayers::STATIC:  return BroadPhaseLayers::NON_MOVING;
+    case PhysicsLayers::DYNAMIC: return BroadPhaseLayers::MOVING;
+    default:                     return BroadPhaseLayers::MOVING;
+    }
+}
+
+#if defined(JPH_EXTERNAL_PROFILE) || defined(JPH_PROFILE_ENABLED)
+const char* PhysicsSystem::BPLayerInterfaceImpl::GetBroadPhaseLayerName(JPH::BroadPhaseLayer layer) const
+{
+    switch ((uint8_t)layer)
+    {
+    case 0: return "NON_MOVING";
+    case 1: return "MOVING";
+    default: return "INVALID";
+    }
+}
+#endif
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ObjVsBPLayerFilterImpl
+// ─────────────────────────────────────────────────────────────────────────────
+bool PhysicsSystem::ObjVsBPLayerFilterImpl::ShouldCollide(
+    JPH::ObjectLayer layer, JPH::BroadPhaseLayer bpLayer) const
+{
+    switch (layer)
+    {
+    case PhysicsLayers::STATIC:  return bpLayer == BroadPhaseLayers::MOVING;
+    case PhysicsLayers::DYNAMIC: return true;
+    default:                     return false;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ObjLayerPairFilterImpl
+// ─────────────────────────────────────────────────────────────────────────────
+bool PhysicsSystem::ObjLayerPairFilterImpl::ShouldCollide(
+    JPH::ObjectLayer layer1, JPH::ObjectLayer layer2) const
+{
+    switch (layer1)
+    {
+    case PhysicsLayers::STATIC:  return layer2 == PhysicsLayers::DYNAMIC;
+    case PhysicsLayers::DYNAMIC: return true;
+    default:                     return false;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ContactListenerImpl
+// ─────────────────────────────────────────────────────────────────────────────
+void PhysicsSystem::ContactListenerImpl::PushEvent(
+    CollisionEventType type,
+    const JPH::Body& body1, const JPH::Body& body2,
+    const JPH::ContactManifold& manifold)
+{
+    if (!events || !bodyEntityMap) return;
+
+    uint32_t idx1 = body1.GetID().GetIndex();
+    uint32_t idx2 = body2.GetID().GetIndex();
+
+    auto it1 = bodyEntityMap->find(idx1);
+    auto it2 = bodyEntityMap->find(idx2);
+    if (it1 == bodyEntityMap->end() || it2 == bodyEntityMap->end()) return;
+
+    Entity eA = it1->second;
+    Entity eB = it2->second;
+
+    bool isTrigger = body1.IsSensor() || body2.IsSensor();
+
+    glm::vec3 point  = {};
+    glm::vec3 normal = {};
+
+    if (!manifold.mRelativeContactPointsOn1.empty())
+    {
+        JPH::RVec3 wp = manifold.mBaseOffset + manifold.mRelativeContactPointsOn1[0];
+        point = ToGlm(wp);
+    }
+    JPH::Vec3 n = manifold.mWorldSpaceNormal;
+    normal = ToGlm(n);
+
+    events->push_back({ type, eA, eB, point, normal, isTrigger });
+}
+
+void PhysicsSystem::ContactListenerImpl::OnContactAdded(
+    const JPH::Body& body1, const JPH::Body& body2,
+    const JPH::ContactManifold& manifold, JPH::ContactSettings&)
+{
+    PushEvent(CollisionEventType::Enter, body1, body2, manifold);
+}
+
+void PhysicsSystem::ContactListenerImpl::OnContactPersisted(
+    const JPH::Body& body1, const JPH::Body& body2,
+    const JPH::ContactManifold& manifold, JPH::ContactSettings&)
+{
+    PushEvent(CollisionEventType::Stay, body1, body2, manifold);
+}
+
+void PhysicsSystem::ContactListenerImpl::OnContactRemoved(
+    const JPH::SubShapeIDPair& subShapePair)
+{
+    if (!events || !bodyEntityMap) return;
+
+    uint32_t idx1 = subShapePair.GetBody1ID().GetIndex();
+    uint32_t idx2 = subShapePair.GetBody2ID().GetIndex();
+
+    auto it1 = bodyEntityMap->find(idx1);
+    auto it2 = bodyEntityMap->find(idx2);
+    if (it1 == bodyEntityMap->end() || it2 == bodyEntityMap->end()) return;
+
+    Entity eA = it1->second;
+    Entity eB = it2->second;
+
+    bool isTrigger = false;
+    if (bodyIsSensor)
+    {
+        auto s1 = bodyIsSensor->find(idx1);
+        auto s2 = bodyIsSensor->find(idx2);
+        if (s1 != bodyIsSensor->end()) isTrigger |= s1->second;
+        if (s2 != bodyIsSensor->end()) isTrigger |= s2->second;
+    }
+
+    events->push_back({ CollisionEventType::Exit, eA, eB, {}, {}, isTrigger });
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Singleton
@@ -29,136 +201,54 @@ PhysicsSystem& PhysicsSystem::Get()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Filter shader — layer-aware collision filtering
-//
-//  Each shape stores in its PxFilterData:
-//    word0 = layer bit  (1u << layer)
-//    word1 = layerMask  (which layers this entity interacts with)
-//
-//  Two actors interact only when both accept each other’s layer.
-// ─────────────────────────────────────────────────────────────────────────────
-static PxFilterFlags ContactFilterShader(
-    PxFilterObjectAttributes /*a0*/, PxFilterData d0,
-    PxFilterObjectAttributes /*a1*/, PxFilterData d1,
-    PxPairFlags& pairFlags,
-    const void* /*constantBlock*/, PxU32 /*constantBlockSize*/)
-{
-    // Layer-mask check: A must accept B’s layer AND B must accept A’s layer.
-    if (!(d0.word1 & d1.word0) || !(d1.word1 & d0.word0))
-        return PxFilterFlag::eSUPPRESS;
-
-    pairFlags = PxPairFlag::eCONTACT_DEFAULT
-              | PxPairFlag::eNOTIFY_TOUCH_FOUND
-              | PxPairFlag::eNOTIFY_TOUCH_LOST
-              | PxPairFlag::eNOTIFY_TOUCH_PERSISTS;
-
-    return PxFilterFlag::eDEFAULT;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ContactCallback
-// ─────────────────────────────────────────────────────────────────────────────
-void PhysicsSystem::ContactCallback::onContact(
-    const PxContactPairHeader& header,
-    const PxContactPair*       pairs,
-    PxU32                      nbPairs)
-{
-    if (!events) return;
-
-    Entity eA = static_cast<Entity>(reinterpret_cast<uintptr_t>(header.actors[0]->userData));
-    Entity eB = static_cast<Entity>(reinterpret_cast<uintptr_t>(header.actors[1]->userData));
-
-    for (PxU32 i = 0; i < nbPairs; ++i)
-    {
-        const PxContactPair& cp = pairs[i];
-
-        CollisionEventType type = CollisionEventType::Stay;
-        if      (cp.events & PxPairFlag::eNOTIFY_TOUCH_FOUND) type = CollisionEventType::Enter;
-        else if (cp.events & PxPairFlag::eNOTIFY_TOUCH_LOST)  type = CollisionEventType::Exit;
-
-        glm::vec3 point  = {};
-        glm::vec3 normal = {};
-        PxContactPairPoint pts[8];
-        PxU32 nPts = cp.extractContacts(pts, 8);
-        if (nPts > 0)
-        {
-            point  = { pts[0].position.x, pts[0].position.y, pts[0].position.z };
-            normal = { pts[0].normal.x,   pts[0].normal.y,   pts[0].normal.z   };
-        }
-
-        events->push_back({ type, eA, eB, point, normal, false });
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// ContactCallback::onTrigger
-// ─────────────────────────────────────────────────────────────────────────────
-void PhysicsSystem::ContactCallback::onTrigger(
-    PxTriggerPair* pairs, PxU32 nbPairs)
-{
-    if (!events) return;
-    for (PxU32 i = 0; i < nbPairs; ++i)
-    {
-        const PxTriggerPair& tp = pairs[i];
-        // Skip stale pairs caused by removed shapes/actors
-        if (tp.flags & (PxTriggerPairFlag::eREMOVED_SHAPE_TRIGGER |
-                        PxTriggerPairFlag::eREMOVED_SHAPE_OTHER))
-            continue;
-
-        Entity eTrigger = static_cast<Entity>(
-            reinterpret_cast<uintptr_t>(tp.triggerActor->userData));
-        Entity eOther = static_cast<Entity>(
-            reinterpret_cast<uintptr_t>(tp.otherActor->userData));
-
-        CollisionEventType type =
-            (tp.status & PxPairFlag::eNOTIFY_TOUCH_FOUND)
-            ? CollisionEventType::Enter
-            : CollisionEventType::Exit;
-
-        events->push_back({ type, eTrigger, eOther, {}, {}, true });
-    }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
 // Init / Shutdown
 // ─────────────────────────────────────────────────────────────────────────────
 void PhysicsSystem::Init()
 {
     if (m_initialized) return;
 
-    m_foundation = PxCreateFoundation(
-        PX_PHYSICS_VERSION, m_allocator, m_errorCallback);
+    JPH::RegisterDefaultAllocator();
 
-    m_physics = PxCreatePhysics(
-        PX_PHYSICS_VERSION, *m_foundation,
-        PxTolerancesScale(), true /*trackOutstandingAllocations*/);
+    JPH::Factory::sInstance = new JPH::Factory();
 
-    m_dispatcher = PxDefaultCpuDispatcherCreate(2 /*threads*/);
+    if (!JPH::VerifyJoltVersionID())
+    {
+        std::cerr << "[Jolt] FATAL: ABI version mismatch between headers and Jolt.lib.\n"
+                  << "       Recompile Jolt or match its compile defines in CMakeLists.\n";
+        return;
+    }
 
-    PxSceneDesc sceneDesc(m_physics->getTolerancesScale());
-    sceneDesc.gravity        = PxVec3(0.0f, -9.81f, 0.0f);
-    sceneDesc.cpuDispatcher  = m_dispatcher;
-    sceneDesc.filterShader   = ContactFilterShader;
+    JPH::RegisterTypes();
 
-    // Raise the minimum relative velocity required to trigger a bounce.
-    // Keeps objects from bouncing when they are resting on surfaces.
-    sceneDesc.bounceThresholdVelocity = 2.0f;
+    constexpr uint32_t cTempAllocMB  = 16;
+    constexpr uint32_t cMaxBodies    = 65536;
+    constexpr uint32_t cBodyMutexes  = 0;      // auto
+    constexpr uint32_t cMaxBodyPairs = 65536;
+    constexpr uint32_t cMaxContacts  = 10240;
 
-    // Friction offset: contacts whose separation is below this generate
-    // friction even before full contact — helps sliding off edges cleanly.
-    sceneDesc.frictionOffsetThreshold = 0.04f;
+    m_tempAllocator = std::make_unique<JPH::TempAllocatorImpl>(cTempAllocMB * 1024 * 1024);
 
-    // Must be set at scene level to allow per-actor CCD flags to take effect.
-    sceneDesc.flags |= PxSceneFlag::eENABLE_CCD;
+    int numThreads = std::max(1, (int)std::thread::hardware_concurrency() - 1);
+    m_jobSystem = std::make_unique<JPH::JobSystemThreadPool>(
+        JPH::cMaxPhysicsJobs, JPH::cMaxPhysicsBarriers, numThreads);
 
-    m_contactCallback.events = &m_events;
-    sceneDesc.simulationEventCallback = &m_contactCallback;
+    m_physicsSystem = std::make_unique<JPH::PhysicsSystem>();
+    m_physicsSystem->Init(cMaxBodies, cBodyMutexes, cMaxBodyPairs, cMaxContacts,
+                          m_bpLayerInterface, m_objVsBpFilter, m_objPairFilter);
 
-    m_scene = m_physics->createScene(sceneDesc);
+    m_physicsSystem->SetGravity(JPH::Vec3(0.0f, -9.81f, 0.0f));
 
-    m_defaultMat = m_physics->createMaterial(0.5f, 0.5f, 0.3f);
+    // Reduce penetration slop and speculative contact distance to prevent sticky collisions.
+    JPH::PhysicsSettings ps;
+    ps.mPenetrationSlop               = 0.005f;  // default 0.02 — less sinking/sticking
+    ps.mSpeculativeContactDistance    = 0.005f;  // default 0.02 — less ghost contacts
+    ps.mBaumgarte                     = 0.4f;    // default 0.2  — faster depenetration
+    m_physicsSystem->SetPhysicsSettings(ps);
 
-    m_controllerManager = PxCreateControllerManager(*m_scene);
+    m_contactListener.events        = &m_events;
+    m_contactListener.bodyEntityMap = &m_bodyEntityMap;
+    m_contactListener.bodyIsSensor  = &m_bodyIsSensor;
+    m_physicsSystem->SetContactListener(&m_contactListener);
 
     m_initialized = true;
 }
@@ -167,66 +257,71 @@ void PhysicsSystem::Shutdown()
 {
     if (!m_initialized) return;
 
-    // Release all actors
+    // Remove all bodies
     for (auto& [e, state] : m_actors)
     {
-        if (state.actor)
+        if (!state.bodyId.IsInvalid())
         {
-            m_scene->removeActor(*state.actor);
-            state.actor->release();
+            BodyIface().RemoveBody(state.bodyId);
+            BodyIface().DestroyBody(state.bodyId);
         }
     }
     m_actors.clear();
+    m_bodyEntityMap.clear();
+    m_bodyIsSensor.clear();
 
-    // Release all character controllers
-    for (auto& [e, ctrl] : m_controllers)
-    {
-        if (ctrl) ctrl->release();
-    }
     m_controllers.clear();
+    m_meshShapeCache.clear();
+    m_events.clear();
+    m_pendingDisplacement.clear();
+    m_controllerGrounded.clear();
+    m_controllerVelocity.clear();
 
-    if (m_controllerManager) { m_controllerManager->release(); m_controllerManager = nullptr; }
-    if (m_defaultMat)        { m_defaultMat->release();        m_defaultMat        = nullptr; }
-    if (m_scene)             { m_scene->release();             m_scene             = nullptr; }
-    if (m_dispatcher)        { m_dispatcher->release();        m_dispatcher        = nullptr; }
-    if (m_physics)           { m_physics->release();           m_physics           = nullptr; }
-    if (m_foundation)        { m_foundation->release();        m_foundation        = nullptr; }
+    m_physicsSystem.reset();
+    m_jobSystem.reset();
+    m_tempAllocator.reset();
+
+    JPH::UnregisterTypes();
+    delete JPH::Factory::sInstance;
+    JPH::Factory::sInstance = nullptr;
 
     m_initialized = false;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Helpers
+// Entity pose helpers
 // ─────────────────────────────────────────────────────────────────────────────
-static inline PxVec3 ToPhysX(const glm::vec3& v) { return { v.x, v.y, v.z }; }
-static inline PxQuat ToPhysX(const glm::quat& q)  { return { q.x, q.y, q.z, q.w }; }
-static inline glm::vec3 ToGlm(const PxVec3& v)   { return { v.x, v.y, v.z }; }
-static inline glm::quat ToGlm(const PxQuat& q)   { return { q.w, q.x, q.y, q.z }; }
-
-PxTransform PhysicsSystem::EntityPose(Registry& registry, Entity e)
+JPH::RVec3 PhysicsSystem::EntityPosition(Registry& registry, Entity e)
 {
     glm::mat4 world = TransformSystem::GetWorldMatrix(e, registry);
 
-    // Extract translation
-    glm::vec3 pos = glm::vec3(world[3]);
-
-    // Extract rotation (strip scale)
-    glm::vec3 scl;
-    glm::quat rot;
-    glm::vec3 skew;
+    glm::vec3 pos, skew;
     glm::vec4 perspective;
+    glm::quat rot;
+    glm::vec3 scl;
     glm::decompose(world, scl, rot, pos, skew, perspective);
 
-    // Apply center offset only when a ColliderComponent exists
     if (registry.Has<ColliderComponent>(e))
-    {
-        const auto& col = registry.Get<ColliderComponent>(e);
-        pos += rot * col.center;
-    }
+        pos += rot * registry.Get<ColliderComponent>(e).center;
 
-    return PxTransform(ToPhysX(pos), ToPhysX(rot));
+    return ToJoltR(pos);
 }
 
+JPH::Quat PhysicsSystem::EntityRotation(Registry& registry, Entity e)
+{
+    glm::mat4 world = TransformSystem::GetWorldMatrix(e, registry);
+
+    glm::vec3 pos, skew, scl;
+    glm::vec4 perspective;
+    glm::quat rot;
+    glm::decompose(world, scl, rot, pos, skew, perspective);
+
+    return ToJolt(rot);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// ShapeHash — detect component changes without recreating bodies
+// ─────────────────────────────────────────────────────────────────────────────
 uint32_t PhysicsSystem::ShapeHash(Registry& registry, Entity e) const
 {
     const auto& col = registry.Get<ColliderComponent>(e);
@@ -235,13 +330,11 @@ uint32_t PhysicsSystem::ShapeHash(Registry& registry, Entity e) const
                         glm::length(glm::vec3(w[1])),
                         glm::length(glm::vec3(w[2])) };
 
-    // Simple hash combining shape enum + dims + scale + isTrigger
-    uint32_t h = static_cast<uint32_t>(col.shape) * 2654435761u;
-
     auto hashF = [](float f) -> uint32_t {
         uint32_t u; memcpy(&u, &f, sizeof(u)); return u * 2246822519u;
     };
 
+    uint32_t h = static_cast<uint32_t>(col.shape) * 2654435761u;
     h ^= hashF(col.boxHalfExtents.x); h ^= hashF(col.boxHalfExtents.y); h ^= hashF(col.boxHalfExtents.z);
     h ^= hashF(col.radius);
     h ^= hashF(col.capsuleHalfHeight);
@@ -251,8 +344,6 @@ uint32_t PhysicsSystem::ShapeHash(Registry& registry, Entity e) const
     h ^= hashF(scl.x); h ^= hashF(scl.y); h ^= hashF(scl.z);
     h ^= static_cast<uint32_t>(col.isTrigger);
 
-    // Include rigidbody presence and properties so adding/removing it
-    // forces a static -> dynamic (or dynamic -> static) actor rebuild.
     if (registry.Has<RigidbodyComponent>(e))
     {
         const auto& rb = registry.Get<RigidbodyComponent>(e);
@@ -260,11 +351,13 @@ uint32_t PhysicsSystem::ShapeHash(Registry& registry, Entity e) const
         h ^= hashF(rb.mass);
         h ^= hashF(rb.linearDrag);
         h ^= hashF(rb.angularDrag);
-        h ^= (rb.isKinematic ? 0xAAAAAAAAu : 0u);
-        h ^= (rb.useGravity  ? 0x55555555u : 0u);
+        h ^= (rb.isKinematic     ? 0xAAAAAAAAu : 0u);
+        h ^= (rb.useGravity      ? 0x55555555u : 0u);
+        h ^= (rb.freezeRotationX ? 0x11111111u : 0u);
+        h ^= (rb.freezeRotationY ? 0x22222222u : 0u);
+        h ^= (rb.freezeRotationZ ? 0x44444444u : 0u);
     }
 
-    // Layer changes require a shape rebuild (filter data must be refreshed).
     if (registry.Has<LayerComponent>(e))
     {
         const auto& lc = registry.Get<LayerComponent>(e);
@@ -275,298 +368,494 @@ uint32_t PhysicsSystem::ShapeHash(Registry& registry, Entity e) const
     return h;
 }
 
-PxShape* PhysicsSystem::CreateShape(Registry& registry, Entity e)
+// ─────────────────────────────────────────────────────────────────────────────
+// CreateShape — build a Jolt shape from ColliderComponent
+// ─────────────────────────────────────────────────────────────────────────────
+JPH::Ref<JPH::Shape> PhysicsSystem::CreateShape(Registry& registry, Entity e)
 {
     const auto& col = registry.Get<ColliderComponent>(e);
 
-    // Extract world scale
     glm::mat4 world = TransformSystem::GetWorldMatrix(e, registry);
     glm::vec3 scl   = { glm::length(glm::vec3(world[0])),
                         glm::length(glm::vec3(world[1])),
                         glm::length(glm::vec3(world[2])) };
 
-    PxMaterial* mat = m_physics->createMaterial(
-        col.staticFriction, col.dynamicFriction, col.restitution);
+    JPH::ShapeSettings::ShapeResult result;
 
-    PxShape* shape = nullptr;
+    // Use a tiny convex radius to avoid the default 5cm padding that causes sticky collisions.
+    // Must be < the smallest half-extent, so we clamp it.
+    auto boxConvexRadius = [](JPH::Vec3 half) -> float {
+        float smallest = std::min({ half.GetX(), half.GetY(), half.GetZ() });
+        return std::min(0.002f, smallest * 0.1f);
+    };
 
     switch (col.shape)
     {
     case ColliderShape::Box:
     {
-        PxVec3 half(
-            std::abs(col.boxHalfExtents.x * scl.x),
-            std::abs(col.boxHalfExtents.y * scl.y),
-            std::abs(col.boxHalfExtents.z * scl.z));
-        // clamp to a minimum to avoid degenerate geometry
-        half.x = std::max(half.x, 0.001f);
-        half.y = std::max(half.y, 0.001f);
-        half.z = std::max(half.z, 0.001f);
-        shape = m_physics->createShape(PxBoxGeometry(half), *mat, true);
+        JPH::Vec3 half(
+            std::max(std::abs(col.boxHalfExtents.x * scl.x), 0.001f),
+            std::max(std::abs(col.boxHalfExtents.y * scl.y), 0.001f),
+            std::max(std::abs(col.boxHalfExtents.z * scl.z), 0.001f));
+        JPH::BoxShapeSettings settings(half, boxConvexRadius(half));
+        result = settings.Create();
         break;
     }
     case ColliderShape::Sphere:
     {
         float maxScl = std::max({ scl.x, scl.y, scl.z });
         float r      = std::max(col.radius * maxScl, 0.001f);
-        shape = m_physics->createShape(PxSphereGeometry(r), *mat, true);
+        result = JPH::SphereShapeSettings(r).Create();
         break;
     }
     case ColliderShape::Capsule:
     {
-        // PxCapsuleGeometry is aligned along X; rotate local pose 90° around Z
         float maxXZ = std::max(scl.x, scl.z);
         float r     = std::max(col.radius           * maxXZ, 0.001f);
         float hh    = std::max(col.capsuleHalfHeight * scl.y, 0.001f);
-        shape = m_physics->createShape(PxCapsuleGeometry(r, hh), *mat, true);
-        // Rotate 90° around Z to align capsule along Y
-        PxQuat rot90(physx::PxHalfPi, PxVec3(0.0f, 0.0f, 1.0f));
-        shape->setLocalPose(PxTransform(PxVec3(0.0f), rot90));
+        // Jolt CapsuleShape is already Y-aligned — no local rotation needed
+        result = JPH::CapsuleShapeSettings(hh, r).Create();
+        break;
+    }
+    case ColliderShape::Mesh:
+    {
+        std::string meshPath;
+        if (registry.Has<MeshRendererComponent>(e))
+            meshPath = registry.Get<MeshRendererComponent>(e).meshPath;
+
+        JPH::Ref<JPH::Shape> meshShape = meshPath.empty()
+            ? nullptr : GetOrCookMeshShape(meshPath);
+
+        if (meshShape)
+        {
+            return meshShape;
+        }
+        else
+        {
+            std::cerr << "[Jolt] MeshCollider fallback to Box (no mesh on entity " << e << ")\n";
+            JPH::Vec3 half(
+                std::max(0.5f * scl.x, 0.001f),
+                std::max(0.5f * scl.y, 0.001f),
+                std::max(0.5f * scl.z, 0.001f));
+            JPH::BoxShapeSettings settings(half, boxConvexRadius(half));
+            result = settings.Create();
+        }
         break;
     }
     }
 
-    mat->release(); // shape holds its own ref
-
-    if (shape)
+    if (result.HasError())
     {
-        // Tune contact/rest offsets:
-        //   contactOffset  – distance at which contacts are generated (slightly larger
-        //                    than the shape so PhysX sees edges early enough to resolve them)
-        //   restOffset     – target separation at rest (must be < contactOffset)
-        // Keeping both small prevents ghost contacts and edge-sticking.
-        shape->setContactOffset(0.02f);
-        shape->setRestOffset   (0.005f);
-
-        if (col.isTrigger)
-        {
-            shape->setFlag(PxShapeFlag::eSIMULATION_SHAPE, false);
-            shape->setFlag(PxShapeFlag::eTRIGGER_SHAPE,    true);
-        }
-
-        // ── Layer filter data ────────────────────────────────────────────────────────
-        // word0 = bit representing this entity’s layer
-        // word1 = layer mask (which layers this entity interacts with)
-        PxFilterData fd;
-        if (registry.Has<LayerComponent>(e))
-        {
-            const auto& lc = registry.Get<LayerComponent>(e);
-            uint8_t layer = lc.layer < 32u ? lc.layer : 0u;
-            fd.word0 = 1u << layer;
-            fd.word1 = lc.layerMask;
-        }
-        else
-        {
-            fd.word0 = 1u;           // default: layer 0
-            fd.word1 = 0xFFFFFFFFu;  // interacts with everything
-        }
-        // Store entity id in simulationFilterData so the filter shader and
-        // raycast queries can retrieve it.
-        fd.word2 = static_cast<PxU32>(e);
-        shape->setSimulationFilterData(fd);
-        shape->setQueryFilterData(fd);
+        std::cerr << "[Jolt] Shape creation error: " << result.GetError() << "\n";
+        return nullptr;
     }
 
+    return result.Get();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// GetOrCookMeshShape — build (and cache) a static triangle-mesh shape
+// ─────────────────────────────────────────────────────────────────────────────
+JPH::Ref<JPH::Shape> PhysicsSystem::GetOrCookMeshShape(const std::string& meshPath)
+{
+    auto it = m_meshShapeCache.find(meshPath);
+    if (it != m_meshShapeCache.end())
+        return it->second;
+
+    if (!MeshManager::Get().Has(meshPath))
+    {
+        try { MeshManager::Get().Load(meshPath); }
+        catch (const std::exception& ex)
+        {
+            std::cerr << "[Jolt] Failed to load mesh: " << ex.what() << "\n";
+            m_meshShapeCache[meshPath] = nullptr;
+            return nullptr;
+        }
+    }
+
+    VulkanMesh& mesh = MeshManager::Get().Load(meshPath);
+    const auto& verts = mesh.GetVertices();
+    const auto& idxs  = mesh.GetIndices();
+
+    if (verts.empty() || idxs.empty() || idxs.size() % 3 != 0)
+    {
+        std::cerr << "[Jolt] MeshCollider: empty or malformed mesh: " << meshPath << "\n";
+        m_meshShapeCache[meshPath] = nullptr;
+        return nullptr;
+    }
+
+    JPH::VertexList joltVerts(verts.size());
+    for (size_t i = 0; i < verts.size(); ++i)
+        joltVerts[i] = JPH::Float3(verts[i].position.x, verts[i].position.y, verts[i].position.z);
+
+    JPH::IndexedTriangleList tris(idxs.size() / 3);
+    for (size_t i = 0; i < idxs.size() / 3; ++i)
+        tris[i] = JPH::IndexedTriangle(idxs[i*3], idxs[i*3+1], idxs[i*3+2]);
+
+    JPH::MeshShapeSettings settings(joltVerts, tris);
+    auto result = settings.Create();
+    if (result.HasError())
+    {
+        std::cerr << "[Jolt] Triangle mesh creation failed for: " << meshPath
+                  << " — " << result.GetError() << "\n";
+        m_meshShapeCache[meshPath] = nullptr;
+        return nullptr;
+    }
+
+    std::cout << "[Jolt] Triangle mesh created: " << meshPath
+              << " (" << verts.size() << " verts, " << idxs.size() / 3 << " tris)\n";
+
+    JPH::Ref<JPH::Shape> shape = result.Get();
+    m_meshShapeCache[meshPath] = shape;
     return shape;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// DestroyActor / DestroyController
+// ─────────────────────────────────────────────────────────────────────────────
 void PhysicsSystem::DestroyActor(Entity e)
 {
     auto it = m_actors.find(e);
     if (it == m_actors.end()) return;
 
-    if (it->second.actor)
+    if (!it->second.bodyId.IsInvalid())
     {
-        m_scene->removeActor(*it->second.actor);
-        it->second.actor->release();
+        uint32_t idx = it->second.bodyId.GetIndex();
+        BodyIface().RemoveBody(it->second.bodyId);
+        BodyIface().DestroyBody(it->second.bodyId);
+        m_bodyEntityMap.erase(idx);
+        m_bodyIsSensor.erase(idx);
     }
     m_actors.erase(it);
 }
 
+void PhysicsSystem::DestroyController(Entity e)
+{
+    auto it = m_controllers.find(e);
+    if (it == m_controllers.end()) return;
+    m_controllers.erase(it);
+    m_pendingDisplacement.erase(e);
+    m_controllerGrounded.erase(e);
+    m_controllerVelocity.erase(e);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
-// SyncActors — create / recreate / remove PxActors to match ECS
+// SyncActors
 // ─────────────────────────────────────────────────────────────────────────────
 void PhysicsSystem::SyncActors(Registry& registry)
 {
     if (!m_initialized) return;
 
-    // ── Remove actors for entities that lost all physics components ─────────
+    // Remove bodies whose ECS components were deleted
     std::vector<Entity> toRemove;
     for (auto& [e, state] : m_actors)
     {
         if (!registry.Has<ColliderComponent>(e) && !registry.Has<RigidbodyComponent>(e))
             toRemove.push_back(e);
     }
-    for (Entity e : toRemove)
-        DestroyActor(e);
+    for (Entity e : toRemove) DestroyActor(e);
 
-    // ── Entities with ColliderComponent (with or without RigidbodyComponent) ─
+    // Sync ColliderComponent entities
     registry.Each<ColliderComponent>([&](Entity e, ColliderComponent& col)
     {
         uint32_t newHash = ShapeHash(registry, e);
-
         auto it = m_actors.find(e);
+
         if (it != m_actors.end())
         {
-            // Check if collider shape geometry changed
             if (it->second.shapeHash == newHash)
             {
-                // Just update kinematic target or static pose if needed
+                // Update kinematic target or static pose
                 ActorState& state = it->second;
-                if (state.dynamic)
+                if (state.kinematic)
                 {
-                    auto* dyn = static_cast<PxRigidDynamic*>(state.actor);
-                    if (state.kinematic && registry.Has<TransformComponent>(e))
+                    BodyIface().SetPositionAndRotation(
+                        state.bodyId,
+                        EntityPosition(registry, e),
+                        EntityRotation(registry, e),
+                        JPH::EActivation::DontActivate);
+                }
+                else if (!state.dynamic)
+                {
+                    // Static body — teleport if editor moved it
+                    JPH::RVec3 desiredPos = EntityPosition(registry, e);
+                    JPH::Quat  desiredRot = EntityRotation(registry, e);
+                    JPH::RVec3 currentPos = BodyIface().GetPosition(state.bodyId);
+                    JPH::Quat  currentRot = BodyIface().GetRotation(state.bodyId);
+
+                    float dist2 = (ToGlm(desiredPos) - ToGlm(currentPos)).length();
+                    float dot   = std::abs(desiredRot.Dot(currentRot));
+                    if (dist2 > 1e-3f || dot < 0.9999f)
                     {
-                        PxTransform pose = EntityPose(registry, e);
-                        dyn->setKinematicTarget(pose);
+                        BodyIface().SetPositionAndRotation(
+                            state.bodyId, desiredPos, desiredRot,
+                            JPH::EActivation::DontActivate);
                     }
                 }
-                else
-                {
-                    // Static: update pose if transform drifted (e.g., editor moved it)
-                    if (registry.Has<TransformComponent>(e))
-                    {
-                        PxTransform pose = EntityPose(registry, e);
-                        state.actor->setGlobalPose(pose);
-                    }
-                }
-                return; // no shape rebuild needed
+                return;
             }
-            // Shape changed — fall through to destroy & recreate
             DestroyActor(e);
         }
 
-        // ── Create new actor ─────────────────────────────────────────────────
         if (!registry.Has<TransformComponent>(e)) return;
 
-        PxShape* shape = CreateShape(registry, e);
+        JPH::Ref<JPH::Shape> shape = CreateShape(registry, e);
         if (!shape) return;
 
-        PxTransform pose = EntityPose(registry, e);
+        JPH::RVec3 pos = EntityPosition(registry, e);
+        JPH::Quat  rot = EntityRotation(registry, e);
 
         ActorState state;
         state.shapeHash = newHash;
 
+        bool isTrigger = col.isTrigger;
+
         if (registry.Has<RigidbodyComponent>(e))
         {
             const auto& rb = registry.Get<RigidbodyComponent>(e);
-            PxRigidDynamic* dyn = m_physics->createRigidDynamic(pose);
-            dyn->attachShape(*shape);
-            PxRigidBodyExt::updateMassAndInertia(*dyn, rb.mass > 0.0f ? rb.mass : 1.0f);
-            dyn->setLinearDamping(rb.linearDrag);
-            dyn->setAngularDamping(rb.angularDrag);
-            dyn->setActorFlag(PxActorFlag::eDISABLE_GRAVITY, !rb.useGravity);
-            if (rb.isKinematic)
-                dyn->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
+            bool forceStatic = !rb.isKinematic && !rb.useGravity && rb.mass <= 0.0f;
 
-            // More solver iterations: 8 position / 4 velocity.
-            // Default (4/1) leaves too much penetration error at sharp edges,
-            // causing the "stuck on rim" freeze.  8/4 resolves it cleanly.
-            dyn->setSolverIterationCounts(8, 4);
+            JPH::EMotionType motionType = forceStatic
+                ? JPH::EMotionType::Static
+                : (rb.isKinematic ? JPH::EMotionType::Kinematic : JPH::EMotionType::Dynamic);
 
-            // Continuous Collision Detection — prevents tunnelling and
-            // reduces edge-lock artefacts at higher velocities.
-            dyn->setRigidBodyFlag(PxRigidBodyFlag::eENABLE_CCD, true);
+            JPH::ObjectLayer layer = (motionType == JPH::EMotionType::Static)
+                ? PhysicsLayers::STATIC : PhysicsLayers::DYNAMIC;
 
-            dyn->userData = reinterpret_cast<void*>(static_cast<uintptr_t>(e));
-            m_scene->addActor(*dyn);
+            JPH::BodyCreationSettings bcs(shape, pos, rot, motionType, layer);
+            bcs.mIsSensor = isTrigger;
 
-            state.actor     = dyn;
-            state.dynamic   = true;
-            state.kinematic = rb.isKinematic;
+            if (motionType == JPH::EMotionType::Dynamic)
+            {
+                float mass = rb.mass > 0.0f ? rb.mass : 1.0f;
+                bcs.mOverrideMassProperties      = JPH::EOverrideMassProperties::CalculateInertia;
+                bcs.mMassPropertiesOverride.mMass = mass;
+                bcs.mLinearDamping  = rb.linearDrag;
+                bcs.mAngularDamping = rb.angularDrag;
+                bcs.mGravityFactor  = rb.useGravity ? 1.0f : 0.0f;
+
+                JPH::EAllowedDOFs dofs = JPH::EAllowedDOFs::All;
+                if (rb.freezeRotationX) dofs &= ~JPH::EAllowedDOFs::RotationX;
+                if (rb.freezeRotationY) dofs &= ~JPH::EAllowedDOFs::RotationY;
+                if (rb.freezeRotationZ) dofs &= ~JPH::EAllowedDOFs::RotationZ;
+                bcs.mAllowedDOFs = dofs;
+            }
+
+            JPH::BodyID bodyId = BodyIface().CreateAndAddBody(
+                bcs,
+                (motionType == JPH::EMotionType::Static)
+                    ? JPH::EActivation::DontActivate
+                    : JPH::EActivation::Activate);
+
+            if (bodyId.IsInvalid()) { std::cerr << "[Jolt] Failed to create body for entity " << e << "\n"; return; }
+
+            BodyIface().SetUserData(bodyId, static_cast<uint64_t>(e));
+            m_bodyEntityMap[bodyId.GetIndex()] = e;
+            m_bodyIsSensor[bodyId.GetIndex()]  = isTrigger;
+
+            state.bodyId    = bodyId;
+            state.dynamic   = (motionType == JPH::EMotionType::Dynamic);
+            state.kinematic = (motionType == JPH::EMotionType::Kinematic);
             state.useGravity= rb.useGravity;
             state.mass      = rb.mass;
         }
         else
         {
-            PxRigidStatic* sta = m_physics->createRigidStatic(pose);
-            sta->attachShape(*shape);
-            sta->userData = reinterpret_cast<void*>(static_cast<uintptr_t>(e));
-            m_scene->addActor(*sta);
+            // No rigidbody → static collider
+            JPH::BodyCreationSettings bcs(shape, pos, rot,
+                JPH::EMotionType::Static, PhysicsLayers::STATIC);
+            bcs.mIsSensor = isTrigger;
 
-            state.actor   = sta;
+            JPH::BodyID bodyId = BodyIface().CreateAndAddBody(bcs, JPH::EActivation::DontActivate);
+            if (bodyId.IsInvalid()) { std::cerr << "[Jolt] Failed to create static body for entity " << e << "\n"; return; }
+
+            BodyIface().SetUserData(bodyId, static_cast<uint64_t>(e));
+            m_bodyEntityMap[bodyId.GetIndex()] = e;
+            m_bodyIsSensor[bodyId.GetIndex()]  = isTrigger;
+
+            state.bodyId  = bodyId;
             state.dynamic = false;
         }
 
-        shape->release();
         m_actors[e] = state;
     });
 
-    // ── Entities with RigidbodyComponent but NO ColliderComponent ─────────────
-    // These still need a PxRigidDynamic so gravity / forces / velocity work.
-    // They have no shape, so they will not collide with anything.
+    // Sync RigidbodyComponent-only entities (no collider)
     registry.Each<RigidbodyComponent>([&](Entity e, RigidbodyComponent& rb)
     {
-        if (registry.Has<ColliderComponent>(e)) return; // already handled above
+        if (registry.Has<ColliderComponent>(e)) return;
         if (!registry.Has<TransformComponent>(e)) return;
 
-        // Hash rb fields to detect changes
         auto hashF = [](float f) -> uint32_t {
             uint32_t u; memcpy(&u, &f, sizeof(u)); return u * 2246822519u;
         };
         uint32_t newHash = hashF(rb.mass) ^ hashF(rb.linearDrag) ^ hashF(rb.angularDrag)
-                         ^ (rb.isKinematic ? 0xAAAAAAAAu : 0u)
-                         ^ (rb.useGravity  ? 0x55555555u : 0u);
+                         ^ (rb.isKinematic     ? 0xAAAAAAAAu : 0u)
+                         ^ (rb.useGravity      ? 0x55555555u : 0u)
+                         ^ (rb.freezeRotationX ? 0x11111111u : 0u)
+                         ^ (rb.freezeRotationY ? 0x22222222u : 0u)
+                         ^ (rb.freezeRotationZ ? 0x44444444u : 0u);
 
         auto it = m_actors.find(e);
         if (it != m_actors.end())
         {
             if (it->second.shapeHash == newHash)
             {
-                // Already up-to-date — just push kinematic target if needed
                 if (it->second.kinematic)
                 {
-                    auto* dyn = static_cast<PxRigidDynamic*>(it->second.actor);
-                    dyn->setKinematicTarget(EntityPose(registry, e));
+                    BodyIface().SetPositionAndRotation(
+                        it->second.bodyId,
+                        EntityPosition(registry, e),
+                        EntityRotation(registry, e),
+                        JPH::EActivation::DontActivate);
                 }
                 return;
             }
-            // rb params changed — rebuild
             DestroyActor(e);
         }
 
-        PxTransform pose = EntityPose(registry, e);
-        PxRigidDynamic* dyn = m_physics->createRigidDynamic(pose);
+        JPH::RVec3 pos = EntityPosition(registry, e);
+        JPH::Quat  rot = EntityRotation(registry, e);
 
-        // Shapeless actor: visible to simulation (gravity, forces) but no collisions
         float mass = rb.mass > 0.0f ? rb.mass : 1.0f;
-        dyn->setMass(mass);
-        dyn->setMassSpaceInertiaTensor(PxVec3(mass * 0.1f)); // minimal inertia tensor
-        dyn->setLinearDamping(rb.linearDrag);
-        dyn->setAngularDamping(rb.angularDrag);
-        dyn->setActorFlag(PxActorFlag::eDISABLE_GRAVITY, !rb.useGravity);
-        if (rb.isKinematic)
-            dyn->setRigidBodyFlag(PxRigidBodyFlag::eKINEMATIC, true);
-        dyn->userData = reinterpret_cast<void*>(static_cast<uintptr_t>(e));
-        m_scene->addActor(*dyn);
+
+        JPH::EMotionType motionType = rb.isKinematic
+            ? JPH::EMotionType::Kinematic : JPH::EMotionType::Dynamic;
+
+        // Tiny sphere as placeholder shape (no visual collider)
+        auto shapeResult = JPH::SphereShapeSettings(0.01f).Create();
+        if (shapeResult.HasError()) return;
+
+        JPH::BodyCreationSettings bcs(shapeResult.Get(), pos, rot,
+            motionType, PhysicsLayers::DYNAMIC);
+        bcs.mOverrideMassProperties       = JPH::EOverrideMassProperties::CalculateInertia;
+        bcs.mMassPropertiesOverride.mMass = mass;
+        bcs.mLinearDamping  = rb.linearDrag;
+        bcs.mAngularDamping = rb.angularDrag;
+        bcs.mGravityFactor  = rb.useGravity ? 1.0f : 0.0f;
+        bcs.mIsSensor       = true; // no visible shape, disable collision response
+
+        JPH::BodyID bodyId = BodyIface().CreateAndAddBody(bcs, JPH::EActivation::Activate);
+        if (bodyId.IsInvalid()) return;
+
+        BodyIface().SetUserData(bodyId, static_cast<uint64_t>(e));
+        m_bodyEntityMap[bodyId.GetIndex()] = e;
+        m_bodyIsSensor[bodyId.GetIndex()]  = false;
 
         ActorState state;
-        state.actor      = dyn;
-        state.dynamic    = true;
-        state.kinematic  = rb.isKinematic;
-        state.useGravity = rb.useGravity;
-        state.mass       = rb.mass;
-        state.shapeHash  = newHash;
+        state.bodyId    = bodyId;
+        state.dynamic   = (motionType == JPH::EMotionType::Dynamic);
+        state.kinematic = (motionType == JPH::EMotionType::Kinematic);
+        state.useGravity= rb.useGravity;
+        state.mass      = rb.mass;
+        state.shapeHash = newHash;
         m_actors[e] = state;
     });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Step — advance simulation
+// SyncControllers
 // ─────────────────────────────────────────────────────────────────────────────
-void PhysicsSystem::Step(float dt)
+void PhysicsSystem::SyncControllers(Registry& registry)
 {
-    if (!m_initialized || !m_scene) return;
-    if (dt <= 0.0f) return;
+    if (!m_initialized) return;
 
-    m_events.clear();
-    m_scene->simulate(dt);
-    m_scene->fetchResults(true);
+    std::vector<Entity> toRemove;
+    for (auto& [e, ch] : m_controllers)
+        if (!registry.Has<CharacterControllerComponent>(e))
+            toRemove.push_back(e);
+    for (Entity e : toRemove) DestroyController(e);
+
+    registry.Each<CharacterControllerComponent>([&](Entity e, CharacterControllerComponent& cc)
+    {
+        if (!registry.Has<TransformComponent>(e)) return;
+
+        if (m_controllers.count(e))
+        {
+            // Update position if teleported far away
+            glm::mat4 world    = TransformSystem::GetWorldMatrix(e, registry);
+            glm::vec3 desired  = glm::vec3(world[3]) + cc.center;
+            glm::vec3 current  = ToGlm(m_controllers[e]->GetPosition());
+            if (glm::length(desired - current) > 1.0f)
+                m_controllers[e]->SetPosition(ToJoltR(desired));
+            return;
+        }
+
+        glm::mat4 world    = TransformSystem::GetWorldMatrix(e, registry);
+        glm::vec3 worldPos = glm::vec3(world[3]) + cc.center;
+
+        float halfHeight = std::max((cc.height * 0.5f) - cc.radius, 0.01f);
+        float radius     = std::max(cc.radius, 0.01f);
+
+        auto capsuleResult = JPH::CapsuleShapeSettings(halfHeight, radius).Create();
+        if (capsuleResult.HasError())
+        {
+            std::cerr << "[Jolt] CharacterVirtual capsule error: " << capsuleResult.GetError() << "\n";
+            return;
+        }
+
+        JPH::CharacterVirtualSettings settings;
+        settings.mMaxSlopeAngle           = JPH::DegreesToRadians(cc.slopeLimit);
+        settings.mShape                   = capsuleResult.Get();
+        settings.mCharacterPadding        = std::max(cc.skinWidth, 0.001f);
+        settings.mUp                      = JPH::Vec3::sAxisY();
+        settings.mSupportingVolume        = JPH::Plane(JPH::Vec3::sAxisY(), -radius);
+        settings.mPenetrationRecoverySpeed = 1.0f;
+        settings.mPredictiveContactDistance = 0.1f;
+
+        JPH::Ref<JPH::CharacterVirtual> character = new JPH::CharacterVirtual(
+            &settings, ToJoltR(worldPos), JPH::Quat::sIdentity(), 0, m_physicsSystem.get());
+
+        m_controllers[e] = character;
+    });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// WriteBack — copy dynamic actor poses back into TransformComponent
+// Step
+// ─────────────────────────────────────────────────────────────────────────────
+void PhysicsSystem::Step(float dt)
+{
+    if (!m_initialized || dt <= 0.0f) return;
+
+    m_events.clear();
+
+    // Advance Jolt physics
+    m_physicsSystem->Update(dt, 1, m_tempAllocator.get(), m_jobSystem.get());
+
+    // Update character virtuals
+    AllBroadPhaseLayerFilter bpFilter;
+    AllObjectLayerFilter     objFilter;
+    JPH::BodyFilter          bodyFilter;
+    JPH::ShapeFilter         shapeFilter;
+
+    for (auto& [e, character] : m_controllers)
+    {
+        if (!character) continue;
+
+        glm::vec3 disp(0.0f);
+        auto dispIt = m_pendingDisplacement.find(e);
+        if (dispIt != m_pendingDisplacement.end())
+        {
+            disp = dispIt->second;
+            m_pendingDisplacement.erase(dispIt);
+        }
+
+        // Convert displacement → velocity and set it (gravity handled by script)
+        glm::vec3 vel = (dt > 1e-6f) ? (disp / dt) : glm::vec3(0.0f);
+        character->SetLinearVelocity(ToJolt(vel));
+
+        // Update with zero internal gravity (Lua scripts integrate gravity themselves)
+        character->Update(dt, JPH::Vec3::sZero(), bpFilter, objFilter,
+                          bodyFilter, shapeFilter, *m_tempAllocator);
+
+        bool grounded = (character->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround);
+        m_controllerGrounded[e] = grounded;
+        m_controllerVelocity[e] = disp;
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// WriteBack
 // ─────────────────────────────────────────────────────────────────────────────
 void PhysicsSystem::WriteBack(Registry& registry)
 {
@@ -577,174 +866,70 @@ void PhysicsSystem::WriteBack(Registry& registry)
         if (!state.dynamic || state.kinematic) continue;
         if (!registry.Has<TransformComponent>(e)) continue;
 
-        auto* dyn = static_cast<PxRigidDynamic*>(state.actor);
-        PxTransform t = dyn->getGlobalPose();
+        JPH::RVec3 jPos = BodyIface().GetPosition(state.bodyId);
+        JPH::Quat  jRot = BodyIface().GetRotation(state.bodyId);
 
-        glm::vec3 pos(t.p.x, t.p.y, t.p.z);
-        glm::quat rot(t.q.w, t.q.x, t.q.y, t.q.z);
+        glm::vec3 pos = ToGlm(jPos);
+        glm::quat rot = ToGlm(jRot);
 
-        // Subtract center offset
         if (registry.Has<ColliderComponent>(e))
-        {
-            const auto& col = registry.Get<ColliderComponent>(e);
-            pos -= rot * col.center;
-        }
+            pos -= rot * registry.Get<ColliderComponent>(e).center;
 
         auto& tr = registry.Get<TransformComponent>(e);
-
-        // Write world position (assumes root-level transforms for physics objects)
         tr.position = pos;
 
-        // Convert quaternion → euler degrees (XYZ / Pitch-Yaw-Roll)
-        glm::vec3 euler = glm::degrees(glm::eulerAngles(rot));
-        tr.rotation = euler;
+        bool allFrozen = false;
+        if (registry.Has<RigidbodyComponent>(e))
+        {
+            const auto& rb2 = registry.Get<RigidbodyComponent>(e);
+            allFrozen = rb2.freezeRotationX && rb2.freezeRotationY && rb2.freezeRotationZ;
+        }
+        if (!allFrozen)
+        {
+            // Store quaternion directly — avoids gimbal lock at ±90° pitch that
+            // occurs when converting to YXZ Euler angles. GetMatrix() will use
+            // physicsQuat instead of Euler angles when usePhysicsQuat is true.
+            tr.usePhysicsQuat = true;
+            tr.physicsQuat    = rot;
 
-        // Write back velocity to RigidbodyComponent
+            // Also update Euler angles so the inspector shows a reasonable value.
+            glm::mat4 rotMat = glm::mat4_cast(rot);
+            float yRad, xRad, zRad;
+            glm::extractEulerAngleYXZ(rotMat, yRad, xRad, zRad);
+            tr.rotation = glm::degrees(glm::vec3(xRad, yRad, zRad));
+        }
+
         if (registry.Has<RigidbodyComponent>(e))
         {
             auto& rb = registry.Get<RigidbodyComponent>(e);
-            PxVec3 lv = dyn->getLinearVelocity();
-            PxVec3 av = dyn->getAngularVelocity();
-            rb.linearVelocity  = { lv.x, lv.y, lv.z };
-            rb.angularVelocity = { av.x, av.y, av.z };
+            JPH::Vec3 lv = BodyIface().GetLinearVelocity(state.bodyId);
+            JPH::Vec3 av = BodyIface().GetAngularVelocity(state.bodyId);
+            rb.linearVelocity  = ToGlm(lv);
+            rb.angularVelocity = ToGlm(av);
         }
     }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// RemoveEntity / MarkDirty
-// ─────────────────────────────────────────────────────────────────────────────
-void PhysicsSystem::RemoveEntity(Entity e)
-{
-    DestroyActor(e);
-    DestroyController(e);
-}
-
-void PhysicsSystem::MarkDirty(Entity e)
-{
-    auto it = m_actors.find(e);
-    if (it != m_actors.end())
-        it->second.shapeHash = 0; // force recreation on next SyncActors
-
-    // Force controller recreation
-    DestroyController(e);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// DestroyController
-// ─────────────────────────────────────────────────────────────────────────────
-void PhysicsSystem::DestroyController(Entity e)
-{
-    auto it = m_controllers.find(e);
-    if (it == m_controllers.end()) return;
-    if (it->second) it->second->release();
-    m_controllers.erase(it);
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// SyncControllers — create / destroy PxControllers to match ECS state
-// ─────────────────────────────────────────────────────────────────────────────
-void PhysicsSystem::SyncControllers(Registry& registry)
-{
-    if (!m_initialized || !m_controllerManager) return;
-
-    // Remove controllers whose entity no longer has the component
-    std::vector<Entity> toRemove;
-    for (auto& [e, ctrl] : m_controllers)
-    {
-        if (!registry.Has<CharacterControllerComponent>(e))
-            toRemove.push_back(e);
-    }
-    for (Entity e : toRemove)
-        DestroyController(e);
-
-    // Create controllers for entities that need them
-    registry.Each<CharacterControllerComponent>([&](Entity e, CharacterControllerComponent& cc)
-    {
-        if (m_controllers.count(e)) return; // already exists
-        if (!registry.Has<TransformComponent>(e)) return;
-
-        const auto& tr = registry.Get<TransformComponent>(e);
-        glm::mat4 world = TransformSystem::GetWorldMatrix(e, registry);
-        glm::vec3 worldPos = glm::vec3(world[3]) + cc.center;
-
-        float halfHeight = std::max((cc.height * 0.5f) - cc.radius, 0.01f);
-
-        PxCapsuleControllerDesc desc;
-        desc.material      = m_defaultMat;
-        desc.radius        = std::max(cc.radius,  0.01f);
-        desc.height        = halfHeight * 2.0f; // PxCapsuleControllerDesc::height is the cylindrical section height
-        desc.stepOffset    = std::max(cc.stepOffset, 0.0f);
-        desc.slopeLimit    = std::cos(glm::radians(cc.slopeLimit));
-        desc.contactOffset = std::max(cc.skinWidth, 0.001f);
-        desc.upDirection   = PxVec3(0.0f, 1.0f, 0.0f);
-        desc.position      = PxExtendedVec3(worldPos.x, worldPos.y, worldPos.z);
-        desc.userData      = reinterpret_cast<void*>(static_cast<uintptr_t>(e));
-
-        if (!desc.isValid())
-        {
-            // Fallback: clamp to safe values
-            desc.radius = 0.3f;
-            desc.height = 1.0f;
-        }
-
-        PxController* ctrl = m_controllerManager->createController(desc);
-        if (ctrl)
-            m_controllers[e] = ctrl;
-    });
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// MoveController — sweep-move a capsule controller by a world displacement
-// ─────────────────────────────────────────────────────────────────────────────
-void PhysicsSystem::MoveController(Entity e, const glm::vec3& displacement, float dt)
-{
-    if (!m_initialized) return;
-
-    auto it = m_controllers.find(e);
-    if (it == m_controllers.end()) return;
-    if (!it->second) return;
-
-    PxVec3 disp(displacement.x, displacement.y, displacement.z);
-
-    PxControllerFilters filters;
-    PxControllerCollisionFlags flags = it->second->move(disp, 0.001f, dt, filters);
-
-    if (!m_initialized) return;
-    if (!m_controllers.count(e)) return;
-
-    // Store grounded state and displacement in per-frame caches.
-    // WriteBackControllers() reads these and applies them to the component.
-    bool grounded = static_cast<bool>(flags & PxControllerCollisionFlag::eCOLLISION_DOWN);
-    m_controllerGrounded[e] = grounded;
-    m_controllerVelocity[e] = displacement;
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// WriteBackControllers — sync PxController positions → TransformComponent
+// WriteBackControllers
 // ─────────────────────────────────────────────────────────────────────────────
 void PhysicsSystem::WriteBackControllers(Registry& registry)
 {
     if (!m_initialized) return;
 
-    for (auto& [e, ctrl] : m_controllers)
+    for (auto& [e, character] : m_controllers)
     {
-        if (!ctrl) continue;
+        if (!character) continue;
         if (!registry.Has<TransformComponent>(e)) continue;
         if (!registry.Has<CharacterControllerComponent>(e)) continue;
 
-        PxExtendedVec3 p = ctrl->getPosition();
+        glm::vec3 p = ToGlm(character->GetPosition());
 
         auto& tr = registry.Get<TransformComponent>(e);
         auto& cc = registry.Get<CharacterControllerComponent>(e);
 
-        // Subtract center offset to get pivot position
-        tr.position = glm::vec3(
-            static_cast<float>(p.x) - cc.center.x,
-            static_cast<float>(p.y) - cc.center.y,
-            static_cast<float>(p.z) - cc.center.z);
+        tr.position = p - cc.center;
 
-        // Propagate grounded + velocity from cache
         if (m_controllerGrounded.count(e))
         {
             cc.isGrounded = m_controllerGrounded[e];
@@ -759,15 +944,12 @@ void PhysicsSystem::WriteBackControllers(Registry& registry)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// DispatchEvents — fire CollisionCallbackComponent callbacks, then clear queue
-// Call this after WriteBack every frame.
+// DispatchEvents
 // ─────────────────────────────────────────────────────────────────────────────
 void PhysicsSystem::DispatchEvents(Registry& registry)
 {
     for (const RawEvent& raw : m_events)
     {
-        // Fire callbacks for both participants.
-        // `self` receives the event with normal pointing AWAY from `other`.
         auto fire = [&](Entity self, Entity other, const glm::vec3& normal)
         {
             if (self == NULL_ENTITY) return;
@@ -802,7 +984,35 @@ void PhysicsSystem::DispatchEvents(Registry& registry)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Raycast — cast a ray through the PhysX scene
+// MoveController
+// ─────────────────────────────────────────────────────────────────────────────
+void PhysicsSystem::MoveController(Entity e, const glm::vec3& displacement, float /*dt*/)
+{
+    if (!m_initialized) return;
+    if (!m_controllers.count(e)) return;
+    m_pendingDisplacement[e] = displacement;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// RemoveEntity / MarkDirty
+// ─────────────────────────────────────────────────────────────────────────────
+void PhysicsSystem::RemoveEntity(Entity e)
+{
+    DestroyActor(e);
+    DestroyController(e);
+}
+
+void PhysicsSystem::MarkDirty(Entity e)
+{
+    auto it = m_actors.find(e);
+    if (it != m_actors.end())
+        it->second.shapeHash = 0;
+
+    DestroyController(e);
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Raycast
 // ─────────────────────────────────────────────────────────────────────────────
 RaycastHit PhysicsSystem::Raycast(const glm::vec3& origin,
                                   const glm::vec3& direction,
@@ -810,71 +1020,83 @@ RaycastHit PhysicsSystem::Raycast(const glm::vec3& origin,
                                   uint32_t         layerMask) const
 {
     RaycastHit result;
-    if (!m_initialized || !m_scene) return result;
+    if (!m_initialized) return result;
 
-    // Normalise the direction
     float len = glm::length(direction);
     if (len < 1e-6f) return result;
     glm::vec3 dir = direction / len;
 
-    PxVec3 origin3(origin.x, origin.y, origin.z);
-    PxVec3 dir3(dir.x, dir.y, dir.z);
+    JPH::RRayCast ray;
+    ray.mOrigin    = ToJoltR(origin);
+    ray.mDirection = ToJolt(dir) * maxDistance;
 
-    // Build a query filter data that carries the caller\u2019s layer mask in word1.
-    // The query filter callback will accept a shape when its layer bit (word0)
-    // is set in the caller\u2019s mask (word1).
-    PxQueryFilterData filterData;
-    filterData.data.word1 = layerMask;
-    filterData.flags      = PxQueryFlag::eSTATIC
-                          | PxQueryFlag::eDYNAMIC
-                          | PxQueryFlag::ePREFILTER;
+    // Accept all layers — per-entity layerMask is checked after the hit
+    AllBroadPhaseLayerFilter bpFilter;
+    AllObjectLayerFilter     objFilter;
 
-    // Use an inline pre-filter to apply the layer mask without a separate callback object.
-    struct LayerFilter : public PxQueryFilterCallback
+    JPH::RayCastResult hitResult;
+    bool found = m_physicsSystem->GetNarrowPhaseQuery().CastRay(
+        ray, hitResult, bpFilter, objFilter);
+
+    if (!found) return result;
+
+    result.hit      = true;
+    result.distance = hitResult.mFraction * maxDistance;
+    JPH::RVec3 hitPos = ray.mOrigin + hitResult.mFraction * ray.mDirection;
+    result.position = ToGlm(hitPos);
+
+    // Look up entity and surface normal
     {
-        uint32_t callerMask;
-        explicit LayerFilter(uint32_t mask) : callerMask(mask) {}
-
-        PxQueryHitType::Enum preFilter(
-            const PxFilterData& fd,
-            const PxShape*,
-            const PxRigidActor*,
-            PxHitFlags&) override
+        JPH::BodyLockRead lock(m_physicsSystem->GetBodyLockInterface(), hitResult.mBodyID);
+        if (lock.Succeeded())
         {
-            // Accept only if this shape\u2019s layer bit is in the caller\u2019s mask,
-            // and also if the shape\u2019s own mask includes at least one source layer.
-            if (fd.word0 & callerMask)
-                return PxQueryHitType::eBLOCK;
-            return PxQueryHitType::eNONE;
+            const JPH::Body& body = lock.GetBody();
+            result.entity = static_cast<Entity>(body.GetUserData());
+
+            // Layer mask filter
+            uint32_t bodyLayer = 1u << body.GetObjectLayer();
+            if (!(bodyLayer & layerMask))
+            {
+                result.hit = false;
+                return result;
+            }
+
+            JPH::Vec3 normal = body.GetWorldSpaceSurfaceNormal(
+                hitResult.mSubShapeID2, JPH::Vec3(hitPos));
+            result.normal = ToGlm(normal);
         }
-
-        PxQueryHitType::Enum postFilter(
-            const PxFilterData&,
-            const PxQueryHit&,
-            const PxShape*,
-            const PxRigidActor*) override
-        {
-            return PxQueryHitType::eBLOCK;
-        }
-    } filter(layerMask);
-
-    PxRaycastBuffer hit;
-    bool found = m_scene->raycast(origin3, dir3, maxDistance, hit,
-                                  PxHitFlag::eDEFAULT, filterData, &filter);
-
-    if (found && hit.hasBlock)
-    {
-        const PxRaycastHit& block = hit.block;
-        result.hit      = true;
-        result.distance = block.distance;
-        result.position = { block.position.x, block.position.y, block.position.z };
-        result.normal   = { block.normal.x,   block.normal.y,   block.normal.z   };
-
-        // Recover entity from actor userData (set in SyncActors)
-        if (block.actor && block.actor->userData)
-            result.entity = static_cast<Entity>(
-                reinterpret_cast<uintptr_t>(block.actor->userData));
     }
 
     return result;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// SetVelocity / AddForce / AddImpulse / GetVelocity
+// ─────────────────────────────────────────────────────────────────────────────
+void PhysicsSystem::SetVelocity(Entity e, const glm::vec3& velocity)
+{
+    auto it = m_actors.find(e);
+    if (it == m_actors.end() || !it->second.dynamic || it->second.kinematic) return;
+    BodyIface().SetLinearVelocity(it->second.bodyId, ToJolt(velocity));
+}
+
+void PhysicsSystem::AddForce(Entity e, const glm::vec3& force)
+{
+    auto it = m_actors.find(e);
+    if (it == m_actors.end() || !it->second.dynamic || it->second.kinematic) return;
+    BodyIface().AddForce(it->second.bodyId, ToJolt(force));
+}
+
+void PhysicsSystem::AddImpulse(Entity e, const glm::vec3& impulse)
+{
+    auto it = m_actors.find(e);
+    if (it == m_actors.end() || !it->second.dynamic || it->second.kinematic) return;
+    BodyIface().AddImpulse(it->second.bodyId, ToJolt(impulse));
+}
+
+glm::vec3 PhysicsSystem::GetVelocity(Entity e) const
+{
+    auto it = m_actors.find(e);
+    if (it == m_actors.end() || !it->second.dynamic) return {};
+    return ToGlm(BodyIface().GetLinearVelocity(it->second.bodyId));
 }

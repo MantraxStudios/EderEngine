@@ -68,6 +68,10 @@ public:
     /// For static meshes the mesh is normalised to [-0.5, +0.5] per axis.
     glm::vec3 GetBoundsMin() const { return m_boundsMin; }
     glm::vec3 GetBoundsMax() const { return m_boundsMax; }
+
+    // Raw geometry access — used by PhysicsSystem to cook triangle mesh colliders.
+    const std::vector<Vertex>&    GetVertices() const { return vertices; }
+    const std::vector<uint32_t>&  GetIndices()  const { return indices;  }
     uint32_t    GetBoneCount      () const { return static_cast<uint32_t>(boneInfos.size()); }
     uint32_t    GetAnimationCount () const { return static_cast<uint32_t>(animations.size()); }
     std::string GetAnimationName  (uint32_t idx) const

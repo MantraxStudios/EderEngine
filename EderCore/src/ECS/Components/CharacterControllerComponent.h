@@ -4,8 +4,8 @@
 // ─────────────────────────────────────────────────────────────────────────────
 // CharacterControllerComponent
 //
-//  Capsule-based kinematic character controller built on top of PhysX
-//  PxCapsuleController.  Uses sweep-based collision so it can walk, step
+//  Capsule-based kinematic character controller built on top of Jolt Physics
+//  CharacterVirtual.  Uses sweep-based collision so it can walk, step
 //  over small obstacles and slide along slopes without needing a rigidbody.
 //
 //  NOTE: A CharacterControllerComponent is mutually exclusive with
@@ -20,7 +20,7 @@ struct CharacterControllerComponent
     // ── Behaviour ─────────────────────────────────────────────────────────────
     float     stepOffset  = 0.30f;  // max step height the controller can climb
     float     slopeLimit  = 45.0f;  // max walkable slope angle (degrees)
-    float     skinWidth   = 0.08f;  // contact offset / skin widths
+    float     skinWidth   = 0.05f;  // contact offset / skin width — 5cm matches Unity default, prevents edge-catching
 
     // ── Local offset ──────────────────────────────────────────────────────────
     glm::vec3 center      = {0.0f, 0.0f, 0.0f}; // local pivot offset

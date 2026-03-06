@@ -13,7 +13,9 @@
       "Bash(glslc shaders/occlusion.frag -o shaders/occlusion.frag.spv)",
       "Bash(glslc shaders/skybox.frag -o shaders/skybox.frag.spv)",
       "Bash(glslc shaders/skybox.vert -o shaders/skybox.vert.spv)",
-      "Bash(ninja)"
+      "Bash(ninja)",
+      "Bash(python3:*)",
+      "WebFetch(domain:nvidia-omniverse.github.io)"
     ]
   }
 }

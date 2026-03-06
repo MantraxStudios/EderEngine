@@ -1,29 +1,58 @@
 #pragma once
-#include <physx/PxPhysicsAPI.h>
-#include <physx/characterkinematic/PxCapsuleController.h>
+
+// ── Jolt Physics ──────────────────────────────────────────────────────────────
+#include <Jolt/Jolt.h>
+#include <Jolt/Core/TempAllocator.h>
+#include <Jolt/Core/JobSystemThreadPool.h>
+#include <Jolt/Physics/PhysicsSystem.h>
+#include <Jolt/Physics/Body/BodyInterface.h>
+#include <Jolt/Physics/Body/BodyCreationSettings.h>
+#include <Jolt/Physics/Collision/ContactListener.h>
+#include <Jolt/Physics/Collision/Shape/Shape.h>
+#include <Jolt/Physics/Character/CharacterVirtual.h>
+
 #include <glm/glm.hpp>
 #include <unordered_map>
 #include <vector>
+#include <memory>
 #include <cstdint>
+#include <string>
+
 #include "ECS/Registry.h"
 #include "ECS/Entity.h"
 #include "ECS/Components/CollisionCallbackComponent.h"
 #include "ECS/Components/CharacterControllerComponent.h"
+
+// ── Object layers ─────────────────────────────────────────────────────────────
+namespace PhysicsLayers
+{
+    static constexpr JPH::ObjectLayer STATIC    = 0;
+    static constexpr JPH::ObjectLayer DYNAMIC   = 1;
+    static constexpr JPH::ObjectLayer NUM_LAYERS = 2;
+}
+
+// ── Broad-phase layers ────────────────────────────────────────────────────────
+namespace BroadPhaseLayers
+{
+    static constexpr JPH::BroadPhaseLayer NON_MOVING { 0 };
+    static constexpr JPH::BroadPhaseLayer MOVING     { 1 };
+    static constexpr uint32_t             NUM_LAYERS  = 2;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // RaycastHit — result returned by PhysicsSystem::Raycast
 // ─────────────────────────────────────────────────────────────────────────────
 struct RaycastHit
 {
-    bool      hit      = false;           // true if any actor was struck
-    Entity    entity   = NULL_ENTITY;     // entity that was struck
-    float     distance = 0.0f;           // distance along the ray
-    glm::vec3 position = {};             // world-space hit position
-    glm::vec3 normal   = {};             // world-space surface normal at hit
+    bool      hit      = false;
+    Entity    entity   = NULL_ENTITY;
+    float     distance = 0.0f;
+    glm::vec3 position = {};
+    glm::vec3 normal   = {};
 };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// PhysicsSystem
+// PhysicsSystem — Jolt Physics backend
 // ─────────────────────────────────────────────────────────────────────────────
 class PhysicsSystem
 {
@@ -34,10 +63,10 @@ public:
     void Shutdown();
 
     // Called every game frame:
-    //   SyncActors        — creates / recreates / destroys PxActors to match ECS
-    //   SyncControllers   — creates / destroys PxControllers to match ECS
+    //   SyncActors        — creates / recreates / destroys bodies to match ECS
+    //   SyncControllers   — creates / destroys character virtuals to match ECS
     //   Step              — advances simulation by dt seconds
-    //   WriteBack         — copies dynamic actor poses → TransformComponent
+    //   WriteBack         — copies dynamic body poses → TransformComponent
     //   WriteBackControllers — copies controller positions → TransformComponent
     //   DispatchEvents    — fires CollisionCallbackComponent callbacks
     void SyncActors          (Registry& registry);
@@ -51,90 +80,134 @@ public:
     // Updates isGrounded and velocity fields on the component.
     void MoveController(Entity e, const glm::vec3& displacement, float dt);
 
-    // Call when an entity is destroyed so its actor / controller gets cleaned up
+    // Call when an entity is destroyed so its body / controller gets cleaned up
     void RemoveEntity(Entity e);
     // Call when an entity's ColliderComponent or RigidbodyComponent is removed
     void MarkDirty   (Entity e);
 
     // ── Raycasting ───────────────────────────────────────────────────────────
-    // Cast a ray from `origin` in `direction` (need not be normalised) up to
-    // `maxDistance` metres. Only hits actors whose LayerComponent.layer bit is
-    // set in `layerMask` (default 0xFFFFFFFF = all layers).
-    // Returns the *closest* hit found, or an empty RaycastHit if nothing was struck.
     RaycastHit Raycast(const glm::vec3& origin,
                        const glm::vec3& direction,
                        float            maxDistance,
                        uint32_t         layerMask = 0xFFFFFFFFu) const;
 
+    void      SetVelocity(Entity e, const glm::vec3& velocity);
+    void      AddForce   (Entity e, const glm::vec3& force);
+    void      AddImpulse (Entity e, const glm::vec3& impulse);
+    glm::vec3 GetVelocity(Entity e) const;
+
 private:
     PhysicsSystem()  = default;
     ~PhysicsSystem() = default;
 
-    // ── Internal raw event (pre-dispatch) ────────────────────────────────────
+    // ── Internal raw event ────────────────────────────────────────────────────
     struct RawEvent
     {
         CollisionEventType type    = CollisionEventType::Enter;
         Entity             entityA = NULL_ENTITY;
         Entity             entityB = NULL_ENTITY;
         glm::vec3          point   = {};
-        glm::vec3          normal  = {}; // points from B toward A
+        glm::vec3          normal  = {};
         bool               trigger = false;
     };
 
-    // ── Per-actor state hash used to detect component changes ────────────────
+    // ── Per-body state ────────────────────────────────────────────────────────
     struct ActorState
     {
-        physx::PxRigidActor* actor   = nullptr;
-        bool                 dynamic = false;
-
-        uint32_t shapeHash   = 0;
-        float    mass        = 0.0f;
-        bool     kinematic   = false;
-        bool     useGravity  = true;
+        JPH::BodyID bodyId;
+        bool        dynamic   = false;
+        bool        kinematic = false;
+        bool        useGravity = true;
+        float       mass      = 1.0f;
+        uint32_t    shapeHash = 0;
     };
 
-    // ── Simulation event callback ────────────────────────────────────────────
-    struct ContactCallback : public physx::PxSimulationEventCallback
+    // ── Contact listener ──────────────────────────────────────────────────────
+    class ContactListenerImpl final : public JPH::ContactListener
     {
-        std::vector<RawEvent>* events = nullptr;
+    public:
+        std::vector<RawEvent>*                 events        = nullptr;
+        std::unordered_map<uint32_t, Entity>*  bodyEntityMap = nullptr;
+        std::unordered_map<uint32_t, bool>*    bodyIsSensor  = nullptr;
 
-        void onContact(const physx::PxContactPairHeader& header,
-                       const physx::PxContactPair*       pairs,
-                       physx::PxU32                      nbPairs) override;
+        JPH::ValidateResult OnContactValidate(
+            const JPH::Body&, const JPH::Body&,
+            JPH::RVec3Arg, const JPH::CollideShapeResult&) override
+        {
+            return JPH::ValidateResult::AcceptAllContactsForThisBodyPair;
+        }
 
-        void onTrigger(physx::PxTriggerPair* pairs,
-                       physx::PxU32          nbPairs) override;
+        void OnContactAdded(const JPH::Body& body1, const JPH::Body& body2,
+            const JPH::ContactManifold& manifold, JPH::ContactSettings&) override;
 
-        void onConstraintBreak(physx::PxConstraintInfo*, physx::PxU32) override {}
-        void onWake  (physx::PxActor**, physx::PxU32) override {}
-        void onSleep (physx::PxActor**, physx::PxU32) override {}
-        void onAdvance(const physx::PxRigidBody* const*, const physx::PxTransform*, physx::PxU32) override {}
+        void OnContactPersisted(const JPH::Body& body1, const JPH::Body& body2,
+            const JPH::ContactManifold& manifold, JPH::ContactSettings&) override;
+
+        void OnContactRemoved(const JPH::SubShapeIDPair& subShapePair) override;
+
+    private:
+        void PushEvent(CollisionEventType type,
+                       const JPH::Body& body1, const JPH::Body& body2,
+                       const JPH::ContactManifold& manifold);
     };
 
-    // ── Helpers ──────────────────────────────────────────────────────────────
-    physx::PxShape*    CreateShape       (Registry& registry, Entity e);
-    physx::PxTransform EntityPose        (Registry& registry, Entity e);
-    uint32_t           ShapeHash         (Registry& registry, Entity e) const;
-    void               DestroyActor      (Entity e);
-    void               DestroyController (Entity e);
+    // ── Broad-phase layer interface ───────────────────────────────────────────
+    struct BPLayerInterfaceImpl final : public JPH::BroadPhaseLayerInterface
+    {
+        uint32_t             GetNumBroadPhaseLayers()                          const override;
+        JPH::BroadPhaseLayer GetBroadPhaseLayer    (JPH::ObjectLayer layer)    const override;
+#if defined(JPH_EXTERNAL_PROFILE) || defined(JPH_PROFILE_ENABLED)
+        const char*          GetBroadPhaseLayerName(JPH::BroadPhaseLayer layer) const override;
+#endif
+    };
 
-    // ── PhysX objects ────────────────────────────────────────────────────────
-    physx::PxDefaultAllocator      m_allocator;
-    physx::PxDefaultErrorCallback  m_errorCallback;
-    physx::PxFoundation*           m_foundation         = nullptr;
-    physx::PxPhysics*              m_physics            = nullptr;
-    physx::PxDefaultCpuDispatcher* m_dispatcher         = nullptr;
-    physx::PxScene*                m_scene              = nullptr;
-    physx::PxMaterial*             m_defaultMat         = nullptr;
-    physx::PxControllerManager*    m_controllerManager  = nullptr;
+    struct ObjVsBPLayerFilterImpl final : public JPH::ObjectVsBroadPhaseLayerFilter
+    {
+        bool ShouldCollide(JPH::ObjectLayer layer, JPH::BroadPhaseLayer bpLayer) const override;
+    };
 
-    ContactCallback              m_contactCallback;
-    std::vector<RawEvent>        m_events;
+    struct ObjLayerPairFilterImpl final : public JPH::ObjectLayerPairFilter
+    {
+        bool ShouldCollide(JPH::ObjectLayer layer1, JPH::ObjectLayer layer2) const override;
+    };
 
-    std::unordered_map<Entity, ActorState>           m_actors;
-    std::unordered_map<Entity, physx::PxController*> m_controllers;
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    JPH::Ref<JPH::Shape> CreateShape         (Registry& registry, Entity e);
+    JPH::RVec3           EntityPosition      (Registry& registry, Entity e);
+    JPH::Quat            EntityRotation      (Registry& registry, Entity e);
+    uint32_t             ShapeHash           (Registry& registry, Entity e) const;
+    void                 DestroyActor        (Entity e);
+    void                 DestroyController   (Entity e);
+    JPH::Ref<JPH::Shape> GetOrCookMeshShape  (const std::string& meshPath);
 
-    // Per-frame write-back caches for MoveController → WriteBackControllers
+    JPH::BodyInterface& BodyIface() const
+    {
+        return m_physicsSystem->GetBodyInterface();
+    }
+
+    // ── Jolt objects ──────────────────────────────────────────────────────────
+    std::unique_ptr<JPH::TempAllocatorImpl>   m_tempAllocator;
+    std::unique_ptr<JPH::JobSystemThreadPool> m_jobSystem;
+    std::unique_ptr<JPH::PhysicsSystem>       m_physicsSystem;
+
+    BPLayerInterfaceImpl   m_bpLayerInterface;
+    ObjVsBPLayerFilterImpl m_objVsBpFilter;
+    ObjLayerPairFilterImpl m_objPairFilter;
+    ContactListenerImpl    m_contactListener;
+
+    std::vector<RawEvent>                                      m_events;
+    std::unordered_map<Entity, ActorState>                     m_actors;
+    std::unordered_map<Entity, JPH::Ref<JPH::CharacterVirtual>> m_controllers;
+    std::unordered_map<std::string, JPH::Ref<JPH::Shape>>      m_meshShapeCache;
+
+    // body index → entity / isSensor (for contact removal lookup)
+    std::unordered_map<uint32_t, Entity> m_bodyEntityMap;
+    std::unordered_map<uint32_t, bool>   m_bodyIsSensor;
+
+    // pending controller movement (set by MoveController, consumed in Step)
+    std::unordered_map<Entity, glm::vec3> m_pendingDisplacement;
+
+    // per-frame write-back caches for controllers → WriteBackControllers
     std::unordered_map<Entity, bool>      m_controllerGrounded;
     std::unordered_map<Entity, glm::vec3> m_controllerVelocity;
 

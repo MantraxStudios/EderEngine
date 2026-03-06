@@ -4,33 +4,47 @@ name=__playsnapshot__
 [entity]
 id=1
 tag.name=Entity
-transform.pos=0.000000 0.000000 0.000000
-transform.rot=0.000000 0.000000 0.000000
+transform.pos=0.945419 3.791618 0.000000
+transform.rot=-0.000000 0.000000 0.000000
 transform.scale=1.000000 1.000000 1.000000
-collider.shape=0
-collider.boxHalfExtents=25.000000 0.500000 25.000000
-collider.radius=0.5
-collider.capsuleHalfH=0.5
-collider.center=0.000000 0.000000 0.000000
-collider.staticFric=0.5
-collider.dynFric=0.5
-collider.restitution=0.3
-collider.isTrigger=0
 [/entity]
 
 [entity]
 id=2
 tag.name=Entity
-transform.pos=0.000000 4.050000 0.000000
+transform.pos=0.000000 0.000000 0.000000
 transform.rot=0.000000 0.000000 0.000000
 transform.scale=1.000000 1.000000 1.000000
-script.guid=552962c7578b2f05
-script.path=scripts/playercontroller.lua
-cc.radius=0.3
-cc.height=1.8
-cc.stepOffset=0.3
-cc.slopeLimit=45
-cc.skinWidth=0.08
-cc.center=0.000000 0.000000 0.000000
+collider.shape=1
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=2.3
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.3
+collider.dynFric=0.3
+collider.restitution=0.3
+collider.isTrigger=0
+[/entity]
+
+[entity]
+id=3
+tag.name=Entity
+transform.pos=0.386757 4.283054 0.000000
+transform.rot=-0.000000 0.000000 0.000000
+transform.scale=1.000000 1.000000 1.000000
+collider.shape=0
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.3
+collider.dynFric=0.3
+collider.restitution=0.3
+collider.isTrigger=0
+rb.mass=1
+rb.isKinematic=0
+rb.useGravity=1
+rb.linearDrag=0.01
+rb.angularDrag=0.05
 [/entity]
 

@@ -32,10 +32,6 @@
 #include "Scripting/LuaScriptSystem.h"
 #include <IO/DebugDraw.h>
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Public entry point
-// ─────────────────────────────────────────────────────────────────────────────
-
 int Application::Run()
 {
     try { Init(); }
@@ -45,26 +41,50 @@ int Application::Run()
         return -1;
     }
 
-    uint64_t prevTime  = SDL_GetTicks();
-    float    physAccum  = 0.f;
-    static constexpr float PHYSICS_DT = 1.f / 60.f;  // fixed physics tick (60 Hz)
-    static constexpr float MAX_DT     = 0.05f;        // clamp: max 50 ms per frame
+    uint64_t prevTime = SDL_GetPerformanceCounter();
+    const uint64_t perfFreq = SDL_GetPerformanceFrequency();
+    static constexpr float PHYSICS_DT        = 1.0f / 60.0f;
+    static constexpr float MAX_DT            = 0.1f;
+    static constexpr int   MAX_PHYSICS_STEPS = 5;
+    float physAccum = 0.0f;
 
     while (m_running)
     {
-        const uint64_t currTime = SDL_GetTicks();
-        const float    dt       = std::min(
-            static_cast<float>(currTime - prevTime) / 1000.0f, MAX_DT);
+        const uint64_t currTime = SDL_GetPerformanceCounter();
+        float dt = static_cast<float>(currTime - prevTime) / static_cast<float>(perfFreq);
+        dt = std::min(dt, MAX_DT);
         prevTime = currTime;
 
         PollEvents();
+
+        if (m_playingInline && m_editor.GetPlayState() == PlayState::Playing)
+        {
+            physAccum += dt;
+
+            int steps = 0;
+            while (physAccum >= PHYSICS_DT && steps < MAX_PHYSICS_STEPS)
+            {
+                LuaScriptSystem::Get().Update(m_registry, PHYSICS_DT);
+                PhysicsSystem::Get().SyncActors(m_registry);
+                PhysicsSystem::Get().SyncControllers(m_registry);
+                PhysicsSystem::Get().Step(PHYSICS_DT);
+                PhysicsSystem::Get().WriteBack(m_registry);
+                PhysicsSystem::Get().WriteBackControllers(m_registry);
+                PhysicsSystem::Get().DispatchEvents(m_registry);
+                physAccum -= PHYSICS_DT;
+                ++steps;
+            }
+
+            if (steps >= MAX_PHYSICS_STEPS)
+                physAccum = 0.0f;
+        }
+
         HandleSceneViewResize();
         ProcessInput(dt);
 
         m_editor.BeginFrame();
         if (m_lookActive)
         {
-            // While in FPS mode imgui should not steal keyboard or mouse.
             ImGui::GetIO().WantCaptureKeyboard = false;
             ImGui::GetIO().WantCaptureMouse    = false;
         }
@@ -72,7 +92,6 @@ int Application::Run()
         VulkanRenderer::Get().BeginFrame();
         if (!VulkanRenderer::Get().IsFrameStarted())
         {
-            // Swapchain was rebuilt — skip this frame and re-sync fb sizes.
             m_editor.EndFrame();
             auto& sc  = VulkanSwapchain::Get();
             uint32_t fw = sc.GetExtent().width  / 2;
@@ -95,30 +114,6 @@ int Application::Run()
         SyncECSToScene();
         UpdateAnimations(dt);
 
-        // Embedded play: physics + scripting run at a fixed 60 Hz timestep.
-        // physAccum accumulates real elapsed time; we consume it in PHYSICS_DT chunks
-        // so that physics is always stable regardless of render framerate.
-        if (m_playingInline && m_editor.GetPlayState() == PlayState::Playing)
-        {
-            physAccum += dt;
-            while (physAccum >= PHYSICS_DT)
-            {
-                PhysicsSystem::Get().SyncActors(m_registry);
-                PhysicsSystem::Get().SyncControllers(m_registry);
-                PhysicsSystem::Get().Step(PHYSICS_DT);
-                PhysicsSystem::Get().WriteBack(m_registry);
-                PhysicsSystem::Get().WriteBackControllers(m_registry);
-                PhysicsSystem::Get().DispatchEvents(m_registry);
-                LuaScriptSystem::Get().Update(m_registry, PHYSICS_DT);
-                physAccum -= PHYSICS_DT;
-            }
-        }
-        else
-        {
-            physAccum = 0.f;  // reset accumulator when not playing
-        }
-
-        // Standalone: watch the external EderPlayer process for exit
         if (m_playerProcess)
             UpdatePlayerWindowPos();
 
@@ -130,16 +125,12 @@ int Application::Run()
         m_editor.Draw(m_camera, m_registry, dt);
         m_editor.Render(cmd);
         VulkanRenderer::Get().EndFrame();
-        Krayon::DebugDraw::Get().Tick(dt);  // expire debug lines after rendering
+        Krayon::DebugDraw::Get().Tick(dt);
     }
 
     Shutdown();
     return 0;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Initialization
-// ─────────────────────────────────────────────────────────────────────────────
 
 void Application::Init()
 {
@@ -151,7 +142,6 @@ void Application::Init()
     if (!m_window)
         throw std::runtime_error("SDL_CreateWindow failed");
 
-    // Camera — FPS mode, slightly elevated start position
     m_camera.fpsMode = true;
     m_camera.fpsPos  = { 0.0f, 2.0f, 12.0f };
     m_camera.SetOrientation(0.0f, 0.0f);
@@ -163,7 +153,6 @@ void Application::Init()
     VulkanRenderer::Get().SetWindow(m_window);
     m_editor.Init(m_window);
 
-    // Main PBR pipeline
     m_pipeline.Create(
         "shaders/triangle.vert.spv",
         "shaders/triangle.frag.spv",
@@ -172,7 +161,6 @@ void Application::Init()
 
     InitMaterials();
 
-    // Shadow maps — must exist before lights.Build() so samplers are available
     m_shadowMap.Create(1024);
     m_shadowPipeline.Create(m_shadowMap.GetFormat());
     m_spotShadowMap.Create(1024);
@@ -180,8 +168,8 @@ void Application::Init()
     m_pointShadowPipeline.Create(m_pointShadowMap.GetFormat());
 
     m_lights.Build(m_pipeline);
-    m_lights.BindShadowMap     (m_shadowMap.GetArrayView(),        m_shadowMap.GetSampler());
-    m_lights.BindSpotShadowMap (m_spotShadowMap.GetArrayView(),    m_spotShadowMap.GetSampler());
+    m_lights.BindShadowMap     (m_shadowMap.GetArrayView(),          m_shadowMap.GetSampler());
+    m_lights.BindSpotShadowMap (m_spotShadowMap.GetArrayView(),      m_spotShadowMap.GetSampler());
     m_lights.BindPointShadowMap(m_pointShadowMap.GetCubeArrayView(), m_pointShadowMap.GetSampler());
 
     InitPostProcess();
@@ -200,7 +188,7 @@ void Application::InitMaterials()
           .AddFloat("roughness")
           .AddFloat("metallic")
           .AddFloat("emissiveIntensity")
-          .AddFloat("alphaThreshold");   // 0 = opaque/blend, >0 = cutout
+          .AddFloat("alphaThreshold");
 
     MaterialManager::Get().Add("default", layout, m_pipeline);
     m_floorMat.Build(layout, m_pipeline);
@@ -208,41 +196,35 @@ void Application::InitMaterials()
     m_glassMat2.Build(layout, m_pipeline);
     m_glassMat3.Build(layout, m_pipeline);
 
-    // Default — warm off-white
     auto& def = MaterialManager::Get().GetDefault();
     def.SetVec4 ("albedo",            glm::vec4(1.0f, 0.92f, 0.78f, 1.0f));
     def.SetFloat("roughness",         0.55f);
     def.SetFloat("metallic",          0.0f);
     def.SetFloat("emissiveIntensity", 0.0f);
 
-    // Floor — cool grey
     m_floorMat.SetVec4 ("albedo",            glm::vec4(0.55f, 0.58f, 0.62f, 1.0f));
     m_floorMat.SetFloat("roughness",         0.85f);
     m_floorMat.SetFloat("metallic",          0.0f);
     m_floorMat.SetFloat("emissiveIntensity", 0.0f);
 
-    // Glass — translucent blue
     m_glassMat.SetVec4 ("albedo",            glm::vec4(0.40f, 0.70f, 1.0f,  0.35f));
     m_glassMat.SetFloat("roughness",         0.05f);
     m_glassMat.SetFloat("metallic",          0.0f);
     m_glassMat.SetFloat("emissiveIntensity", 0.0f);
     m_glassMat.opacity = 0.35f;
 
-    // Glass 2 — translucent green
     m_glassMat2.SetVec4 ("albedo",            glm::vec4(0.30f, 1.0f,  0.45f, 0.40f));
     m_glassMat2.SetFloat("roughness",         0.05f);
     m_glassMat2.SetFloat("metallic",          0.0f);
     m_glassMat2.SetFloat("emissiveIntensity", 0.0f);
     m_glassMat2.opacity = 0.40f;
 
-    // Glass 3 — translucent amber
     m_glassMat3.SetVec4 ("albedo",            glm::vec4(1.0f,  0.65f, 0.10f, 0.45f));
     m_glassMat3.SetFloat("roughness",         0.05f);
     m_glassMat3.SetFloat("metallic",          0.0f);
     m_glassMat3.SetFloat("emissiveIntensity", 0.0f);
     m_glassMat3.opacity = 0.45f;
 
-    // Shared texture
     try { m_albedoTex.Load("assets/bush01.png"); }
     catch (const std::exception& e)
     {
@@ -259,10 +241,10 @@ void Application::InitMaterials()
 
 void Application::InitPostProcess()
 {
-    auto& sc     = VulkanSwapchain::Get();
-    auto& rd     = VulkanRenderer::Get();
-    uint32_t w   = sc.GetExtent().width  / 2;
-    uint32_t h   = sc.GetExtent().height / 2;
+    auto& sc      = VulkanSwapchain::Get();
+    auto& rd      = VulkanRenderer::Get();
+    uint32_t w    = sc.GetExtent().width  / 2;
+    uint32_t h    = sc.GetExtent().height / 2;
     auto depthFmt = rd.GetDepthFormat();
 
     m_debugFb.Create(w, h, vk::Format::eB8G8R8A8Unorm, depthFmt);
@@ -277,9 +259,6 @@ void Application::InitPostProcess()
                            *m_pipeline.GetLightDescriptorSetLayout());
 }
 
-// ─────────────────────────────────────────────────────────────────────────────//  Scene operations
-// ──────────────────────────────────────────────────────────────────────────────
-
 void Application::WireEditorCallbacks()
 {
     m_editor.SetNewSceneCallback([this]() { NewScene(); });
@@ -292,7 +271,7 @@ void Application::WireEditorCallbacks()
             SaveScene();
     });
 
-    m_editor.SetSaveAsCallback  ([this](const std::string& name) { SaveSceneAs(name); });
+    m_editor.SetSaveAsCallback   ([this](const std::string& name) { SaveSceneAs(name); });
     m_editor.SetOpenSceneCallback([this](const std::string& path) { LoadScene(path); });
 
     m_editor.SetBuildPakCallback([this](const std::string& outPak,
@@ -302,37 +281,19 @@ void Application::WireEditorCallbacks()
         BuildPak(outPak, initialScene, gameName);
     });
 
-    // Play: auto-save current scene then launch embedded EderPlayer
-    m_editor.SetPlayCallback([this]()
-    {
-        StartPlayMode();
-    });
-
-    // Stop: terminate embedded EderPlayer process
-    m_editor.SetStopCallback([this]()
-    {
-        StopPlayMode();
-    });
-
+    m_editor.SetPlayCallback([this]() { StartPlayMode(); });
+    m_editor.SetStopCallback([this]() { StopPlayMode(); });
     m_editor.SetCurrentSceneName(m_currentSceneName);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Play mode — embedded EderPlayer preview
-// ─────────────────────────────────────────────────────────────────────────────
-//  Play mode
-// ─────────────────────────────────────────────────────────────────────────────
 
 void Application::StartPlayMode()
 {
     const bool wantEmbedded = (m_editor.GetPlayTarget() == PlayTarget::Embedded);
 
-    // ── Embedded: run game inline in the editor process ────────────────────
     if (wantEmbedded)
     {
         namespace fs = std::filesystem;
 
-        // Snapshot the scene so Stop can restore it
         const std::string workdirAbs = fs::absolute(
             Krayon::AssetManager::Get().GetWorkDir()).string();
         m_tempScenePath = (fs::path(workdirAbs) / "__playsnapshot__.scene").string();
@@ -346,7 +307,6 @@ void Application::StartPlayMode()
         return;
     }
 
-    // ── Standalone: launch EderPlayer.exe as a separate OS window ────────────
 #ifdef _WIN32
     {
         namespace fs = std::filesystem;
@@ -416,14 +376,12 @@ void Application::StartPlayMode()
 
 void Application::StopPlayMode()
 {
-    // ── Inline embedded ──────────────────────────────────────────────────────
     if (m_playingInline)
     {
         PhysicsSystem::Get().Shutdown();
         LuaScriptSystem::Get().Shutdown();
         m_playingInline = false;
 
-        // Restore the scene to its pre-play state
         if (!m_tempScenePath.empty())
         {
             VulkanInstance::Get().GetDevice().waitIdle();
@@ -444,7 +402,6 @@ void Application::StopPlayMode()
         return;
     }
 
-    // ── Standalone: terminate external EderPlayer ────────────────────────────
 #ifdef _WIN32
     if (m_playerProcess)
     {
@@ -463,7 +420,6 @@ void Application::StopPlayMode()
 
 void Application::UpdatePlayerWindowPos()
 {
-    // Only used in Standalone mode to detect when EderPlayer exits.
 #ifdef _WIN32
     HANDLE hProcess = reinterpret_cast<HANDLE>(m_playerProcess);
     if (!hProcess) return;
@@ -485,7 +441,6 @@ void Application::UpdatePlayerWindowPos()
 
 void Application::NewScene()
 {
-    // Clear GPU scene + ECS state
     VulkanInstance::Get().GetDevice().waitIdle();
     m_scene.Clear();
     m_registry.Clear();
@@ -511,19 +466,16 @@ void Application::SaveSceneAs(const std::string& name)
     auto& AM = Krayon::AssetManager::Get();
     if (AM.GetWorkDir().empty()) return;
 
-    // Store under <workDir>/scenes/<name>.scene
     const fs::path scenesDir = fs::path(AM.GetWorkDir()) / "scenes";
     std::error_code ec;
     fs::create_directories(scenesDir, ec);
 
-    // Deduplicate filename
     std::string stem = name;
     fs::path    absFile;
     int         suffix = 0;
     do {
         absFile = scenesDir / (stem + ".scene");
         if (!fs::exists(absFile)) break;
-        // If it's the same file we're overwriting, just use it
         if (absFile.string() == m_currentScenePath) break;
         stem = name + "_" + std::to_string(++suffix);
     } while (true);
@@ -542,7 +494,6 @@ void Application::LoadScene(const std::string& absPath)
     namespace fs = std::filesystem;
     if (!fs::exists(absPath)) return;
 
-    // Wait for GPU idle before clearing scene objects
     VulkanInstance::Get().GetDevice().waitIdle();
     m_scene.Clear();
     m_registry.Clear();
@@ -562,14 +513,7 @@ void Application::LoadScene(const std::string& absPath)
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  BuildPak
-//  Packs every registered asset in Game/Content into a single .pak file and
-//  embeds a game.conf entry that records the initial scene path and game name.
-//  Progress is streamed to the Editor build log so the user can follow along.
-// ─────────────────────────────────────────────────────────────────────────────
-
-void Application::BuildPak(const std::string& /*outPakPathHint*/,
+void Application::BuildPak(const std::string&,
                             const std::string& initialScene,
                             const std::string& gameName)
 {
@@ -578,10 +522,6 @@ void Application::BuildPak(const std::string& /*outPakPathHint*/,
     auto& AM        = Krayon::AssetManager::Get();
     const auto& all = AM.GetAll();
 
-    // Compute output dir: one folder above the AssetManager content dir.
-    //   AM.GetWorkDir() == "Game/Content"  (relative to build dir)
-    //   parent           == "Game"
-    //   dist dir         == "Game/<GameName>"
     const fs::path buildDir  = fs::current_path();
     const fs::path amContent = fs::path(AM.GetWorkDir()).is_absolute()
                                ? fs::path(AM.GetWorkDir())
@@ -590,26 +530,22 @@ void Application::BuildPak(const std::string& /*outPakPathHint*/,
     const fs::path distDir   = amContent.parent_path() / gname;
     const std::string outPakPath = (distDir / "Game.pak").string();
 
-    // Rescan content folder to catch any files added since last scan
     AM.Scan();
 
-    // Build the file-asset map: relative-path → absolute-path
     std::unordered_map<std::string, std::string> fileMap;
     fileMap.reserve(all.size());
     const std::string workDir = AM.GetWorkDir();
 
     for (const auto& [guid, meta] : all)
     {
-        // Skip .pak entries themselves and any unknown types
         if (meta.type == Krayon::AssetType::Unknown) continue;
-        if (meta.type == Krayon::AssetType::PAK)      continue;
+        if (meta.type == Krayon::AssetType::PAK)     continue;
 
         const std::string absPath = workDir + "/" + meta.path;
         if (fs::exists(absPath))
             fileMap[meta.path] = absPath;
     }
 
-    // Build in-memory entries: game.conf + assets.manifest
     Krayon::GameConfig config;
     config.gameName     = gameName.empty() ? "EderGame" : gameName;
     config.initialScene = initialScene;
@@ -618,7 +554,6 @@ void Application::BuildPak(const std::string& /*outPakPathHint*/,
     std::unordered_map<std::string, std::vector<uint8_t>> memMap;
     memMap["game.conf"] = std::vector<uint8_t>(cfgText.begin(), cfgText.end());
 
-    // Build GUID manifest: one asset per line — "<guid_hex>\t<type>\t<name>\t<path>"
     {
         std::ostringstream manifest;
         for (const auto& [guid, meta] : all)
@@ -635,7 +570,6 @@ void Application::BuildPak(const std::string& /*outPakPathHint*/,
         memMap["assets.manifest"] = std::vector<uint8_t>(ms.begin(), ms.end());
     }
 
-    // Ensure output directory exists
     const fs::path outDir = fs::path(outPakPath).parent_path();
     if (!outDir.empty())
     {
@@ -643,7 +577,6 @@ void Application::BuildPak(const std::string& /*outPakPathHint*/,
         fs::create_directories(outDir, ec);
     }
 
-    // Delete old pak so it is always fully regenerated
     {
         std::error_code ec;
         if (fs::exists(outPakPath, ec))
@@ -675,7 +608,6 @@ void Application::BuildPak(const std::string& /*outPakPathHint*/,
 
         m_editor.AppendBuildLog("[Build] Done!  " + outPakPath);
 
-        // ── Launch background thread: compile EderPlayer + package dist ──────────
         m_editor.AppendBuildLog("[Compile] Building EderPlayer.exe...");
         m_editor.SetBuildRunning(true);
 
@@ -688,7 +620,6 @@ void Application::BuildPak(const std::string& /*outPakPathHint*/,
         {
             namespace fs = std::filesystem;
 
-            // cmake --build . --target EderPlayer  (CWD is already the build dir)
             const std::string cmd = "cmake --build . --target EderPlayer 2>&1";
             FILE* pipe = _popen(cmd.c_str(), "r");
             if (pipe)
@@ -720,12 +651,10 @@ void Application::BuildPak(const std::string& /*outPakPathHint*/,
             }
             m_editor.AppendBuildLog("[Compile] EderPlayer built OK.");
 
-            // ── Copy dist files ─────────────────────────────────────────────────
             const fs::path bldDir = fs::current_path();
             const fs::path pakSrc = fs::path(capturedOutPak).is_absolute()
                                     ? fs::path(capturedOutPak)
                                     : bldDir / capturedOutPak;
-            // pak is already at distDir/Game.pak; outDir == pakSrc.parent_path()
             const fs::path outDir = pakSrc.parent_path();
             std::error_code ec;
             fs::create_directories(outDir, ec);
@@ -745,12 +674,7 @@ void Application::BuildPak(const std::string& /*outPakPathHint*/,
             copyFile(bldDir / "EderGraphics.dll",        "EderGraphics.dll");
             copyFile(bldDir / "SDL3.dll",                "SDL3.dll");
             copyFile(bldDir / "assimp-vc143-mt.dll",     "assimp-vc143-mt.dll");
-            copyFile(bldDir / "PhysX_64.dll",            "PhysX_64.dll");
-            copyFile(bldDir / "PhysXCommon_64.dll",      "PhysXCommon_64.dll");
-            copyFile(bldDir / "PhysXFoundation_64.dll",  "PhysXFoundation_64.dll");
-            copyFile(bldDir / "PhysXCooking_64.dll",     "PhysXCooking_64.dll");
             copyFile(bldDir / "lua54.dll",               "lua54.dll");
-            // Game.pak is already written directly to outDir — no copy needed
 
             m_editor.AppendBuildLog("[Package] Done -> " + outDir.string());
             m_editor.SetBuildRunning(false);
@@ -763,12 +687,8 @@ void Application::BuildPak(const std::string& /*outPakPathHint*/,
     }
 }
 
-// ──────────────────────────────────────────────────────────────────────────────//  Shutdown
-// ─────────────────────────────────────────────────────────────────────────────
-
 void Application::Shutdown()
 {
-    // Wait for any running build thread before tearing down Vulkan resources
     if (m_buildThread.joinable())
         m_buildThread.join();
 
@@ -803,10 +723,6 @@ void Application::Shutdown()
     SDL_Quit();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Per-frame: input & events
-// ─────────────────────────────────────────────────────────────────────────────
-
 void Application::PollEvents()
 {
     SDL_Event event;
@@ -827,6 +743,13 @@ void Application::PollEvents()
             if (event.key.scancode == SDL_SCANCODE_ESCAPE)
                 m_running = false;
             break;
+        case SDL_EVENT_MOUSE_MOTION:
+            if (m_lookActive)
+            {
+                m_mouseDX += event.motion.xrel;
+                m_mouseDY += event.motion.yrel;
+            }
+            break;
         default:
             break;
         }
@@ -835,8 +758,6 @@ void Application::PollEvents()
 
 void Application::ProcessInput(float dt)
 {
-    // RMB state is polled rather than event-driven to avoid losing keyboard
-    // events when toggling relative mouse mode inside the event loop.
     float mx, my;
     bool  rmb = (SDL_GetMouseState(&mx, &my) & SDL_BUTTON_RMASK) != 0;
 
@@ -845,28 +766,23 @@ void Application::ProcessInput(float dt)
         m_lookActive = true;
         SDL_SetWindowRelativeMouseMode(m_window, true);
         SDL_RaiseWindow(m_window);
-        SDL_GetRelativeMouseState(&mx, &my);   // flush accumulated delta
         m_mouseDX = m_mouseDY = 0.0f;
     }
     else if (!rmb && m_lookActive)
     {
         m_lookActive = false;
         SDL_SetWindowRelativeMouseMode(m_window, false);
-        SDL_GetRelativeMouseState(&mx, &my);   // flush
-        m_mouseDX = m_mouseDY = 0.0f;
-    }
-    else if (m_lookActive)
-    {
-        SDL_GetRelativeMouseState(&m_mouseDX, &m_mouseDY);
-    }
-    else
-    {
         m_mouseDX = m_mouseDY = 0.0f;
     }
 
-    if (!m_lookActive) return;
+    if (!m_lookActive)
+    {
+        m_mouseDX = m_mouseDY = 0.0f;
+        return;
+    }
 
     m_camera.FPSLook(m_mouseDX, m_mouseDY);
+    m_mouseDX = m_mouseDY = 0.0f;
 
     const bool*     keys  = SDL_GetKeyboardState(nullptr);
     constexpr float speed = 8.0f;
@@ -879,7 +795,7 @@ void Application::ProcessInput(float dt)
     if (keys[SDL_SCANCODE_A])     m_camera.fpsPos -= right   * speed * dt;
     if (keys[SDL_SCANCODE_D])     m_camera.fpsPos += right   * speed * dt;
     if (keys[SDL_SCANCODE_SPACE]) m_camera.fpsPos.y += speed * dt;
-    if (keys[SDL_SCANCODE_LCTRL])  m_camera.fpsPos.y -= speed * dt;
+    if (keys[SDL_SCANCODE_LCTRL]) m_camera.fpsPos.y -= speed * dt;
 }
 
 void Application::HandleSceneViewResize()
@@ -899,22 +815,17 @@ void Application::HandleSceneViewResize()
     m_volumetricFog.Resize(svW, svH);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Per-frame: ECS synchronization
-// ─────────────────────────────────────────────────────────────────────────────
-
 void Application::UpdateLightBuffer()
 {
     auto& sc     = VulkanSwapchain::Get();
     float aspect = static_cast<float>(sc.GetExtent().width) /
                    static_cast<float>(sc.GetExtent().height);
 
-    // Reset per-frame state
-    m_hasDir           = false;
-    m_hasSpotShadow    = false;
-    m_hasPointShadow   = false;
-    m_activeDirDir     = glm::normalize(glm::vec3(-1.0f, -1.0f, -0.4f));
-    m_activeDirColor   = glm::vec3(1.0f, 0.9f, 0.7f);
+    m_hasDir             = false;
+    m_hasSpotShadow      = false;
+    m_hasPointShadow     = false;
+    m_activeDirDir       = glm::normalize(glm::vec3(-1.0f, -1.0f, -0.4f));
+    m_activeDirColor     = glm::vec3(1.0f, 0.9f, 0.7f);
     m_activeDirIntensity = 1.0f;
 
     m_lights.ClearLights();
@@ -927,7 +838,7 @@ void Application::UpdateLightBuffer()
 
         if (l.type == LightType::Directional)
         {
-glm::mat4 mat = TransformSystem::GetWorldMatrix(e, m_registry);
+            glm::mat4 mat = TransformSystem::GetWorldMatrix(e, m_registry);
             glm::vec3 dir = glm::normalize(glm::vec3(mat * glm::vec4(0, -1, 0, 0)));
 
             if (!m_hasDir)
@@ -938,7 +849,6 @@ glm::mat4 mat = TransformSystem::GetWorldMatrix(e, m_registry);
                 m_hasDir             = true;
             }
 
-            // Fade out as the sun crosses below the horizon
             float sunHorizon = glm::clamp(-dir.y * 5.0f + 1.0f, 0.0f, 1.0f);
             DirectionalLight dl{};
             dl.direction = dir;
@@ -956,10 +866,10 @@ glm::mat4 mat = TransformSystem::GetWorldMatrix(e, m_registry);
 
             if (l.castShadow && pointSlot < 1)
             {
-                pl.shadowIdx       = 0;
-                m_hasPointShadow   = true;
-                m_activePointPos   = pl.position;
-                m_activePointFar   = l.range;
+                pl.shadowIdx     = 0;
+                m_hasPointShadow = true;
+                m_activePointPos = pl.position;
+                m_activePointFar = l.range;
                 m_lights.SetPointFarPlane(0, l.range);
                 ++pointSlot;
             }
@@ -983,13 +893,13 @@ glm::mat4 mat = TransformSystem::GetWorldMatrix(e, m_registry);
 
             if (l.castShadow && spotSlot < 1)
             {
-                sl.shadowIdx          = 0;
-                m_hasSpotShadow       = true;
-                m_activeSpotPos       = sl.position;
-                m_activeSpotDir       = dir;
-                m_activeSpotOuterCos  = sl.outerCos;
-                m_activeSpotFar       = l.range;
-                m_activeSpotMatrix    = VulkanSpotShadowMap::ComputeMatrix(
+                sl.shadowIdx         = 0;
+                m_hasSpotShadow      = true;
+                m_activeSpotPos      = sl.position;
+                m_activeSpotDir      = dir;
+                m_activeSpotOuterCos = sl.outerCos;
+                m_activeSpotFar      = l.range;
+                m_activeSpotMatrix   = VulkanSpotShadowMap::ComputeMatrix(
                     m_activeSpotPos, m_activeSpotDir, m_activeSpotOuterCos, 0.3f, m_activeSpotFar);
                 m_lights.SetSpotMatrix(0, m_activeSpotMatrix);
                 ++spotSlot;
@@ -1013,7 +923,6 @@ glm::mat4 mat = TransformSystem::GetWorldMatrix(e, m_registry);
 
 void Application::SyncECSToScene()
 {
-    // 1. Remove SceneObjects whose entity no longer has a MeshRendererComponent
     auto& objs = m_scene.GetObjects();
     objs.erase(std::remove_if(objs.begin(), objs.end(),
         [&](const SceneObject& o) {
@@ -1026,11 +935,8 @@ void Application::SyncECSToScene()
             return remove;
         }), objs.end());
 
-    // 2. Add SceneObjects for entities that gained a MeshRendererComponent,
-    //    OR hot-swap the mesh when the GUID changed (drag-drop from Asset Browser).
     m_registry.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
     {
-        // Resolve the load key: prefer GUID, fall back to bare path
         std::string loadPath;
         if (mr.meshGuid != 0)
         {
@@ -1040,24 +946,15 @@ void Application::SyncECSToScene()
         if (loadPath.empty()) loadPath = mr.meshPath;
         if (loadPath.empty()) return;
 
-        // Find existing SceneObject for this entity (if any)
-        // NOTE: Re-fetch GetObjects() each time — a previous Add() may have
-        //       reallocated the vector, invalidating any earlier pointer.
         SceneObject* existingObj = nullptr;
         for (auto& o : m_scene.GetObjects())
             if (o.entityId == e) { existingObj = &o; break; }
 
-        // Change detection by GUID (or path if no GUID yet)
         const uint64_t trackGuid = mr.meshGuid ? mr.meshGuid
             : Krayon::AssetManager::Get().GetGuid(loadPath);
         auto it = m_lastMeshGuid.find(e);
         const bool meshChanged = (it == m_lastMeshGuid.end() || it->second != trackGuid);
 
-        // ── .mat asset → runtime Material sync ───────────────────────────────
-        // When a materialGuid is assigned, ensure MaterialManager has a runtime
-        // Material for it and push the .mat surface params to the GPU material.
-        // This runs every frame the entity has a guid, so live edits in the
-        // Material Editor are reflected immediately.
         if (mr.materialGuid != 0)
         {
             Krayon::MaterialAsset matAsset;
@@ -1065,7 +962,6 @@ void Application::SyncECSToScene()
             {
                 if (!matAsset.name.empty())
                 {
-                    // Create a runtime material entry if it doesn't exist yet
                     if (!MaterialManager::Get().Has(matAsset.name))
                     {
                         MaterialLayout matLayout;
@@ -1076,7 +972,6 @@ void Application::SyncECSToScene()
                                  .AddFloat("alphaThreshold");
                         MaterialManager::Get().Add(matAsset.name, matLayout, m_pipeline);
                     }
-                    // Push surface params from the .mat file to the GPU material
                     Material& rMat = MaterialManager::Get().Get(matAsset.name);
                     rMat.SetVec4 ("albedo",
                         glm::vec4(matAsset.albedo[0], matAsset.albedo[1],
@@ -1089,7 +984,6 @@ void Application::SyncECSToScene()
                     rMat.SetFloat("emissiveIntensity", ei);
                     rMat.SetFloat("alphaThreshold",    0.0f);
 
-                    // ── Albedo texture hot-swap (slot 0) ─────────────
                     if (matAsset.albedoTexGuid != 0)
                     {
                         auto& lastTex = m_lastMatTexGuid[matAsset.name];
@@ -1105,17 +999,16 @@ void Application::SyncECSToScene()
                                     rMat.BindTexture(0, tex);
                                     lastTex = matAsset.albedoTexGuid;
                                 }
-                                catch (const std::exception&) { /* ya logueado en TextureManager */ }
+                                catch (const std::exception&) {}
                             }
                         }
                     }
 
-                    mr.materialName = matAsset.name;  // keep name in sync
+                    mr.materialName = matAsset.name;
                 }
             }
         }
 
-        // ── Material hot-swap (independent of mesh change) ───────────────────
         const std::string& curMatName = mr.materialName;
         auto matIt = m_lastMaterialName.find(e);
         const bool matChanged = existingObj &&
@@ -1128,11 +1021,10 @@ void Application::SyncECSToScene()
 
         if (existingObj && !meshChanged) return;
 
-        // Load (or re-use cached) mesh
         Material& mat = MaterialManager::Get().Get(mr.materialName);
         VulkanMesh* meshPtr = nullptr;
         try { meshPtr = &MeshManager::Get().Load(loadPath); }
-        catch (const std::exception&) { return; /* ya logueado en MeshManager */ }
+        catch (const std::exception&) { return; }
         VulkanMesh& mesh = *meshPtr;
         m_lastMeshGuid[e]     = trackGuid;
         m_lastMaterialName[e] = mr.materialName;
@@ -1144,7 +1036,6 @@ void Application::SyncECSToScene()
             return;
         }
 
-        // New entity — create SceneObject
         SceneObject& obj = m_scene.Add(mesh, mat);
         obj.entityId = e;
         m_lastMaterialName[e] = mr.materialName;
@@ -1158,9 +1049,6 @@ void Application::SyncECSToScene()
         }
     });
 
-    // 3. Mirror world transform → SceneObject::transform every frame
-    //    (TransformComponent values are LOCAL; SceneObject needs world space)
-    //    Re-obtain the vector reference — Add() may have reallocated it.
     for (auto& obj : m_scene.GetObjects())
     {
         if (obj.entityId == 0 || !m_registry.Has<TransformComponent>(obj.entityId)) continue;
@@ -1169,7 +1057,6 @@ void Application::SyncECSToScene()
 
         glm::mat4 world = TransformSystem::GetWorldMatrix(obj.entityId, m_registry);
 
-        // Decompose world matrix into T / R(YXZ deg) / S
         obj.transform.position = glm::vec3(world[3]);
         obj.transform.scale.x  = glm::length(glm::vec3(world[0]));
         obj.transform.scale.y  = glm::length(glm::vec3(world[1]));
@@ -1184,7 +1071,6 @@ void Application::SyncECSToScene()
         obj.transform.rotation = glm::degrees(glm::vec3(xRad, yRad, zRad));
     }
 
-    // 4. Sync alphaMode → alphaThreshold UBO field
     for (auto& obj : m_scene.GetObjects())
     {
         if (!obj.material) continue;
@@ -1193,7 +1079,6 @@ void Application::SyncECSToScene()
         obj.material->SetFloat("alphaThreshold", threshold);
     }
 
-    // 5. Active CameraComponent entity → m_camera (game-mode only)
     if (m_playingInline)
     {
         m_registry.Each<CameraComponent>([&](Entity e, CameraComponent& cam)
@@ -1224,7 +1109,6 @@ void Application::UpdateAnimations(float dt)
         if (!m_registry.Has<MeshRendererComponent>(e)) return;
         const auto& mr = m_registry.Get<MeshRendererComponent>(e);
 
-        // Resolve load path from GUID first, fall back to stored path
         std::string loadPath;
         if (mr.meshGuid != 0)
         {
@@ -1234,7 +1118,6 @@ void Application::UpdateAnimations(float dt)
         if (loadPath.empty()) loadPath = mr.meshPath;
         if (loadPath.empty() || !MeshManager::Get().Has(loadPath)) return;
 
-        // ── Detect mesh swap via GUID → reset playback state ──────────────────
         const uint64_t trackGuid = mr.meshGuid ? mr.meshGuid
             : Krayon::AssetManager::Get().GetGuid(loadPath);
         auto it = m_lastAnimMeshGuid.find(e);
@@ -1255,7 +1138,6 @@ void Application::UpdateAnimations(float dt)
         int clipIdx = glm::clamp(anim.animIndex, 0,
             static_cast<int>(mesh.GetAnimationCount()) - 1);
 
-        // Detect clip change → trigger crossfade
         if (anim.activeIndex != clipIdx)
         {
             anim.prevIndex   = (anim.activeIndex >= 0) ? anim.activeIndex : clipIdx;
@@ -1268,7 +1150,7 @@ void Application::UpdateAnimations(float dt)
 
         if (!anim.playing) return;
 
-        const float step          = dt * anim.speed;
+        const float step           = dt * anim.speed;
         const float activeDuration = mesh.GetAnimationDuration(
             static_cast<uint32_t>(anim.activeIndex));
 
@@ -1313,22 +1195,15 @@ void Application::UpdateAnimations(float dt)
         for (uint32_t i = 0; i < static_cast<uint32_t>(boneMats.size()) && i < MAX_BONES; ++i)
             boneMatrices[i] = boneMats[i];
 
-        // Store per-entity so DrawSkinned can upload the right matrices
         m_entityBoneMatrices[e] = boneMatrices;
     });
 
-    // Upload identity for static (non-skinned) draws
     static const std::vector<glm::mat4> s_identity(MAX_BONES, glm::mat4(1.0f));
     m_boneSSBO.Upload(s_identity);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Render passes
-// ─────────────────────────────────────────────────────────────────────────────
-
 void Application::RenderShadowPasses(vk::CommandBuffer cmd)
 {
-    // Cascaded directional shadow (4 splits)
     for (uint32_t c = 0; c < VulkanShadowMap::NUM_CASCADES; ++c)
     {
         m_shadowMap.BeginRendering(cmd, c);
@@ -1339,7 +1214,6 @@ void Application::RenderShadowPasses(vk::CommandBuffer cmd)
     }
     m_shadowMap.TransitionToShaderRead(cmd);
 
-    // Spot shadow (slot 0)
     if (m_hasSpotShadow)
     {
         m_spotShadowMap.BeginRendering(cmd, 0);
@@ -1350,7 +1224,6 @@ void Application::RenderShadowPasses(vk::CommandBuffer cmd)
     }
     m_spotShadowMap.TransitionToShaderRead(cmd);
 
-    // Point shadow — 6 cubemap faces (slot 0)
     if (m_hasPointShadow)
     {
         auto faceMats = VulkanPointShadowMap::ComputeFaceMatrices(
@@ -1375,12 +1248,10 @@ void Application::RenderSceneView(vk::CommandBuffer cmd)
 
     m_debugFb.BeginRendering(cmd);
 
-    // Opaque geometry
     m_pipeline.Bind(cmd);
     m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
     m_scene.Draw(cmd, m_pipeline, m_camera, aspect, m_lights);
 
-    // Draw skinned (animated) objects one at a time with per-entity bone matrices
     m_pipeline.Bind(cmd);
     m_scene.DrawSkinned(cmd, m_pipeline, m_camera, aspect, m_lights,
         [this, &cmd](uint32_t entityId)
@@ -1391,14 +1262,11 @@ void Application::RenderSceneView(vk::CommandBuffer cmd)
             m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
         });
 
-    // Skybox — after opaques so depth test skips covered pixels
     m_skybox.Draw(cmd, m_camera.GetView(), m_camera.GetProjection(aspect), -m_activeDirDir);
 
-    // Transparents — after skybox so skybox doesn't overwrite them
     m_pipeline.BindTransparent(cmd);
     m_scene.DrawTransparent(cmd, m_pipeline, m_camera, aspect, m_lights);
 
-    // Light gizmos on top
     glm::mat4 vp = m_camera.GetProjection(aspect) * m_camera.GetView();
     m_gizmo.Draw(cmd, m_registry, vp, m_editor.GetSelected());
 
@@ -1411,7 +1279,6 @@ void Application::RenderPostProcess(vk::CommandBuffer cmd)
     const float aspect = SceneViewAspect();
     m_postFb = &m_debugFb;
 
-    // ── Volumetric Lighting ───────────────────────────────────────────────────
     {
         LightComponent* volComp = nullptr;
         m_registry.Each<LightComponent>([&](Entity e, LightComponent& l) {
@@ -1424,7 +1291,6 @@ void Application::RenderPostProcess(vk::CommandBuffer cmd)
                 ? glm::normalize(-m_activeDirDir)
                 : glm::vec3(0.0f, 1.0f, 0.0f);
 
-            // Fade directional scatter below the horizon
             float sunAbove = m_hasDir
                 ? glm::clamp(sunWorldDir.y * 5.0f + 1.0f, 0.0f, 1.0f)
                 : 0.0f;
@@ -1457,7 +1323,6 @@ void Application::RenderPostProcess(vk::CommandBuffer cmd)
         }
     }
 
-    // ── Volumetric Fog ────────────────────────────────────────────────────────
     {
         VolumetricFogComponent* fogComp = nullptr;
         m_registry.Each<VolumetricFogComponent>([&](Entity e, VolumetricFogComponent& f) {
@@ -1494,7 +1359,6 @@ void Application::RenderPostProcess(vk::CommandBuffer cmd)
         }
     }
 
-    // ── Sun Shafts ────────────────────────────────────────────────────────────
     {
         LightComponent* shaftsComp = nullptr;
         m_registry.Each<LightComponent>([&](Entity e, LightComponent& l) {
@@ -1512,7 +1376,7 @@ void Application::RenderPostProcess(vk::CommandBuffer cmd)
                               (glm::dot(m_camera.GetForward(), sunWorldDir) > 0.0f);
             glm::vec2 sunUV = sunInFront
                 ? glm::vec2(sunClip.x / sunClip.w, sunClip.y / sunClip.w) * 0.5f + 0.5f
-                : glm::vec2(-10.0f);   // off-screen → god-ray intensity = 0
+                : glm::vec2(-10.0f);
 
             float sunHeight = glm::normalize(-m_activeDirDir).y;
 
@@ -1541,19 +1405,9 @@ void Application::RenderPostProcess(vk::CommandBuffer cmd)
 
 void Application::RenderMainPass(vk::CommandBuffer cmd)
 {
-    // The scene is rendered to m_debugFb in RenderSceneView and displayed
-    // inside the ImGui scene-view panel.  This pass only needs to start the
-    // swapchain render-pass and draw any overlay on top of it; re-drawing the
-    // full scene here would produce a second (wrong-aspect) skybox behind the
-    // ImGui panels causing the "double / stretched skybox" artifact.
     VulkanRenderer::Get().BeginMainPass();
-
     m_debugOverlay.Draw(cmd, m_debugFb, m_shadowMap);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  Utility
-// ─────────────────────────────────────────────────────────────────────────────
 
 float Application::SceneViewAspect() const
 {
