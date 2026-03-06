@@ -6,9 +6,7 @@
 #include "ECS/Components/CollisionCallbackComponent.h"
 #include "ECS/Components/LayerComponent.h"
 #include "ECS/Components/CharacterControllerComponent.h"
-#include "ECS/Components/MeshRendererComponent.h"
 #include "ECS/Systems/TransformSystem.h"
-#include "Core/MeshManager.h"
 
 // ── Jolt ──────────────────────────────────────────────────────────────────────
 #include <Jolt/RegisterTypes.h>
@@ -16,7 +14,6 @@
 #include <Jolt/Physics/Collision/Shape/BoxShape.h>
 #include <Jolt/Physics/Collision/Shape/SphereShape.h>
 #include <Jolt/Physics/Collision/Shape/CapsuleShape.h>
-#include <Jolt/Physics/Collision/Shape/MeshShape.h>
 #include <Jolt/Physics/Collision/RayCast.h>
 #include <Jolt/Physics/Collision/CastResult.h>
 #include <Jolt/Physics/Collision/BroadPhase/BroadPhaseQuery.h>
@@ -417,31 +414,6 @@ JPH::Ref<JPH::Shape> PhysicsSystem::CreateShape(Registry& registry, Entity e)
         result = JPH::CapsuleShapeSettings(hh, r).Create();
         break;
     }
-    case ColliderShape::Mesh:
-    {
-        std::string meshPath;
-        if (registry.Has<MeshRendererComponent>(e))
-            meshPath = registry.Get<MeshRendererComponent>(e).meshPath;
-
-        JPH::Ref<JPH::Shape> meshShape = meshPath.empty()
-            ? nullptr : GetOrCookMeshShape(meshPath);
-
-        if (meshShape)
-        {
-            return meshShape;
-        }
-        else
-        {
-            std::cerr << "[Jolt] MeshCollider fallback to Box (no mesh on entity " << e << ")\n";
-            JPH::Vec3 half(
-                std::max(0.5f * scl.x, 0.001f),
-                std::max(0.5f * scl.y, 0.001f),
-                std::max(0.5f * scl.z, 0.001f));
-            JPH::BoxShapeSettings settings(half, boxConvexRadius(half));
-            result = settings.Create();
-        }
-        break;
-    }
     }
 
     if (result.HasError())
@@ -453,62 +425,6 @@ JPH::Ref<JPH::Shape> PhysicsSystem::CreateShape(Registry& registry, Entity e)
     return result.Get();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// GetOrCookMeshShape — build (and cache) a static triangle-mesh shape
-// ─────────────────────────────────────────────────────────────────────────────
-JPH::Ref<JPH::Shape> PhysicsSystem::GetOrCookMeshShape(const std::string& meshPath)
-{
-    auto it = m_meshShapeCache.find(meshPath);
-    if (it != m_meshShapeCache.end())
-        return it->second;
-
-    if (!MeshManager::Get().Has(meshPath))
-    {
-        try { MeshManager::Get().Load(meshPath); }
-        catch (const std::exception& ex)
-        {
-            std::cerr << "[Jolt] Failed to load mesh: " << ex.what() << "\n";
-            m_meshShapeCache[meshPath] = nullptr;
-            return nullptr;
-        }
-    }
-
-    VulkanMesh& mesh = MeshManager::Get().Load(meshPath);
-    const auto& verts = mesh.GetVertices();
-    const auto& idxs  = mesh.GetIndices();
-
-    if (verts.empty() || idxs.empty() || idxs.size() % 3 != 0)
-    {
-        std::cerr << "[Jolt] MeshCollider: empty or malformed mesh: " << meshPath << "\n";
-        m_meshShapeCache[meshPath] = nullptr;
-        return nullptr;
-    }
-
-    JPH::VertexList joltVerts(verts.size());
-    for (size_t i = 0; i < verts.size(); ++i)
-        joltVerts[i] = JPH::Float3(verts[i].position.x, verts[i].position.y, verts[i].position.z);
-
-    JPH::IndexedTriangleList tris(idxs.size() / 3);
-    for (size_t i = 0; i < idxs.size() / 3; ++i)
-        tris[i] = JPH::IndexedTriangle(idxs[i*3], idxs[i*3+1], idxs[i*3+2]);
-
-    JPH::MeshShapeSettings settings(joltVerts, tris);
-    auto result = settings.Create();
-    if (result.HasError())
-    {
-        std::cerr << "[Jolt] Triangle mesh creation failed for: " << meshPath
-                  << " — " << result.GetError() << "\n";
-        m_meshShapeCache[meshPath] = nullptr;
-        return nullptr;
-    }
-
-    std::cout << "[Jolt] Triangle mesh created: " << meshPath
-              << " (" << verts.size() << " verts, " << idxs.size() / 3 << " tris)\n";
-
-    JPH::Ref<JPH::Shape> shape = result.Get();
-    m_meshShapeCache[meshPath] = shape;
-    return shape;
-}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // DestroyActor / DestroyController
@@ -795,13 +711,13 @@ void PhysicsSystem::SyncControllers(Registry& registry)
         }
 
         JPH::CharacterVirtualSettings settings;
-        settings.mMaxSlopeAngle           = JPH::DegreesToRadians(cc.slopeLimit);
-        settings.mShape                   = capsuleResult.Get();
-        settings.mCharacterPadding        = std::max(cc.skinWidth, 0.001f);
-        settings.mUp                      = JPH::Vec3::sAxisY();
-        settings.mSupportingVolume        = JPH::Plane(JPH::Vec3::sAxisY(), -radius);
-        settings.mPenetrationRecoverySpeed = 1.0f;
-        settings.mPredictiveContactDistance = 0.1f;
+        settings.mMaxSlopeAngle              = JPH::DegreesToRadians(cc.slopeLimit);
+        settings.mShape                      = capsuleResult.Get();
+        settings.mCharacterPadding           = std::max(cc.skinWidth, 0.001f);
+        settings.mUp                         = JPH::Vec3::sAxisY();
+        settings.mSupportingVolume           = JPH::Plane(JPH::Vec3::sAxisY(), -radius);
+        settings.mPenetrationRecoverySpeed   = 1.0f;
+        settings.mPredictiveContactDistance  = 0.1f;
 
         JPH::Ref<JPH::CharacterVirtual> character = new JPH::CharacterVirtual(
             &settings, ToJoltR(worldPos), JPH::Quat::sIdentity(), 0, m_physicsSystem.get());

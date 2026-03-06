@@ -638,11 +638,11 @@ void InspectorPanel::DrawColliderComponent()
         const bool          prevTrigger    = col.isTrigger;
 
         // Shape selector
-        const char* shapes[] = { "Box", "Sphere", "Capsule", "Mesh" };
+        const char* shapes[] = { "Box", "Sphere", "Capsule" };
         int shapeIdx = static_cast<int>(col.shape);
         ImGui::Text("Shape"); ImGui::SameLine(130.0f);
         ImGui::SetNextItemWidth(-1);
-        if (ImGui::Combo("##col_shape", &shapeIdx, shapes, 4))
+        if (ImGui::Combo("##col_shape", &shapeIdx, shapes, 3))
             col.shape = static_cast<ColliderShape>(shapeIdx);
 
         ImGui::Columns(2, "col_cols", false);
@@ -674,14 +674,6 @@ void InspectorPanel::DrawColliderComponent()
             ImGui::DragFloat("##col_chh", &col.capsuleHalfHeight, 0.01f, 0.001f, 999.0f, "%.3f");
             ImGui::NextColumn();
         }
-        else // Mesh
-        {
-            ImGui::TextDisabled("Uses MeshRenderer mesh.");
-            ImGui::NextColumn();
-            ImGui::TextDisabled("(Static actors only)");
-            ImGui::NextColumn();
-        }
-
         ImGui::Text("Center"); ImGui::NextColumn();
         ImGui::SetNextItemWidth(-1);
         ImGui::DragFloat3("##col_ctr", &col.center.x, 0.01f, -999.0f, 999.0f, "%.3f");

@@ -1,7 +1,7 @@
 #pragma once
 #include <glm/glm.hpp>
 
-enum class ColliderShape { Box, Sphere, Capsule, Mesh };
+enum class ColliderShape { Box, Sphere, Capsule };
 
 struct ColliderComponent
 {

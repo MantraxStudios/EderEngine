@@ -178,7 +178,6 @@ private:
     uint32_t             ShapeHash           (Registry& registry, Entity e) const;
     void                 DestroyActor        (Entity e);
     void                 DestroyController   (Entity e);
-    JPH::Ref<JPH::Shape> GetOrCookMeshShape  (const std::string& meshPath);
 
     JPH::BodyInterface& BodyIface() const
     {
@@ -198,7 +197,6 @@ private:
     std::vector<RawEvent>                                      m_events;
     std::unordered_map<Entity, ActorState>                     m_actors;
     std::unordered_map<Entity, JPH::Ref<JPH::CharacterVirtual>> m_controllers;
-    std::unordered_map<std::string, JPH::Ref<JPH::Shape>>      m_meshShapeCache;
 
     // body index → entity / isSensor (for contact removal lookup)
     std::unordered_map<uint32_t, Entity> m_bodyEntityMap;
