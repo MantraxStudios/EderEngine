@@ -53,6 +53,26 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
         prevTime = currTime;
         physAccum += dt;
 
+        // ── Scene transition (queued by Scene.load()) ─────────────────────────
+        {
+            std::string next = LuaScriptSystem::Get().ConsumePendingScene();
+            if (!next.empty())
+            {
+                LuaScriptSystem::Get().Shutdown();
+                PhysicsSystem::Get().Shutdown();
+                m_registry.Clear();
+                m_scene.GetObjects().clear();
+                const auto bytes = Krayon::AssetManager::Get().GetBytes(next);
+                if (!bytes.empty())
+                    Krayon::SceneSerializer::LoadFromBytes(bytes, m_registry);
+                else
+                    Krayon::SceneSerializer::Load(next, m_registry);
+                PhysicsSystem::Get().Init();
+                LuaScriptSystem::Get().Init();
+                physAccum = 0.0f;
+            }
+        }
+
         PollEvents();
         ProcessInput(dt);
 
@@ -187,6 +207,26 @@ int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
             static_cast<float>(currTime - prevTime) / 1000.0f, MAX_DT);
         prevTime = currTime;
         physAccum += dt;
+
+        // ── Scene transition (queued by Scene.load()) ─────────────────────────
+        {
+            std::string next = LuaScriptSystem::Get().ConsumePendingScene();
+            if (!next.empty())
+            {
+                LuaScriptSystem::Get().Shutdown();
+                PhysicsSystem::Get().Shutdown();
+                m_registry.Clear();
+                m_scene.GetObjects().clear();
+                const auto bytes = Krayon::AssetManager::Get().GetBytes(next);
+                if (!bytes.empty())
+                    Krayon::SceneSerializer::LoadFromBytes(bytes, m_registry);
+                else
+                    Krayon::SceneSerializer::Load(next, m_registry);
+                PhysicsSystem::Get().Init();
+                LuaScriptSystem::Get().Init();
+                physAccum = 0.0f;
+            }
+        }
 
         PollEvents();
         ProcessInput(dt);

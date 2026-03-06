@@ -1505,4 +1505,11 @@ void LuaScriptSystem::BindAPI()
     Inp["MB_LEFT"]   = 1;
     Inp["MB_MIDDLE"] = 2;
     Inp["MB_RIGHT"]  = 3;
+
+    // ── Scene ─────────────────────────────────────────────────────────────────
+    sol::table SceneT = m_lua.create_named_table("Scene");
+    SceneT["load"] = [this](const std::string& path)
+    {
+        m_pendingScene = path;
+    };
 }

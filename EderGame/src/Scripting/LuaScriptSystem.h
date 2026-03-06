@@ -39,6 +39,14 @@ public:
 
     sol::state& GetState() { return m_lua; }
 
+    // Returns and clears the scene path queued by Scene.load(), or empty string.
+    std::string ConsumePendingScene()
+    {
+        std::string s = std::move(m_pendingScene);
+        m_pendingScene.clear();
+        return s;
+    }
+
 private:
     LuaScriptSystem()  = default;
     ~LuaScriptSystem() = default;
@@ -56,4 +64,5 @@ private:
     sol::state                                 m_lua;
     std::unordered_map<Entity, sol::environment> m_envs;
     bool                                       m_initialized = false;
+    std::string                                m_pendingScene;
 };

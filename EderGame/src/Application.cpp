@@ -30,6 +30,8 @@
 #include "Renderer/Vulkan/VulkanSwapchain.h"
 #include "Physics/PhysicsSystem.h"
 #include "Scripting/LuaScriptSystem.h"
+#include <IO/AssetManager.h>
+#include <IO/SceneSerializer.h>
 #include <IO/DebugDraw.h>
 
 int Application::Run()
@@ -59,6 +61,26 @@ int Application::Run()
 
         if (m_playingInline && m_editor.GetPlayState() == PlayState::Playing)
         {
+            // ── Scene transition (queued by Scene.load()) ─────────────────────
+            {
+                std::string next = LuaScriptSystem::Get().ConsumePendingScene();
+                if (!next.empty())
+                {
+                    LuaScriptSystem::Get().Shutdown();
+                    PhysicsSystem::Get().Shutdown();
+                    m_registry.Clear();
+                    m_scene.GetObjects().clear();
+                    const auto bytes = Krayon::AssetManager::Get().GetBytes(next);
+                    if (!bytes.empty())
+                        Krayon::SceneSerializer::LoadFromBytes(bytes, m_registry);
+                    else
+                        Krayon::SceneSerializer::Load(next, m_registry);
+                    PhysicsSystem::Get().Init();
+                    LuaScriptSystem::Get().Init();
+                    physAccum = 0.0f;
+                }
+            }
+
             physAccum += dt;
 
             int steps = 0;

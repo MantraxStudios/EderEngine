@@ -268,7 +268,6 @@ void PhysicsSystem::Shutdown()
     m_bodyIsSensor.clear();
 
     m_controllers.clear();
-    m_meshShapeCache.clear();
     m_events.clear();
     m_pendingDisplacement.clear();
     m_controllerGrounded.clear();
