@@ -79,10 +79,8 @@ if(WIN32)
             COMMENT "Copiando ${BIN}")
     endforeach()
 
-    # EderGraphics.dll + lua54.dll + PhysX DLLs
-    foreach(DLL EderGraphics.dll lua54.dll
-                PhysX_64.dll PhysXCommon_64.dll
-                PhysXFoundation_64.dll PhysXCooking_64.dll)
+    # EderGraphics.dll + lua54.dll + fmod.dll
+    foreach(DLL EderGraphics.dll lua54.dll fmod.dll)
         add_custom_command(TARGET EderHub POST_BUILD
             COMMAND ${CMAKE_COMMAND} -E copy_if_different
                 "${GAME_BIN}/${DLL}" "${OUT}/${DLL}"
@@ -94,6 +92,12 @@ if(WIN32)
         COMMAND ${CMAKE_COMMAND} -E copy_directory
             "${GAME_BIN}/Game/Content/shaders" "${OUT}/Game/Content/shaders"
         COMMENT "Copiando shaders")
+
+    # fonts/
+    add_custom_command(TARGET EderHub POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_directory
+            "${GAME_BIN}/Game/Content/fonts" "${OUT}/Game/Content/fonts"
+        COMMENT "Copiando fonts")
 
     # Ensure a default Game/Content tree exists so EderGame.exe works
     # when launched from EderHub/build/ without --workdir

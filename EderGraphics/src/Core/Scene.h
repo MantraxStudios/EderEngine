@@ -35,5 +35,6 @@ private:
     VulkanInstanceBuffer     instanceBuffer;
     VulkanInstanceBuffer     shadowInstanceBuffer;
     VulkanInstanceBuffer     transparentInstanceBuffer;
-    VulkanInstanceBuffer     skinnedInstanceBuffer;   // single-entry buffer for per-object skinned draws
+    VulkanInstanceBuffer     skinnedInstanceBuffer;    // single-entry buffer for per-object skinned draws
+    VulkanInstanceBuffer     subMeshInstanceBuffer;    // single-entry buffer for per-submesh multi-material draws
 };

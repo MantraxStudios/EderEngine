@@ -34,6 +34,7 @@ void Scene::Draw(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& 
         if (!obj.mesh || !obj.material) continue;
         if (obj.material->IsTransparent()) continue;  // skip transparents
         if (obj.isSkinned) continue;                  // skip skinned — drawn separately
+        if (!obj.subMeshMaterials.empty()) continue;  // skip multi-material — drawn per-submesh below
         groups[{ obj.mesh, obj.material }].push_back(obj.transform.GetMatrix());
     }
 
@@ -54,6 +55,30 @@ void Scene::Draw(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& 
         cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &viewProj);
         mesh->DrawInstanced(cmd, first, static_cast<uint32_t>(matrices.size()));
         first += static_cast<uint32_t>(matrices.size());
+    }
+
+    // ── Per-submesh multi-material objects ──────────────────────────────────────
+    for (auto& obj : objects)
+    {
+        if (!obj.mesh || obj.subMeshMaterials.empty()) continue;
+        if (obj.isSkinned) continue;
+
+        const glm::mat4 model = obj.transform.GetMatrix();
+        subMeshInstanceBuffer.Upload({ model });
+        subMeshInstanceBuffer.Bind(cmd);
+
+        uint32_t smCount = obj.mesh->GetSubmeshCount();
+        uint32_t matCount = static_cast<uint32_t>(obj.subMeshMaterials.size());
+        for (uint32_t si = 0; si < smCount; si++)
+        {
+            Material* mat = (si < matCount && obj.subMeshMaterials[si])
+                          ? obj.subMeshMaterials[si]
+                          : obj.material;
+            if (!mat || mat->IsTransparent()) continue;
+            mat->Bind(cmd, layout);
+            cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &viewProj);
+            obj.mesh->DrawSubMesh(cmd, si, 0, 1);
+        }
     }
 }
 
@@ -91,14 +116,33 @@ void Scene::DrawTransparent(vk::CommandBuffer cmd, VulkanPipeline& pipeline, con
     vk::PipelineLayout layout = *pipeline.GetLayout();
 
     // Collect + sort back-to-front
-    struct Entry { VulkanMesh* mesh; Material* mat; glm::mat4 model; float depth; };
+    struct Entry { VulkanMesh* mesh; Material* mat; glm::mat4 model; float depth; uint32_t submesh; };
     std::vector<Entry> entries;
     for (auto& obj : objects)
     {
-        if (!obj.mesh || !obj.material || !obj.material->IsTransparent()) continue;
-        glm::mat4 m   = obj.transform.GetMatrix();
-        float     d   = glm::length(glm::vec3(m[3]) - camPos);
-        entries.push_back({ obj.mesh, obj.material, m, d });
+        if (!obj.mesh) continue;
+        glm::mat4 m = obj.transform.GetMatrix();
+        float     d = glm::length(glm::vec3(m[3]) - camPos);
+
+        if (!obj.subMeshMaterials.empty())
+        {
+            // Multi-material: add one entry per transparent submesh
+            uint32_t smCount  = obj.mesh->GetSubmeshCount();
+            uint32_t matCount = static_cast<uint32_t>(obj.subMeshMaterials.size());
+            for (uint32_t si = 0; si < smCount; si++)
+            {
+                Material* mat = (si < matCount && obj.subMeshMaterials[si])
+                              ? obj.subMeshMaterials[si]
+                              : obj.material;
+                if (!mat || !mat->IsTransparent()) continue;
+                entries.push_back({ obj.mesh, mat, m, d, si });
+            }
+        }
+        else
+        {
+            if (!obj.material || !obj.material->IsTransparent()) continue;
+            entries.push_back({ obj.mesh, obj.material, m, d, UINT32_MAX });
+        }
     }
     std::stable_sort(entries.begin(), entries.end(),
               [](const Entry& a, const Entry& b){ return a.depth > b.depth; });
@@ -118,7 +162,10 @@ void Scene::DrawTransparent(vk::CommandBuffer cmd, VulkanPipeline& pipeline, con
     {
         entries[i].mat->Bind(cmd, layout);
         cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &viewProj);
-        entries[i].mesh->DrawInstanced(cmd, i, 1);
+        if (entries[i].submesh == UINT32_MAX)
+            entries[i].mesh->DrawInstanced(cmd, i, 1);
+        else
+            entries[i].mesh->DrawSubMesh(cmd, entries[i].submesh, i, 1);
     }
 }
 
@@ -197,5 +244,6 @@ void Scene::Destroy()
     instanceBuffer.Destroy();
     shadowInstanceBuffer.Destroy();
     transparentInstanceBuffer.Destroy();
+    subMeshInstanceBuffer.Destroy();
     objects.clear();
 }

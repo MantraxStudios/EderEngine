@@ -3,10 +3,9 @@
 layout(location = 0) in  vec2 fragUV;
 layout(location = 0) out vec4 outColor;
 
-// ── Set 0 : volumetric-specific resources ───────────────────────────────────
 layout(set = 0, binding = 0) uniform sampler2D      sceneTex;
 layout(set = 0, binding = 1) uniform sampler2D      depthTex;
-layout(set = 0, binding = 2) uniform sampler2DArray shadowMapTex;   // cascade array (4 layers)
+layout(set = 0, binding = 2) uniform sampler2DArray shadowMapTex;
 
 layout(set = 0, binding = 3) uniform VolumetricUBO
 {
@@ -21,7 +20,6 @@ layout(set = 0, binding = 3) uniform VolumetricUBO
     vec4  tint;
 } ubo;
 
-// ── Set 1 : LightBuffer (same layout as triangle.frag) ───────────────────────
 #define MAX_DIR_LIGHTS   4
 #define MAX_POINT_LIGHTS 16
 #define MAX_SPOT_LIGHTS  8
@@ -56,23 +54,19 @@ layout(set = 1, binding = 0) uniform LightUBO
 layout(set = 1, binding = 2) uniform sampler2DArray   spotShadowMap;
 layout(set = 1, binding = 3) uniform samplerCubeArray pointShadowMap;
 
-// ── Interleaved Gradient Noise (better distribution than sin-hash) ──────────
 float IGN(vec2 pixelPos)
 {
     return fract(52.9829189 * fract(0.06711056 * pixelPos.x + 0.00583715 * pixelPos.y));
 }
 
-// ── Sphere vs ray-segment intersection (pre-cull lights) ─────────────────────
-// Returns true if the sphere (center, radius) intersects the segment [0, tMax].
 bool SphereIntersectsRay(vec3 origin, vec3 dir, float tMax, vec3 center, float radius)
 {
     vec3  oc = center - origin;
-    float tc = clamp(dot(oc, dir), 0.0, tMax);   // closest t on ray to sphere center
+    float tc = clamp(dot(oc, dir), 0.0, tMax);
     vec3  cl = origin + dir * tc;
     return dot(center - cl, center - cl) <= radius * radius;
 }
 
-// ── Henyey-Greenstein phase function ────────────────────────────────────────
 float HenyeyGreenstein(float cosTheta, float g)
 {
     float g2  = g * g;
@@ -80,7 +74,6 @@ float HenyeyGreenstein(float cosTheta, float g)
     return (1.0 - g2) / (4.0 * 3.14159265359 * pow(den, 1.5));
 }
 
-// ── Cascade shadow map visibility ────────────────────────────────────────────
 float SampleCascade(vec3 worldPos, int cascade)
 {
     vec4  sc  = ubo.shadowMatrix[cascade] * vec4(worldPos, 1.0);
@@ -90,8 +83,7 @@ float SampleCascade(vec3 worldPos, int cascade)
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 ||
         ref  < 0.0 || ref  > 1.0)
         return 1.0;
-    float stored = texture(shadowMapTex, vec3(uv, float(cascade))).r;
-    return (stored >= ref - 0.0005) ? 1.0 : 0.0;
+    return (texture(shadowMapTex, vec3(uv, float(cascade))).r >= ref - 0.0005) ? 1.0 : 0.0;
 }
 
 float DirVisibility(vec3 worldPos, float viewDist)
@@ -103,7 +95,6 @@ float DirVisibility(vec3 worldPos, float viewDist)
     return SampleCascade(worldPos, cascade);
 }
 
-// ── Spot shadow visibility ────────────────────────────────────────────────────
 float SpotVisibility(vec3 worldPos, int slot)
 {
     vec4  sc  = lights.spotMatrices[slot] * vec4(worldPos, 1.0);
@@ -113,11 +104,9 @@ float SpotVisibility(vec3 worldPos, int slot)
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 ||
         ref  < 0.0 || ref  > 1.0)
         return 1.0;
-    float stored = texture(spotShadowMap, vec3(uv, float(slot))).r;
-    return (stored >= ref - 0.002) ? 1.0 : 0.0;
+    return (texture(spotShadowMap, vec3(uv, float(slot))).r >= ref - 0.002) ? 1.0 : 0.0;
 }
 
-// ── Point shadow visibility ───────────────────────────────────────────────────
 float PointVisibility(vec3 worldPos, vec3 lightPos, int slot, float farPlane)
 {
     vec3  dir    = worldPos - lightPos;
@@ -126,18 +115,13 @@ float PointVisibility(vec3 worldPos, vec3 lightPos, int slot, float farPlane)
     return (stored >= dist - 0.15) ? 1.0 : 0.0;
 }
 
-// ── Karis/Epic (2013) windowed inverse-square.
-// Range-precise: physically bright near source, exactly 0 at radius boundary.
 float DistAtten(float dist, float radius)
 {
-    float r2     = radius * radius;
-    float minDSq = r2 * 0.0001;  // prevent singularity (clamp to 1% of range)
     float x      = clamp(dist / max(radius, 0.0001), 0.0, 1.0);
     float window = max(0.0, 1.0 - x * x * x * x);
-    return (r2 / max(dist * dist, minDSq)) * (window * window);
+    return window * window;
 }
 
-// ── Reconstruct world position from depth ────────────────────────────────────
 vec3 ReconstructWorldPos(vec2 uv, float depth)
 {
     vec4 ndc   = vec4(uv * 2.0 - 1.0, depth, 1.0);
@@ -145,7 +129,6 @@ vec3 ReconstructWorldPos(vec2 uv, float depth)
     return world.xyz / world.w;
 }
 
-// ── Main ─────────────────────────────────────────────────────────────────────
 void main()
 {
     vec3  sceneColor = texture(sceneTex, fragUV).rgb;
@@ -161,8 +144,9 @@ void main()
     float fragDist     = length(toFrag);
     vec3  rayDir       = toFrag / max(fragDist, 0.0001);
 
-    float marchDist = isSky ? maxDist : min(fragDist, maxDist);
-    int   steps     = ubo.iparams.x;
+    float marchDist  = maxDist;
+    float sceneDist  = isSky ? maxDist : min(fragDist, maxDist);
+    int   steps      = ubo.iparams.x;
 
     float density    = ubo.params.x;
     float absorption = ubo.params.y;
@@ -174,20 +158,17 @@ void main()
     float stepSize   = marchDist / float(max(steps, 1));
     float stepT      = exp(-extinction * stepSize);
 
-    // ── Interleaved Gradient Noise for jitter ────────────────────────────────
-    float noise  = IGN(gl_FragCoord.xy);
-    float startT = stepSize * (0.5 + jitter * (noise - 0.5));
+    float sceneTransmittance = exp(-extinction * sceneDist);
 
-    // ── Pre-compute directional phase (constant along the ray) ───────────────
+    float noise  = IGN(gl_FragCoord.xy);
+    float startT = stepSize * noise * jitter;
+
     float dirCos   = dot(rayDir, ubo.lightDir.xyz);
     float dirPhase = HenyeyGreenstein(dirCos, g);
-    // Sky pixels already represent the lit atmosphere — adding directional scatter
-    // on top would double-count it and tint the skybox whites.  Zero it out for
-    // sky pixels; point/spot lights still contribute so beams remain visible.
-    vec3  dirColor = isSky ? vec3(0.0)
-                           : ubo.lightColor.xyz * ubo.lightColor.w * tint * dirPhase;
+    vec3  dirColor = ubo.lightColor.xyz * ubo.lightColor.w * tint * dirPhase;
 
-    // ── Pre-cull lights: skip any light whose sphere misses the full ray ──────
+    vec3  ambientLight = (lights.skyAmbient.rgb + lights.groundAmbient.rgb) * 0.5;
+
     bool pointActive[MAX_POINT_LIGHTS];
     for (int p = 0; p < lights.numPointLights; p++)
         pointActive[p] = SphereIntersectsRay(camPos, rayDir, marchDist,
@@ -204,20 +185,19 @@ void main()
 
     for (int i = 0; i < steps; i++)
     {
-        float t   = startT + float(i) * stepSize;
-        // Energy-conserving step weight
+        float t          = startT + float(i) * stepSize;
         float stepWeight = transmittance * (1.0 - stepT) / max(extinction, 1e-7);
+        vec3  pos        = camPos + rayDir * t;
+        float inScene    = (t <= sceneDist) ? 1.0 : 0.0;
 
-        vec3  pos = camPos + rayDir * t;
+        scatter += ambientLight * tint * density * stepWeight * inScene;
 
-        // ── Directional light ─────────────────────────────────────────────────
         float dirVis = DirVisibility(pos, t);
-        scatter += dirColor * density * dirVis * stepWeight;
+        scatter += dirColor * density * dirVis * stepWeight * inScene;
 
-        // ── Point lights ──────────────────────────────────────────────────────
         for (int p = 0; p < lights.numPointLights; p++)
         {
-            if (!pointActive[p]) continue;   // sphere misses entire ray segment
+            if (!pointActive[p]) continue;
 
             vec3  lpos  = lights.pointLights[p].position;
             float lrad  = lights.pointLights[p].radius;
@@ -235,13 +215,12 @@ void main()
             float vis   = (sidx >= 0) ? PointVisibility(pos, lpos, sidx, farP) : 1.0;
 
             vec3 lcolor = lights.pointLights[p].color * lights.pointLights[p].intensity;
-            scatter += lcolor * tint * density * phase * atten * vis * stepWeight;
+            scatter += lcolor * tint * density * phase * atten * vis * stepWeight * inScene;
         }
 
-        // ── Spot lights ───────────────────────────────────────────────────────
         for (int s = 0; s < lights.numSpotLights; s++)
         {
-            if (!spotActive[s]) continue;    // sphere misses entire ray segment
+            if (!spotActive[s]) continue;
 
             vec3  lpos  = lights.spotLights[s].position;
             float lrad  = lights.spotLights[s].radius;
@@ -249,13 +228,11 @@ void main()
             float dist  = length(ltoP);
             if (dist > lrad) continue;
 
-            vec3  ldir  = ltoP / dist;
-            float atten = DistAtten(dist, lrad);
-
-            // Cone attenuation
-            float cosA    = dot(-ldir, lights.spotLights[s].direction);
-            float inner   = lights.spotLights[s].innerCos;
-            float outer   = lights.spotLights[s].outerCos;
+            vec3  ldir     = ltoP / dist;
+            float atten    = DistAtten(dist, lrad);
+            float cosA     = dot(-ldir, lights.spotLights[s].direction);
+            float inner    = lights.spotLights[s].innerCos;
+            float outer    = lights.spotLights[s].outerCos;
             float coneFact = clamp((cosA - outer) / max(inner - outer, 0.0001), 0.0, 1.0);
             if (coneFact < 0.001) continue;
 
@@ -266,20 +243,15 @@ void main()
             float vis  = (sidx >= 0) ? SpotVisibility(pos, sidx) : 1.0;
 
             vec3 lcolor = lights.spotLights[s].color * lights.spotLights[s].intensity;
-            scatter += lcolor * tint * density * phase * atten * coneFact * vis * stepWeight;
+            scatter += lcolor * tint * density * phase * atten * coneFact * vis * stepWeight * inScene;
         }
 
         transmittance *= stepT;
         if (transmittance < 0.001) break;
     }
 
-    // ── Transparency mask ─────────────────────────────────────────────────
-    // For sky pixels, alpha is 1.0 (nothing transparent in front of the sky).
     float transAlpha = isSky ? 1.0 : texture(sceneTex, fragUV).a;
 
-    // ── Soft knee (Reinhard on scatter luminance) ─────────────────────────
-    float scatterLum = dot(scatter, vec3(0.2126, 0.7152, 0.0722));
-    float knee = 1.0 / (1.0 + scatterLum * (finalMult * 0.35));
-
-    outColor = vec4(sceneColor + scatter * knee * finalMult * transAlpha, 1.0);
+    vec3 finalScatter = scatter * finalMult * transAlpha;
+    outColor = vec4(sceneColor * sceneTransmittance + finalScatter, 1.0);
 }

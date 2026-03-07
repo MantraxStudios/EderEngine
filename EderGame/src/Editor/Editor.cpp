@@ -249,8 +249,9 @@ void Editor::Draw(Camera& cam, Registry& registry, float dt)
     if (cameraPanel .open) cameraPanel .OnDraw();
     if (hierarchy   .open) hierarchy   .OnDraw();
     if (inspector   .open) inspector   .OnDraw();
-    if (assetBrowser.open) assetBrowser.OnDraw();
+    if (assetBrowser.open)  assetBrowser.OnDraw();
     if (materialEditor.open) materialEditor.OnDraw();
+    if (postProcess.open)   postProcess.OnDraw();
     if (sceneView  .open)
     {
         ImVec2 svSize   = sceneView.GetDesiredSize();
@@ -521,6 +522,7 @@ void Editor::DrawMenuBar()
         ImGui::MenuItem("Stats",          nullptr, &stats       .open);
         ImGui::MenuItem("Asset Browser",    nullptr, &assetBrowser  .open);
         ImGui::MenuItem("Material Editor",  nullptr, &materialEditor.open);
+        ImGui::MenuItem("Post Process",     nullptr, &postProcess   .open);
         ImGui::Separator();
         ImGui::MenuItem("ImGui Demo",     nullptr, &showDemo);
         ImGui::EndMenu();

@@ -46,6 +46,14 @@ struct SceneNode
     int                   boneIndex = -1;  // -1 if this node is not a bone
 };
 
+// ── Sub-mesh range (one per Assimp mesh node) ────────────────────────────────
+struct SubMeshInfo
+{
+    uint32_t    firstIndex  = 0;
+    uint32_t    indexCount  = 0;
+    std::string name;           // Assimp material name (display hint)
+};
+
 class EDERGRAPHICS_API VulkanMesh
 {
 public:
@@ -58,10 +66,14 @@ public:
     void LoadFromMemory (const uint8_t* data, size_t size, const std::string& hint = "");
 
     void DrawInstanced  (vk::CommandBuffer cmd, uint32_t firstInstance, uint32_t instanceCount);
+    void DrawSubMesh    (vk::CommandBuffer cmd, uint32_t submeshIndex, uint32_t firstInstance, uint32_t instanceCount);
     void Destroy        ();
 
     uint32_t GetIndexCount()  const { return indexCount; }
     uint32_t GetVertexCount() const { return vertexCount; }
+
+    uint32_t          GetSubmeshCount() const { return static_cast<uint32_t>(m_submeshes.size()); }
+    const SubMeshInfo& GetSubmeshInfo(uint32_t i) const { return m_submeshes[i]; }
 
     // ── Animation queries ──────────────────────────────────────────────────    // ── Bounds (local space, set during load) ─────────────────────────────
     /// Returns the axis-aligned bounding box in local/object space.
@@ -115,6 +127,9 @@ private:
     uint32_t                         rootNodeIndex = 0;
     std::map<std::string, uint32_t>  nodeNameToIndex;
     glm::mat4                        globalInverseTransform = glm::mat4(1.0f);
+
+    // ── Sub-meshes ─────────────────────────────────────────────────────────
+    std::vector<SubMeshInfo> m_submeshes;
 
     // ── AABB ───────────────────────────────────────────────────────────────
     glm::vec3 m_boundsMin = glm::vec3( FLT_MAX);

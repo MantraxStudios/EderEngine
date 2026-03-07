@@ -1,0 +1,4 @@
+guid=bc56d93a36eac52b
+type=Shader
+name=passthrough.frag
+path=shaders/passthrough.frag.spv

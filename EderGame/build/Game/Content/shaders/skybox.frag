@@ -115,12 +115,6 @@ vec3 ComputeSky(vec3 rd, vec3 sun, float intensity)
     return scatter;
 }
 
-vec3 ACESFilm(vec3 x)
-{
-    float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
-    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
-}
-
 float hash2(vec2 p)
 {
     p  = fract(p * vec2(0.1031, 0.1030));
@@ -151,23 +145,13 @@ float StarField(vec3 rd, float density)
 
 void main()
 {
-    // Build the view-space ray direction using ONLY the diagonal x/y scale
-    // factors of inverseProj (which encode FOV + aspect ratio).  We hardcode
-    // z = -1 (view-space forward) instead of sampling z from the full matrix
-    // multiply, because GLM_FORCE_DEPTH_ZERO_TO_ONE changes the z/w rows of
-    // the inverse projection and would make the z contribution vary per-pixel,
-    // distorting the sun disk differently at each aspect ratio.
-    //   inverseProj[col][row] in GLSL (column-major):
-    //     [0][0]  =  a/f   (a = aspect, f = cot(fov/2))
-    //     [1][1]  = ±1/f   (sign from the Vulkan Y-flip in GetProjection)
-    vec2 ndc = inUVs * 2.0 - 1.0;
+    vec2 ndc    = inUVs * 2.0 - 1.0;
     vec3 viewRay = vec3(
-        camData.inverseProj[0][0] * ndc.x,  // horizontal: accounts for aspect + FOV
-        camData.inverseProj[1][1] * ndc.y,  // vertical:   accounts for FOV + Vulkan flip
-        -1.0                                 // view-space forward (-Z)
+        camData.inverseProj[0][0] * ndc.x,
+        camData.inverseProj[1][1] * ndc.y,
+        -1.0
     );
 
-    // Rotate to world space (w = 0 → translation is NOT applied — direction only).
     vec3 rd = normalize((camData.inverseView * vec4(viewRay, 0.0)).xyz);
     rd.x = -rd.x;
 
@@ -204,22 +188,21 @@ void main()
     float uzon = clamp(skyRd.y * 1.5, 0.0, 1.0);
     hdr += vec3(0.08, 0.03, 0.20) * twi * uzon * itn * 0.08;
 
-    vec3 sky = ACESFilm(hdr * 0.50);
-    sky = pow(max(sky, 0.0), vec3(1.0 / 2.2));
+    vec3 sky = hdr * 0.50;
 
     float night = clamp(-sunY * 4.0, 0.0, 1.0);
     float upY   = clamp(rd.y * 2.0, 0.0, 1.0);
-    sky = mix(sky, max(sky, vec3(0.004, 0.008, 0.020)), night * upY);
+    sky = mix(sky, max(sky, vec3(0.0003, 0.0006, 0.0015)), night * upY);
 
     if (night > 0.05 && rd.y > 0.0)
     {
         float sn = night * clamp(rd.y * 3.0, 0.0, 1.0);
-        sky += vec3(0.80, 0.90, 1.00) * StarField(rd, 0.020) * sn;
+        sky += vec3(0.80, 0.90, 1.00) * StarField(rd, 0.020) * sn * 0.15;
     }
 
     float belowT = clamp(-rd.y * 12.0, 0.0, 1.0);
     vec3  gHDR   = vec3(0.08, 0.065, 0.050) * clamp(effI * 0.20 + 0.010, 0.010, 1.0);
-    vec3  gCol   = pow(max(ACESFilm(gHDR * 0.50), 0.0), vec3(1.0 / 2.2));
+    vec3  gCol   = gHDR * 0.50;
     gCol = mix(gCol, gCol * vec3(1.1, 0.75, 0.50), snh * 0.5);
 
     float blend = smoothstep(0.0, 1.0, belowT);

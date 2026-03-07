@@ -3,16 +3,12 @@ name=Untitled
 
 [entity]
 id=1
-tag.name=Entity
-transform.pos=-4.017608 -1.230605 -2.464318
+tag.name=Player
+transform.pos=-4.442896 -1.230590 1.820469
 transform.rot=-0.000000 0.000000 0.000000
 transform.scale=1.000000 1.000000 1.000000
-mesh.guid=e064c46f5ac5c8ad
-mesh.path=meshes/cylinder.fbx
-mesh.matGuid=0
-mesh.matName=default
-mesh.castShadow=1
-mesh.visible=1
+hierarchy.parent=0
+hierarchy.children=9
 script.guid=552962c7578b2f05
 script.path=scripts/playercontroller.lua
 cc.radius=0.3
@@ -196,5 +192,51 @@ audio.loop=1
 audio.playOnAwake=1
 audio.spatial=1
 audio.muted=0
+[/entity]
+
+[entity]
+id=9
+tag.name=Camera
+transform.pos=0.000000 0.793019 0.000000
+transform.rot=-0.000000 0.000000 0.000000
+transform.scale=1.000000 1.000000 1.000000
+hierarchy.parent=1
+hierarchy.children=10
+script.guid=0
+script.path=
+[/entity]
+
+[entity]
+id=10
+tag.name=Lintern
+transform.pos=0.000000 0.000000 0.000000
+transform.rot=77.222130 0.000000 0.000010
+transform.scale=1.000000 0.999988 0.999988
+hierarchy.parent=9
+hierarchy.children=
+light.type=2
+light.color=1.000000 1.000000 1.000000
+light.intensity=1
+light.range=10
+light.innerCone=15
+light.outerCone=30
+light.castShadow=0
+light.vol.enabled=0
+light.vol.steps=64
+light.vol.density=0.008
+light.vol.absorption=0
+light.vol.g=0.3
+light.vol.intensity=0.5
+light.vol.maxDist=40
+light.vol.jitter=1
+light.vol.tint=1.000000 0.950000 0.850000
+light.shafts.enabled=0
+light.shafts.density=1
+light.shafts.bloom=1
+light.shafts.decay=0.97
+light.shafts.weight=2
+light.shafts.exposure=0.85
+light.shafts.sunRadius=0.012
+light.shafts.tint=1.000000 0.950000 0.850000
 [/entity]
 

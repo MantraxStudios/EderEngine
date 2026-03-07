@@ -20,7 +20,7 @@ layout(location = 0) out vec3 fragWorldPos;
 
 layout(push_constant) uniform Push {
     mat4 lightViewProj;
-    vec4 lightPosAndFar;  // xyz = light position, w = far plane
+    vec4 lightPosAndFar;  
 };
 
 void main()

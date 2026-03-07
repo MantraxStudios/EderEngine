@@ -342,6 +342,129 @@ void InspectorPanel::DrawMeshRendererComponent()
                 if (mm) m.materialName = mm->name;
             }
         }
+        // ── Per-submesh material slots ────────────────────────────
+        {
+            uint32_t smCount = 0;
+            if (m_getMeshSubmeshCount && m.meshGuid != 0)
+                smCount = m_getMeshSubmeshCount(m.meshGuid);
+
+            if (smCount > 1)
+            {
+                if (m.subMeshMaterialGuids.size() != smCount)
+                {
+                    m.subMeshMaterialGuids.resize(smCount, 0);
+                    m.subMeshMaterialNames.resize(smCount);
+                }
+
+                ImGui::Spacing();
+                ImGui::TextDisabled("-- Sub-mesh Materials --");
+                ImGui::SameLine();
+                if (ImGui::SmallButton("Auto-detect") && m_getMeshSubmeshName)
+                {
+                    auto& am = Krayon::AssetManager::Get();
+                    auto toLower = [](std::string s) {
+                        for (auto& c : s) c = (char)std::tolower((unsigned char)c);
+                        return s;
+                    };
+
+                    const auto& allAssets = am.GetAll();
+                    for (uint32_t si = 0; si < smCount; si++)
+                    {
+                        std::string smName = m_getMeshSubmeshName(m.meshGuid, si);
+                        if (smName.empty()) continue;
+                        std::string smLow = toLower(smName);
+
+                        // 1st pass: exact name match on existing .mat
+                        uint64_t matGuid = 0;
+                        for (auto& [guid, asset] : allAssets)
+                        {
+                            if (asset.type != Krayon::AssetType::Material) continue;
+                            if (toLower(asset.name) == smLow) { matGuid = guid; break; }
+                        }
+                        // 2nd pass: contains match on .mat
+                        if (!matGuid)
+                        {
+                            for (auto& [guid, asset] : allAssets)
+                            {
+                                if (asset.type != Krayon::AssetType::Material) continue;
+                                std::string an = toLower(asset.name);
+                                if (an.find(smLow) != std::string::npos ||
+                                    smLow.find(an)  != std::string::npos)
+                                { matGuid = guid; break; }
+                            }
+                        }
+                        // 3rd pass: find a matching texture and CREATE a .mat from it
+                        if (!matGuid)
+                        {
+                            uint64_t texGuid = 0;
+                            for (auto& [guid, asset] : allAssets)
+                            {
+                                if (asset.type != Krayon::AssetType::Texture) continue;
+                                std::string an = toLower(asset.name);
+                                if (an == smLow ||
+                                    an.find(smLow) != std::string::npos ||
+                                    smLow.find(an)  != std::string::npos)
+                                { texGuid = guid; break; }
+                            }
+                            if (texGuid)
+                            {
+                                // Create a real .mat file so it can be edited in the Material Editor
+                                uint64_t newGuid = am.CreateMaterialAsset("assets/materials", smName);
+                                if (newGuid)
+                                {
+                                    Krayon::MaterialAsset ma;
+                                    if (am.ReadMaterialAsset(newGuid, ma))
+                                    {
+                                        ma.albedoTexGuid = texGuid;
+                                        am.SaveMaterialAsset(newGuid, ma);
+                                    }
+                                    matGuid = newGuid;
+                                }
+                            }
+                        }
+
+                        if (matGuid)
+                        {
+                            m.subMeshMaterialGuids[si] = matGuid;
+                            const auto* mm = am.FindByGuid(matGuid);
+                            m.subMeshMaterialNames[si] = mm ? mm->name : "";
+                        }
+                    }
+                }
+                for (uint32_t si = 0; si < smCount; si++)
+                {
+                    ImGui::PushID((int)si);
+                    // Build label: "Slot N (AssipmName)"
+                    std::string smHint = m_getMeshSubmeshName
+                        ? m_getMeshSubmeshName(m.meshGuid, si) : "";
+                    char label[128];
+                    if (!smHint.empty())
+                        snprintf(label, sizeof(label), "Slot %u (%s)", si, smHint.c_str());
+                    else
+                        snprintf(label, sizeof(label), "Slot %u", si);
+                    std::string displayPath = m.subMeshMaterialNames[si];
+                    if (m.subMeshMaterialGuids[si] != 0)
+                    {
+                        const auto* mm = Krayon::AssetManager::Get().FindByGuid(m.subMeshMaterialGuids[si]);
+                        if (mm) displayPath = mm->path;
+                    }
+                    std::string newPath; uint64_t newGuid = 0;
+                    if (AssetDropField(label, Krayon::AssetType::Material, displayPath, newPath, newGuid))
+                    {
+                        m.subMeshMaterialGuids[si] = newGuid;
+                        const auto* mm2 = Krayon::AssetManager::Get().FindByGuid(newGuid);
+                        m.subMeshMaterialNames[si] = mm2 ? mm2->name : newPath;
+                    }
+                    if (m_openMaterial && m.subMeshMaterialGuids[si] != 0)
+                    {
+                        ImGui::SameLine();
+                        if (ImGui::SmallButton("Edit"))
+                            m_openMaterial(m.subMeshMaterialGuids[si]);
+                    }
+                    ImGui::PopID();
+                }
+            }
+        }
         ImGui::Spacing();
         ImGui::Checkbox("Visible",     &m.visible);
         ImGui::SameLine(120);

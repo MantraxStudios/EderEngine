@@ -1,6 +1,7 @@
 #pragma once
 #include <string>
 #include <cstdint>
+#include <vector>
 
 struct MeshRendererComponent
 {
@@ -10,4 +11,9 @@ struct MeshRendererComponent
     std::string materialName = "default";
     bool        castShadow   = true;
     bool        visible      = true;
+
+    // Per-submesh material overrides (optional).
+    // If populated, size should match the mesh's GetSubmeshCount().
+    std::vector<uint64_t>    subMeshMaterialGuids;   // GUID per slot (0 = inherit base material)
+    std::vector<std::string> subMeshMaterialNames;   // name per slot (fallback when GUID is 0)
 };

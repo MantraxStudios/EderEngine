@@ -5,6 +5,7 @@
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/ColliderComponent.h"
 #include "ECS/Components/CharacterControllerComponent.h"
+#include "ECS/Systems/TransformSystem.h"
 #include <IO/AssetManager.h>
 #include <IO/DebugDraw.h>
 #include <fstream>
@@ -312,7 +313,7 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
 
         bool isSel = (e == selectedEntity);
 
-        glm::mat4 world = t.GetMatrix();
+        glm::mat4 world = TransformSystem::GetWorldMatrix(e, registry);
         glm::vec3 pos   = glm::vec3(world[3]);
 
         glm::vec4 col = isSel
@@ -363,7 +364,7 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
         else if (col.isTrigger) color = glm::vec4(0.00f, 0.90f, 0.90f, 0.75f);
         else                    color = glm::vec4(0.15f, 0.80f, 0.15f, 0.75f);
 
-        glm::mat4 world = t.GetMatrix();
+        glm::mat4 world = TransformSystem::GetWorldMatrix(e, registry);
         uint32_t  start = static_cast<uint32_t>(verts.size());
 
         if (col.shape == ColliderShape::Box)
@@ -401,7 +402,7 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
             ? glm::vec4(1.0f, 0.75f, 0.10f, 1.00f)
             : glm::vec4(1.0f, 0.55f, 0.10f, 0.75f);
 
-        glm::mat4 world   = t.GetMatrix();
+        glm::mat4 world   = TransformSystem::GetWorldMatrix(e, registry);
         float     halfHgt = std::max((cc.height * 0.5f) - cc.radius, 0.0f);
         uint32_t  startIdx = static_cast<uint32_t>(verts.size());
 

@@ -763,7 +763,7 @@ void PlayerApp::SyncECSToScene()
         m_camera.fov       = cam.fov;
         m_camera.nearPlane = cam.nearPlane;
         m_camera.farPlane  = cam.farPlane;
-        m_camera.SetOrientation(std::atan2(fwd.x, -fwd.z),
+        m_camera.SetOrientation(std::atan2(-fwd.x, -fwd.z),
                                 std::asin(glm::clamp(fwd.y, -1.0f, 1.0f)));
     });
 }

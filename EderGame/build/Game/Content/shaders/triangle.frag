@@ -36,10 +36,8 @@ layout(set = 1, binding = 0) uniform LightUBO {
     int              numPointLights;
     int              numSpotLights;
     float            _pad;
-    vec3             cameraPos;
-    float            _pad2;
-    vec3             cameraForward;
-    float            _pad3;
+    vec3             cameraPos;    float _pad2;
+    vec3             cameraForward; float _pad3;
     vec4             cascadeSplits;
     mat4             cascadeMatrices[4];
     mat4             spotMatrices[4];
@@ -48,33 +46,25 @@ layout(set = 1, binding = 0) uniform LightUBO {
     vec4             groundAmbient;
 } lights;
 
-layout(set = 1, binding = 1) uniform sampler2DArray    shadowMap;
-layout(set = 1, binding = 2) uniform sampler2DArray    spotShadowMap;
-layout(set = 1, binding = 3) uniform samplerCubeArray  pointShadowMap;
+layout(set = 1, binding = 1) uniform sampler2DArray   shadowMap;
+layout(set = 1, binding = 2) uniform sampler2DArray   spotShadowMap;
+layout(set = 1, binding = 3) uniform samplerCubeArray pointShadowMap;
 
 layout(location = 0) out vec4 outColor;
 
-// ---------------------------------------------------------------------------
-// Lighting
-// ---------------------------------------------------------------------------
 vec3 CalcLight(vec3 N, vec3 L, vec3 V, vec3 lightColor, float intensity,
                vec3 baseColor, float roughness, float metallic)
 {
-    float NdotL   = max(dot(N, L), 0.0);
-    vec3  diffuse = baseColor * (1.0 - metallic) * lightColor * intensity * NdotL;
-
-    vec3  H         = normalize(L + V);
-    float shininess = pow(1.0 - roughness, 4.0) * 256.0 + 1.0;
-    float spec      = pow(max(dot(N, H), 0.0), shininess) * NdotL;
-    vec3  specColor = mix(vec3(0.04), baseColor, metallic);
-    vec3  specular  = specColor * lightColor * intensity * spec;
-
-    return diffuse + specular;
+    float NdotL = max(dot(N, L), 0.0);
+    vec3  diff  = baseColor * (1.0 - metallic) * lightColor * intensity * NdotL;
+    vec3  H     = normalize(L + V);
+    float NdotH = max(dot(N, H), 0.0);
+    float shine = max(1.0, pow(1.0 - roughness, 4.0) * 256.0);
+    float spec  = pow(NdotH, shine) * NdotL;
+    vec3  F0    = mix(vec3(0.04), baseColor, metallic);
+    return diff + F0 * lightColor * intensity * spec;
 }
 
-// ---------------------------------------------------------------------------
-// Vogel disk
-// ---------------------------------------------------------------------------
 vec2 VogelDisk(int i, int n, float phi)
 {
     float r     = sqrt((float(i) + 0.5) / float(n));
@@ -82,160 +72,129 @@ vec2 VogelDisk(int i, int n, float phi)
     return vec2(r * cos(theta), r * sin(theta));
 }
 
-// Hash cuantizado en world-space → ángulo fijo por celda, sin parpadeo al moverse
-float WorldHash(vec3 p)
+float IGN(vec2 p)
 {
-    return fract(dot(floor(p * 8.0 + 0.5), vec3(127.1, 311.7, 74.7)));
+    return fract(52.9829189 * fract(0.06711056 * p.x + 0.00583715 * p.y));
 }
 
-// ---------------------------------------------------------------------------
-// PCF de radio fijo — estilo Unreal Engine
-//
-// Unreal usa un kernel fijo de ~2–3 texels de radio con disco Poisson/Vogel
-// rotado por un hash en world-space. El resultado: bordes suaves y uniformes,
-// bien pegados al objeto, sin la zona pre-sombra difusa del PCSS.
-//
-// FILTER_TEXELS controla el suavizado:
-//   1.5  → sombra casi dura con bordes apenas suavizados
-//   2.5  → suave tipo Unreal (valor recomendado)
-//   4.0  → más suave, ligeramente más "dreamy"
-// ---------------------------------------------------------------------------
-#define FILTER_TEXELS 2.5
-#define PCF_N         16
+#define FILTER_TEXELS 1.0
+#define PCF_N         32
+
+const float cascadeBiasScale[4] = float[4](1.0, 2.0, 4.0, 8.0);
 
 float SampleCascade(vec3 worldPos, vec3 N, vec3 L, int cascade)
 {
     vec4 lsPos = lights.cascadeMatrices[cascade] * vec4(worldPos, 1.0);
-    vec3 proj   = lsPos.xyz / lsPos.w;
-    vec2 uv     = proj.xy * 0.5 + 0.5;
+    vec3 proj  = lsPos.xyz / lsPos.w;
+    vec2 uv    = proj.xy * 0.5 + 0.5;
 
-    if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 || proj.z > 1.0)
+    if (proj.z < 0.0 || proj.z > 1.0 ||
+        uv.x  < 0.0 || uv.x  > 1.0 ||
+        uv.y  < 0.0 || uv.y  > 1.0)
         return 1.0;
 
-    float NdotL = max(dot(N, L), 0.0);
-    float bias  = max(0.0006 * (1.0 - NdotL), 0.0001);
-    float recvZ = proj.z - bias;
+    float NdotL  = max(dot(N, L), 0.0);
+    float bias   = max(0.0005 * (1.0 - NdotL), 0.00005) * cascadeBiasScale[cascade];
+    float recvZ  = proj.z - bias;
 
-    vec2  texelSize = 1.0 / vec2(textureSize(shadowMap, 0).xy);
-    float filterR   = FILTER_TEXELS * texelSize.x;   // radio fijo, no depende de penumbra
-
-    // Rotación aleatoria por hash world-space → sin banding, sin parpadeo
-    float phi   = WorldHash(worldPos) * 6.28318530;
+    vec2  ts     = 1.0 / vec2(textureSize(shadowMap, 0).xy);
+    float fR     = FILTER_TEXELS * ts.x;
+    float phi    = IGN(gl_FragCoord.xy) * 6.28318530;
     float shadow = 0.0;
     for (int i = 0; i < PCF_N; i++)
     {
-        vec2  o       = VogelDisk(i, PCF_N, phi) * filterR;
-        float closest = texture(shadowMap, vec3(uv + o, float(cascade))).r;
-        shadow += (recvZ < closest) ? 1.0 : 0.0;
+        vec2 o = VogelDisk(i, PCF_N, phi) * fR;
+        shadow += (recvZ < texture(shadowMap, vec3(uv + o, float(cascade))).r) ? 1.0 : 0.0;
     }
     return shadow / float(PCF_N);
 }
 
-// ---------------------------------------------------------------------------
-// Shadow factor con selección de cascade + zona de blend
-// ---------------------------------------------------------------------------
 float ShadowFactor(vec3 worldPos, vec3 N, vec3 L)
 {
-    float depth = dot(worldPos - lights.cameraPos, lights.cameraForward);
-
-    int cascade = 3;
+    float depth   = dot(worldPos - lights.cameraPos, lights.cameraForward);
+    int   cascade = 3;
     for (int i = 0; i < 4; i++)
         if (depth < lights.cascadeSplits[i]) { cascade = i; break; }
 
     float shadow = SampleCascade(worldPos, N, L, cascade);
 
-    // Blend suave con el siguiente cascade en el último 10% antes del split
     if (cascade < 3)
     {
-        float splitFar   = lights.cascadeSplits[cascade];
-        float blendStart = splitFar * 0.90;
-        float blend      = clamp((depth - blendStart) / (splitFar - blendStart), 0.0, 1.0);
+        float far   = lights.cascadeSplits[cascade];
+        float blend = clamp((depth - far * 0.90) / (far * 0.10), 0.0, 1.0);
         if (blend > 0.0)
             shadow = mix(shadow, SampleCascade(worldPos, N, L, cascade + 1), blend);
     }
-
     return shadow;
 }
 
-// ---------------------------------------------------------------------------
-// Spot light shadow — PCF radio fijo
-// ---------------------------------------------------------------------------
 float ShadowSpot(int slot, vec3 worldPos, vec3 N, vec3 L)
 {
     vec4 lsPos = lights.spotMatrices[slot] * vec4(worldPos, 1.0);
     if (lsPos.w <= 0.0) return 1.0;
-
-    vec3 proj = lsPos.xyz / lsPos.w;
-    vec2 uv   = proj.xy * 0.5 + 0.5;
+    vec3 proj  = lsPos.xyz / lsPos.w;
+    vec2 uv    = proj.xy * 0.5 + 0.5;
     if (proj.z < 0.0 || proj.z > 1.0 ||
-        uv.x < 0.0 || uv.x > 1.0 ||
-        uv.y < 0.0 || uv.y > 1.0)
+        uv.x  < 0.0 || uv.x  > 1.0 ||
+        uv.y  < 0.0 || uv.y  > 1.0)
         return 1.0;
 
-    float NdotL     = max(dot(N, L), 0.0);
-    float bias      = max(0.0006 * (1.0 - NdotL), 0.0001);
-    float recvZ     = proj.z - bias;
-    vec2  texelSize = 1.0 / vec2(textureSize(spotShadowMap, 0).xy);
-    float filterR   = FILTER_TEXELS * texelSize.x;
-    float phi       = WorldHash(worldPos) * 6.28318530;
-
+    float NdotL  = max(dot(N, L), 0.0);
+    float bias   = max(0.0005 * (1.0 - NdotL), 0.0001);
+    float recvZ  = proj.z - bias;
+    vec2  ts     = 1.0 / vec2(textureSize(spotShadowMap, 0).xy);
+    float fR     = FILTER_TEXELS * ts.x;
+    float phi    = IGN(gl_FragCoord.xy) * 6.28318530;
     float shadow = 0.0;
     for (int i = 0; i < PCF_N; i++)
     {
-        vec2  o = VogelDisk(i, PCF_N, phi) * filterR;
-        float d = texture(spotShadowMap, vec3(uv + o, float(slot))).r;
-        shadow += (recvZ < d) ? 1.0 : 0.0;
+        vec2 o = VogelDisk(i, PCF_N, phi) * fR;
+        shadow += (recvZ < texture(spotShadowMap, vec3(uv + o, float(slot))).r) ? 1.0 : 0.0;
     }
     return shadow / float(PCF_N);
 }
 
-// ---------------------------------------------------------------------------
-// Point light shadow — PCF radio fijo en world-space
-// ---------------------------------------------------------------------------
 float ShadowPoint(int slot, vec3 worldPos, vec3 lightPos, vec3 N)
 {
-    vec3  dir      = worldPos - lightPos;
-    float dist     = length(dir);
-    float farPlane = lights.pointFarPlanes[slot];
-    float curDist  = dist / farPlane;
+    vec3  dir     = worldPos - lightPos;
+    float dist    = length(dir);
+    float farP    = lights.pointFarPlanes[slot];
+    float curDist = dist / farP;
     if (curDist >= 1.0) return 1.0;
 
     vec3  dirN  = dir / dist;
     float NdotL = max(dot(N, -dirN), 0.0);
-    float bias  = max(0.0005 * (1.0 - NdotL), 0.0001);
+    float bias  = max(0.005 * (1.0 - NdotL), 0.0005);
+    float fR    = FILTER_TEXELS * dist * 2.0 / 512.0;
 
-    // Radio fijo en world-space equivalente a FILTER_TEXELS texels del cubemap
-    float worldTexel = dist * 2.0 / 512.0;
-    float filterR    = FILTER_TEXELS * worldTexel;
+    vec3 up   = abs(dirN.y) < 0.99 ? vec3(0,1,0) : vec3(1,0,0);
+    vec3 tang = normalize(cross(up, dirN));
+    vec3 btan = cross(dirN, tang);
 
-    vec3 up      = abs(dirN.y) < 0.99 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
-    vec3 tangent = normalize(cross(up, dirN));
-    vec3 bitan   = cross(dirN, tangent);
-
-    float phi    = WorldHash(worldPos) * 6.28318530;
+    float phi    = IGN(gl_FragCoord.xy) * 6.28318530;
     float shadow = 0.0;
     for (int i = 0; i < PCF_N; i++)
     {
-        vec2  o    = VogelDisk(i, PCF_N, phi) * filterR;
-        vec3  sdir = dir + o.x * tangent + o.y * bitan;
-        float d    = texture(pointShadowMap, vec4(sdir, float(slot))).r;
-        shadow    += (curDist - bias > d) ? 0.0 : 1.0;
+        vec2 o    = VogelDisk(i, PCF_N, phi) * fR;
+        vec3 sdir = dir + o.x * tang + o.y * btan;
+        shadow   += (curDist - bias <= texture(pointShadowMap, vec4(sdir, float(slot))).r) ? 1.0 : 0.0;
     }
     return shadow / float(PCF_N);
 }
 
-// ---------------------------------------------------------------------------
-// Main
-// ---------------------------------------------------------------------------
 void main()
 {
-    vec3 baseColor = fragColor.rgb * texture(albedoTex, fragUV).rgb;
+    vec4  albedoSample = texture(albedoTex, fragUV);
+    float alpha        = fragColor.a * albedoSample.a;
+    if (material.alphaThreshold > 0.0 && alpha < material.alphaThreshold)
+        discard;
+
+    vec3 baseColor = fragColor.rgb * albedoSample.rgb;
     vec3 N         = normalize(fragNormal);
     vec3 V         = normalize(lights.cameraPos - fragWorldPos);
 
-    float hemi  = N.y * 0.5 + 0.5;
-    vec3 ambient = mix(lights.groundAmbient.rgb, lights.skyAmbient.rgb, hemi);
-    vec3 result  = baseColor * ambient;
+    float hemi   = N.y * 0.5 + 0.5;
+    vec3  result = baseColor * mix(lights.groundAmbient.rgb, lights.skyAmbient.rgb, hemi);
 
     for (int i = 0; i < lights.numDirLights; i++)
     {
@@ -248,19 +207,17 @@ void main()
 
     for (int i = 0; i < lights.numPointLights; i++)
     {
-        vec3  toLight = lights.pointLights[i].position - fragWorldPos;
-        float distSqr = dot(toLight, toLight);
-        float dist    = sqrt(distSqr);
-        float r       = lights.pointLights[i].radius;
+        vec3  toLight  = lights.pointLights[i].position - fragWorldPos;
+        float distSqr  = dot(toLight, toLight);
+        float dist     = sqrt(distSqr);
+        float r        = lights.pointLights[i].radius;
         if (dist >= r) continue;
-        float minDSq   = r * r * 0.0001;
         float normDist = dist / r;
         float window   = max(0.0, 1.0 - normDist * normDist * normDist * normDist);
-        float atten    = (r * r / max(distSqr, minDSq)) * (window * window);
+        float atten    = window * window;
         float shadow   = (lights.pointLights[i].shadowIdx >= 0)
-                        ? ShadowPoint(lights.pointLights[i].shadowIdx, fragWorldPos,
-                                      lights.pointLights[i].position, N)
-                        : 1.0;
+                       ? ShadowPoint(lights.pointLights[i].shadowIdx, fragWorldPos,
+                                     lights.pointLights[i].position, N) : 1.0;
         result += shadow * CalcLight(N, toLight / dist, V,
             lights.pointLights[i].color, lights.pointLights[i].intensity * atten,
             baseColor, fragRoughness, fragMetallic);
@@ -268,23 +225,21 @@ void main()
 
     for (int i = 0; i < lights.numSpotLights; i++)
     {
-        vec3  toLight = lights.spotLights[i].position - fragWorldPos;
-        float distSqr = dot(toLight, toLight);
-        float dist    = sqrt(distSqr);
-        vec3  L       = toLight / dist;
-        float r       = lights.spotLights[i].radius;
+        vec3  toLight  = lights.spotLights[i].position - fragWorldPos;
+        float distSqr  = dot(toLight, toLight);
+        float dist     = sqrt(distSqr);
+        vec3  L        = toLight / dist;
+        float r        = lights.spotLights[i].radius;
         if (dist >= r) continue;
-        float minDSq   = r * r * 0.0001;
         float normDist = dist / r;
         float window   = max(0.0, 1.0 - normDist * normDist * normDist * normDist);
-        float atten    = (r * r / max(distSqr, minDSq)) * (window * window);
-        float theta   = dot(L, normalize(-lights.spotLights[i].direction));
-        float eps     = lights.spotLights[i].innerCos - lights.spotLights[i].outerCos;
-        float cone    = clamp((theta - lights.spotLights[i].outerCos) / max(eps, 0.0001), 0.0, 1.0);
+        float atten    = window * window;
+        float theta    = dot(L, normalize(-lights.spotLights[i].direction));
+        float eps      = lights.spotLights[i].innerCos - lights.spotLights[i].outerCos;
+        float cone     = clamp((theta - lights.spotLights[i].outerCos) / max(eps, 0.0001), 0.0, 1.0);
         if (cone <= 0.0) continue;
-        float shadow  = (lights.spotLights[i].shadowIdx >= 0)
-                        ? ShadowSpot(lights.spotLights[i].shadowIdx, fragWorldPos, N, L)
-                        : 1.0;
+        float shadow   = (lights.spotLights[i].shadowIdx >= 0)
+                       ? ShadowSpot(lights.spotLights[i].shadowIdx, fragWorldPos, N, L) : 1.0;
         result += shadow * CalcLight(N, L, V,
             lights.spotLights[i].color, lights.spotLights[i].intensity * atten * cone,
             baseColor, fragRoughness, fragMetallic);
@@ -292,10 +247,5 @@ void main()
 
     result += baseColor * fragEmissive;
 
-    result = pow(max(result, vec3(0.0)), vec3(1.0 / 2.2));
-
-    float alpha = fragColor.a * texture(albedoTex, fragUV).a;
-    if (material.alphaThreshold > 0.0 && alpha < material.alphaThreshold)
-        discard;
     outColor = vec4(result, alpha);
 }

@@ -17,6 +17,8 @@
 #include "Panels/SceneViewPanel.h"
 #include "Panels/AssetBrowserPanel.h"
 #include "Panels/MaterialEditorPanel.h"
+#include "Panels/PostProcessPanel.h"
+#include "PostProcess/PostProcessGraph.h"
 
 class Editor
 {
@@ -79,6 +81,43 @@ public:
     void SetCurrentSceneName(const std::string& name) { m_currentSceneName = name; }
     const std::string& GetCurrentSceneName() const    { return m_currentSceneName; }
 
+    // Give the editor a pointer to the application's PostProcessGraph so the
+    // PostProcessPanel can edit it directly.
+    void SetPostProcessGraph(Krayon::PostProcessGraph* graph,
+                             std::function<void()>     onChanged)
+    {
+        postProcess.SetGraph(graph);
+        postProcess.SetOnChanged(std::move(onChanged));
+    }
+
+    // Let the application provide a callback so the inspector can query
+    // how many sub-meshes a given mesh GUID has.
+    void SetMeshSubmeshCountQuery(std::function<uint32_t(uint64_t)> fn)
+    {
+        inspector.SetMeshSubmeshCountQuery(std::move(fn));
+    }
+
+    void SetMeshSubmeshNameQuery(std::function<std::string(uint64_t, uint32_t)> fn)
+    {
+        inspector.SetMeshSubmeshNameQuery(std::move(fn));
+    }
+
+    void SetOpenMaterialCallback(std::function<void(uint64_t)> fn)
+    {
+        inspector.SetOpenMaterialCallback(std::move(fn));
+    }
+
+    // Wire the inspector's "Edit" button to open the material editor.
+    // Called once after Init so Inspector can open MaterialEditorPanel directly.
+    void WireInternalCallbacks()
+    {
+        inspector.SetOpenMaterialCallback([this](uint64_t guid)
+        {
+            materialEditor.Open(guid);
+            materialEditor.open = true;
+        });
+    }
+
 private:
     void DrawMenuBar();
     void DrawToolbar();
@@ -124,11 +163,12 @@ private:
     std::function<void()>                   m_onPlay;
     std::function<void()>                   m_onStop;
 
-    StatsPanel        stats;
-    CameraPanel       cameraPanel;
-    HierarchyPanel    hierarchy;
-    InspectorPanel    inspector;
-    SceneViewPanel    sceneView;
-    AssetBrowserPanel assetBrowser;
+    StatsPanel          stats;
+    CameraPanel         cameraPanel;
+    HierarchyPanel      hierarchy;
+    InspectorPanel      inspector;
+    SceneViewPanel      sceneView;
+    AssetBrowserPanel   assetBrowser;
     MaterialEditorPanel materialEditor;
+    PostProcessPanel    postProcess;
 };

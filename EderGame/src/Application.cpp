@@ -293,9 +293,38 @@ void Application::InitPostProcess()
                            *m_pipeline.GetLightDescriptorSetLayout());
 }
 
+void Application::RebuildPostProcessPasses()
+{
+    VulkanInstance::Get().GetDevice().waitIdle();
+
+    m_ppPasses.clear();
+    m_ppPasses.reserve(m_ppGraph.effects.size());
+
+    uint32_t w = m_debugFb.GetExtent().width;
+    uint32_t h = m_debugFb.GetExtent().height;
+
+    for (const auto& fx : m_ppGraph.effects)
+    {
+        auto pass = std::make_unique<VulkanPostProcessPass>();
+        try {
+            pass->Create(m_debugFb.GetColorFormat(), w, h, fx.fragShaderPath);
+            m_ppPasses.push_back(std::move(pass));
+        }
+        catch (const std::exception& e) {
+            m_editor.AppendBuildLog(std::string("[PostProcess] Failed to create '")
+                + fx.name + "': " + e.what());
+            m_ppPasses.push_back(nullptr);  // keep slot so indices match graph
+        }
+    }
+
+    m_ppDirty = false;
+}
+
 void Application::WireEditorCallbacks()
 {
     m_editor.SetNewSceneCallback([this]() { NewScene(); });
+
+    m_editor.SetPostProcessGraph(&m_ppGraph, [this]() { m_ppDirty = true; });
 
     m_editor.SetSaveSceneCallback([this]()
     {
@@ -318,6 +347,26 @@ void Application::WireEditorCallbacks()
     m_editor.SetPlayCallback([this]() { StartPlayMode(); });
     m_editor.SetStopCallback([this]() { StopPlayMode(); });
     m_editor.SetCurrentSceneName(m_currentSceneName);
+
+    m_editor.SetMeshSubmeshCountQuery([](uint64_t guid) -> uint32_t {
+        if (guid == 0) return 0;
+        const auto* meta = Krayon::AssetManager::Get().FindByGuid(guid);
+        if (!meta || !MeshManager::Get().Has(meta->path)) return 0;
+        try { return MeshManager::Get().Load(meta->path).GetSubmeshCount(); }
+        catch (...) { return 0; }
+    });
+
+    m_editor.SetMeshSubmeshNameQuery([](uint64_t guid, uint32_t index) -> std::string {
+        if (guid == 0) return {};
+        const auto* meta = Krayon::AssetManager::Get().FindByGuid(guid);
+        if (!meta || !MeshManager::Get().Has(meta->path)) return {};
+        try {
+            auto& mesh = MeshManager::Get().Load(meta->path);
+            if (index >= mesh.GetSubmeshCount()) return {};
+            return mesh.GetSubmeshInfo(index).name;
+        }
+        catch (...) { return {}; }
+    });
 }
 
 void Application::StartPlayMode()
@@ -493,7 +542,7 @@ void Application::NewScene()
 void Application::SaveScene()
 {
     if (m_currentScenePath.empty()) { SaveSceneAs(m_currentSceneName); return; }
-    Krayon::SceneSerializer::Save(m_currentScenePath, m_registry, m_currentSceneName);
+    Krayon::SceneSerializer::Save(m_currentScenePath, m_registry, m_currentSceneName, &m_ppGraph);
 }
 
 void Application::SaveSceneAs(const std::string& name)
@@ -516,7 +565,7 @@ void Application::SaveSceneAs(const std::string& name)
         stem = name + "_" + std::to_string(++suffix);
     } while (true);
 
-    if (Krayon::SceneSerializer::Save(absFile.string(), m_registry, stem))
+    if (Krayon::SceneSerializer::Save(absFile.string(), m_registry, stem, &m_ppGraph))
     {
         m_currentScenePath = absFile.string();
         m_currentSceneName = stem;
@@ -539,13 +588,15 @@ void Application::LoadScene(const std::string& absPath)
     m_lastMatTexGuid.clear();
 
     std::string loadedName;
-    if (Krayon::SceneSerializer::Load(absPath, m_registry, &loadedName))
+    m_ppGraph = {};
+    if (Krayon::SceneSerializer::Load(absPath, m_registry, &loadedName, &m_ppGraph))
     {
         m_currentScenePath = absPath;
         m_currentSceneName = loadedName.empty()
             ? fs::path(absPath).stem().string()
             : loadedName;
         m_editor.SetCurrentSceneName(m_currentSceneName);
+        m_ppDirty = true;
     }
 }
 
@@ -731,6 +782,7 @@ void Application::Shutdown()
     VulkanInstance::Get().GetDevice().waitIdle();
 
     m_editor.Shutdown();
+    m_ppPasses.clear();
     m_gizmo.Destroy();
     m_boneSSBO.Destroy();
     m_occlusionPass.Destroy();
@@ -850,6 +902,8 @@ void Application::HandleSceneViewResize()
     m_occlusionPass.Resize(svW, svH);
     m_volumetricLight.Resize(svW, svH);
     m_volumetricFog.Resize(svW, svH);
+    for (auto& pass : m_ppPasses)
+        pass->Resize(svW, svH);
 }
 
 void Application::UpdateLightBuffer()
@@ -965,9 +1019,10 @@ void Application::SyncECSToScene()
         [&](const SceneObject& o) {
             bool remove = o.entityId != 0 && !m_registry.Has<MeshRendererComponent>(o.entityId);
             if (remove) {
-                m_lastMeshGuid    .erase(o.entityId);
-                m_lastAnimMeshGuid.erase(o.entityId);
-                m_lastMaterialName.erase(o.entityId);
+                m_lastMeshGuid        .erase(o.entityId);
+                m_lastAnimMeshGuid    .erase(o.entityId);
+                m_lastMaterialName    .erase(o.entityId);
+                m_lastSubMeshMaterials.erase(o.entityId);
             }
             return remove;
         }), objs.end());
@@ -1046,6 +1101,103 @@ void Application::SyncECSToScene()
             }
         }
 
+        // ── Load per-submesh materials ──────────────────────────────────────
+        for (size_t si = 0; si < mr.subMeshMaterialGuids.size(); si++)
+        {
+            uint64_t smGuid = mr.subMeshMaterialGuids[si];
+            if (smGuid == 0) continue;
+
+            const auto* smMeta = Krayon::AssetManager::Get().FindByGuid(smGuid);
+            if (!smMeta) continue;
+
+            std::string resolvedName;
+
+            Krayon::MaterialAsset smAsset;
+            if (Krayon::AssetManager::Get().ReadMaterialAsset(smGuid, smAsset) && !smAsset.name.empty())
+            {
+                // ── Path A: proper .mat file ────────────────────────────────
+                resolvedName = smAsset.name;
+                if (!MaterialManager::Get().Has(resolvedName))
+                {
+                    MaterialLayout smLayout;
+                    smLayout.AddVec4 ("albedo")
+                            .AddFloat("roughness")
+                            .AddFloat("metallic")
+                            .AddFloat("emissiveIntensity")
+                            .AddFloat("alphaThreshold");
+                    MaterialManager::Get().Add(resolvedName, smLayout, m_pipeline);
+                }
+                Material& smMat = MaterialManager::Get().Get(resolvedName);
+                smMat.SetVec4 ("albedo", glm::vec4(smAsset.albedo[0], smAsset.albedo[1],
+                                                   smAsset.albedo[2], smAsset.albedo[3]));
+                smMat.SetFloat("roughness",         smAsset.roughness);
+                smMat.SetFloat("metallic",          smAsset.metallic);
+                smMat.SetFloat("emissiveIntensity",
+                    std::max({ smAsset.emissive[0], smAsset.emissive[1], smAsset.emissive[2] }));
+                smMat.SetFloat("alphaThreshold", 0.0f);
+                if (smAsset.albedoTexGuid != 0)
+                {
+                    auto& lastTex = m_lastMatTexGuid[resolvedName];
+                    if (lastTex != smAsset.albedoTexGuid)
+                    {
+                        const Krayon::AssetMeta* tm =
+                            Krayon::AssetManager::Get().FindByGuid(smAsset.albedoTexGuid);
+                        if (tm)
+                        {
+                            try {
+                                VulkanTexture& tex = TextureManager::Get().Load(tm->path);
+                                smMat.BindTexture(0, tex);
+                                lastTex = smAsset.albedoTexGuid;
+                            } catch (const std::exception&) {}
+                        }
+                    }
+                }
+            }
+            else if (smMeta->type == Krayon::AssetType::Texture)
+            {
+                // ── Path B: raw texture GUID (from auto-detect) ─────────────
+                // Create a temporary material named "auto_<texName>" that uses
+                // this texture as albedo. No .mat file required.
+                resolvedName = "auto_" + smMeta->name;
+                if (!MaterialManager::Get().Has(resolvedName))
+                {
+                    MaterialLayout smLayout;
+                    smLayout.AddVec4 ("albedo")
+                            .AddFloat("roughness")
+                            .AddFloat("metallic")
+                            .AddFloat("emissiveIntensity")
+                            .AddFloat("alphaThreshold");
+                    MaterialManager::Get().Add(resolvedName, smLayout, m_pipeline);
+                    Material& smMat = MaterialManager::Get().Get(resolvedName);
+                    smMat.SetVec4 ("albedo", glm::vec4(1.0f));
+                    smMat.SetFloat("roughness",          0.5f);
+                    smMat.SetFloat("metallic",           0.0f);
+                    smMat.SetFloat("emissiveIntensity",  0.0f);
+                    smMat.SetFloat("alphaThreshold",     0.0f);
+                }
+                Material& smMat = MaterialManager::Get().Get(resolvedName);
+                auto& lastTex = m_lastMatTexGuid[resolvedName];
+                if (lastTex != smGuid)
+                {
+                    try {
+                        VulkanTexture& tex = TextureManager::Get().Load(smMeta->path);
+                        smMat.BindTexture(0, tex);
+                        lastTex = smGuid;
+                    } catch (const std::exception&) {}
+                }
+            }
+            else { continue; }  // unknown asset type — skip
+
+            // Write the resolved name back so the sync loop picks it up
+            if (si < mr.subMeshMaterialNames.size())
+                mr.subMeshMaterialNames[si] = resolvedName;
+            else
+            {
+                mr.subMeshMaterialNames.resize(si + 1);
+                mr.subMeshMaterialNames[si] = resolvedName;
+            }
+        }
+
         const std::string& curMatName = mr.materialName;
         auto matIt = m_lastMaterialName.find(e);
         const bool matChanged = existingObj &&
@@ -1068,8 +1220,10 @@ void Application::SyncECSToScene()
 
         if (existingObj)
         {
-            existingObj->mesh     = &mesh;
-            existingObj->material = &mat;
+            existingObj->mesh            = &mesh;
+            existingObj->material        = &mat;
+            existingObj->subMeshMaterials.clear();  // will be re-synced this frame
+            m_lastSubMeshMaterials.erase(e);        // force sync loop to re-fire
             return;
         }
 
@@ -1083,6 +1237,33 @@ void Application::SyncECSToScene()
             obj.transform.position = t.position;
             obj.transform.rotation = t.rotation;
             obj.transform.scale    = t.scale;
+        }
+    });
+
+    // ── Sync per-submesh materials ────────────────────────────────────────────
+    m_registry.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
+    {
+        if (mr.subMeshMaterialNames.empty()) return;
+
+        SceneObject* obj = nullptr;
+        for (auto& o : m_scene.GetObjects())
+            if (o.entityId == e) { obj = &o; break; }
+        if (!obj || !obj->mesh) return;
+
+        const auto& names = mr.subMeshMaterialNames;
+        auto& last = m_lastSubMeshMaterials[e];
+        if (last == names) return;
+        last = names;
+
+        uint32_t smCount = obj->mesh->GetSubmeshCount();
+        obj->subMeshMaterials.resize(smCount, nullptr);
+        for (uint32_t si = 0; si < smCount; si++)
+        {
+            const std::string& name = (si < (uint32_t)names.size()) ? names[si] : "";
+            if (!name.empty() && MaterialManager::Get().Has(name))
+                obj->subMeshMaterials[si] = &MaterialManager::Get().Get(name);
+            else
+                obj->subMeshMaterials[si] = nullptr;
         }
     });
 
@@ -1131,7 +1312,7 @@ void Application::SyncECSToScene()
             m_camera.fov       = cam.fov;
             m_camera.nearPlane = cam.nearPlane;
             m_camera.farPlane  = cam.farPlane;
-            m_camera.SetOrientation(std::atan2(fwd.x, -fwd.z),
+            m_camera.SetOrientation(std::atan2(-fwd.x, -fwd.z),
                                     std::asin(glm::clamp(fwd.y, -1.0f, 1.0f)));
         });
     }
@@ -1308,56 +1489,7 @@ void Application::RenderSceneView(vk::CommandBuffer cmd)
 
     Entity selected = m_editor.GetSelected();
 
-    // Shim: promote every entity with a parent to world-space so the gizmo
-    // reads correct positions for ALL handles, not just the selected one.
-    struct ShimEntry { Entity e; TransformComponent saved; glm::mat4 shimmed; };
-    std::vector<ShimEntry> shims;
-
-    m_registry.Each<TransformComponent>([&](Entity e, TransformComponent& tr)
-    {
-        Entity parent = NULL_ENTITY;
-        if (m_registry.Has<HierarchyComponent>(e))
-            parent = m_registry.Get<HierarchyComponent>(e).parent;
-        if (parent == NULL_ENTITY || !m_registry.Has<TransformComponent>(parent)) return;
-
-        ShimEntry s;
-        s.e      = e;
-        s.saved  = tr;
-        TransformSystem::DecomposeInto(TransformSystem::GetWorldMatrix(e, m_registry), tr);
-        s.shimmed = tr.GetMatrix();
-        shims.push_back(s);
-    });
-
     m_gizmo.Draw(cmd, m_registry, vp, selected);
-
-    for (auto& s : shims)
-    {
-        auto& tr             = m_registry.Get<TransformComponent>(s.e);
-        glm::mat4 worldAfter = tr.GetMatrix();
-
-        bool changed = false;
-        for (int col = 0; col < 4 && !changed; ++col)
-            for (int row = 0; row < 4 && !changed; ++row)
-                if (std::abs(worldAfter[col][row] - s.shimmed[col][row]) > 1e-5f)
-                    changed = true;
-
-        if (changed && s.e == selected)
-        {
-            Entity parent = NULL_ENTITY;
-            if (m_registry.Has<HierarchyComponent>(s.e))
-                parent = m_registry.Get<HierarchyComponent>(s.e).parent;
-
-            glm::mat4 invParent = (parent != NULL_ENTITY && m_registry.Has<TransformComponent>(parent))
-                ? glm::inverse(TransformSystem::GetWorldMatrix(parent, m_registry))
-                : glm::mat4(1.0f);
-
-            TransformSystem::DecomposeInto(invParent * worldAfter, tr);
-        }
-        else
-        {
-            tr = s.saved;
-        }
-    }
 
     m_debugFb.EndRendering(cmd);
     m_debugFb.TransitionToShaderRead(cmd);
@@ -1483,13 +1615,27 @@ void Application::RenderPostProcess(vk::CommandBuffer cmd)
                 sunHeight, aspect);
 
             m_sunShafts.GetOutput().TransitionToShaderRead(cmd);
-            m_editor.SetSceneViewFramebuffer(&m_sunShafts.GetOutput());
-        }
-        else
-        {
-            m_editor.SetSceneViewFramebuffer(m_postFb);
+            m_postFb = &m_sunShafts.GetOutput();
         }
     }
+
+    // ── Custom post-process graph ─────────────────────────────────────────────
+    if (m_ppDirty) RebuildPostProcessPasses();
+
+    for (size_t i = 0; i < m_ppPasses.size(); ++i)
+    {
+        if (!m_ppGraph.effects[i].enabled) continue;
+        if (!m_ppPasses[i]) continue;
+
+        m_ppPasses[i]->Draw(cmd,
+            m_postFb->GetColorView(),    m_postFb->GetSampler(),
+            m_debugFb.GetDepthView(),    m_debugFb.GetSampler(),
+            m_ppGraph.effects[i].params);
+        m_ppPasses[i]->GetOutput().TransitionToShaderRead(cmd);
+        m_postFb = &m_ppPasses[i]->GetOutput();
+    }
+
+    m_editor.SetSceneViewFramebuffer(m_postFb);
 }
 
 void Application::RenderMainPass(vk::CommandBuffer cmd)

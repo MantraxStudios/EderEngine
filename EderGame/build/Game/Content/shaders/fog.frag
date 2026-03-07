@@ -101,66 +101,53 @@ void main()
     float maxFogAmount  = ubo.params.y;
     float fogStart      = ubo.params.z;
     float fogEnd        = ubo.params.w;
-    float marchDist     = min(dist, fogEnd);
+    float marchDist      = min(dist, fogEnd);
+    float lightMarchDist = fogEnd;
 
-    // Height-based exponential fog
-    float avgH      = ((camPos.y) + (isSky ? camPos.y : worldPos.y)) * 0.5;
+    float avgH      = (camPos.y + (isSky ? camPos.y : worldPos.y)) * 0.5;
     float heightFog = density * exp(-heightFalloff * max(avgH - heightOffset, 0.0));
 
     float fogFactor = 1.0 - exp(-heightFog * max(marchDist - fogStart, 0.0));
     fogFactor = clamp(fogFactor, 0.0, maxFogAmount);
     fogFactor *= clamp((dist - fogStart) / max(fogStart * 0.15 + 0.5, 0.5), 0.0, 1.0);
 
-    // Atmospheric colour
-    // horizonBlend capped at 0.85 to avoid full saturation at the exact horizon line
     float horizonBlend = pow(clamp(1.0 - abs(rayDir.y), 0.0, 0.85), 3.0);
     vec3  baseFogColor = mix(ubo.fogColor.xyz, ubo.horizonColor.xyz, horizonBlend);
 
-    // Sun scatter: attenuate by sun elevation so it fades when sun is below horizon.
-    // sunElevFade goes 0→1 as sun goes from -0.04 to +0.15 (same ramp as sky shader).
     float sunY        = ubo.lightDir.y;
     float sunElevFade = smoothstep(-0.04, 0.15, sunY);
 
     float cosTheta        = dot(rayDir, ubo.lightDir.xyz);
-    float mie             = MiePhase(cosTheta, 0.76);
-    // Clamp mie peak so forward-scatter spike doesn't blow out the horizon.
-    mie                   = min(mie, 4.0);
+    float mie             = min(MiePhase(cosTheta, 0.76), 4.0);
     float scatterStrength = ubo.sunScatterColor.w * ubo.lightDir.w * sunElevFade;
-    // Do NOT multiply by fogFactor here — the mix() at the end already gates it.
-    vec3  sunContrib = ubo.sunScatterColor.xyz * mie * scatterStrength
-                       * (isSky ? 0.3 : 1.0);
+    vec3  sunContrib      = ubo.sunScatterColor.xyz * mie * scatterStrength
+                            * (isSky ? 0.3 : 1.0);
 
-    // Point light scatter
     vec3 lightScatter = vec3(0.0);
     for (int p = 0; p < lights.numPointLights; p++)
     {
         vec3  lpos  = lights.pointLights[p].position;
         float lrad  = lights.pointLights[p].radius;
-
-        float chord = RaySphereChord(camPos, rayDir, marchDist, lpos, lrad);
+        float chord = RaySphereChord(camPos, rayDir, lightMarchDist, lpos, lrad);
         if (chord <= 0.0) continue;
 
-        vec3  oc    = lpos - camPos;
-        float tc    = clamp(dot(oc, rayDir), 0.0, marchDist);
-        float dCl   = length(lpos - (camPos + rayDir * tc));
-
-        float atten  = DistAtten(dCl, lrad);
-        float weight = density * chord * atten * fogFactor;
+        vec3  oc   = lpos - camPos;
+        float tc   = clamp(dot(oc, rayDir), 0.0, lightMarchDist);
+        float dCl  = length(lpos - (camPos + rayDir * tc));
+        float weight = density * chord * DistAtten(dCl, lrad);
         lightScatter += lights.pointLights[p].color
                       * lights.pointLights[p].intensity * weight;
     }
 
-    // Spot light scatter
     for (int s = 0; s < lights.numSpotLights; s++)
     {
         vec3  lpos  = lights.spotLights[s].position;
         float lrad  = lights.spotLights[s].radius;
-
-        float chord = RaySphereChord(camPos, rayDir, marchDist, lpos, lrad);
+        float chord = RaySphereChord(camPos, rayDir, lightMarchDist, lpos, lrad);
         if (chord <= 0.0) continue;
 
         vec3  oc  = lpos - camPos;
-        float tc  = clamp(dot(oc, rayDir), 0.0, marchDist);
+        float tc  = clamp(dot(oc, rayDir), 0.0, lightMarchDist);
         vec3  cp  = camPos + rayDir * tc;
 
         vec3  toCP  = normalize(cp - lpos);
@@ -171,16 +158,13 @@ void main()
         if (cone < 0.001) continue;
 
         float dCl    = length(lpos - cp);
-        float atten  = DistAtten(dCl, lrad);
-        float weight = density * chord * atten * cone * fogFactor;
+        float weight = density * chord * DistAtten(dCl, lrad) * cone;
         lightScatter += lights.spotLights[s].color
                       * lights.spotLights[s].intensity * weight;
     }
 
-    // Sky pixels must not receive local light scatter — that would halo streetlights into the skybox.
-    // Sun scatter is fine at reduced strength (already handled by the isSky ? 0.3 : 1.0 above).
     if (isSky) lightScatter = vec3(0.0);
 
-    vec3 finalFogColor = baseFogColor + sunContrib + lightScatter;
-    outColor = vec4(mix(sceneColor, finalFogColor, fogFactor), 1.0);
+    vec3 foggedScene = mix(sceneColor, baseFogColor + sunContrib, fogFactor);
+    outColor = vec4(foggedScene + lightScatter, 1.0);
 }

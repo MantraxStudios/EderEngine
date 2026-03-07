@@ -7,11 +7,9 @@ layout(location = 3) in vec3 inTangent;
 layout(location = 4) in vec3 inBitangent;
 layout(location = 5) in vec4 inColor;
 
-// Skeletal animation: bone indices + blend weights (0 = no skinning, static mesh)
 layout(location = 6) in uvec4 inBoneIndices;
 layout(location = 7) in vec4  inBoneWeights;
 
-// Instance data — model matrix cols (binding 1, instance rate)
 layout(location = 8)  in vec4 instanceModelCol0;
 layout(location = 9)  in vec4 instanceModelCol1;
 layout(location = 10) in vec4 instanceModelCol2;
@@ -26,10 +24,9 @@ layout(set = 0, binding = 0) uniform MaterialUBO {
     float roughness;
     float metallic;
     float emissiveIntensity;
-    float alphaThreshold;  // 0 = disabled; >0 = cutout (discard below threshold)
+    float alphaThreshold;  
 } material;
 
-// Bone matrices SSBO — one mat4 per bone, up to 256 bones
 layout(set = 2, binding = 0) readonly buffer BoneBuffer {
     mat4 boneMatrices[];
 } bones;
@@ -46,8 +43,8 @@ void main()
 {
     mat4 model = mat4(instanceModelCol0, instanceModelCol1, instanceModelCol2, instanceModelCol3);
 
-    // Skeletal skinning — only applied when at least one weight > 0.
-    // For static meshes all weights are 0, so they pass through unchanged.
+    
+    
     float totalWeight = inBoneWeights.x + inBoneWeights.y + inBoneWeights.z + inBoneWeights.w;
 
     vec4 localPos;

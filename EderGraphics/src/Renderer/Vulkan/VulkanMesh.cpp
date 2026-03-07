@@ -58,7 +58,7 @@ void VulkanMesh::Load(const std::string& path)
 void VulkanMesh::LoadFromMemory(const uint8_t* data, size_t size, const std::string& hint)
 {
     // Clear any previous load
-    vertices.clear(); indices.clear();
+    vertices.clear(); indices.clear(); m_submeshes.clear();
     boneNameToIndex.clear(); boneInfos.clear();
     animations.clear(); nodes.clear(); nodeNameToIndex.clear();
     rootNodeIndex = 0;
@@ -133,7 +133,7 @@ void VulkanMesh::LoadFromMemory(const uint8_t* data, size_t size, const std::str
 void VulkanMesh::_LoadFromPath(const std::string& path)
 {
     // Clear any previous load
-    vertices.clear(); indices.clear();
+    vertices.clear(); indices.clear(); m_submeshes.clear();
     boneNameToIndex.clear(); boneInfos.clear();
     animations.clear(); nodes.clear(); nodeNameToIndex.clear();
     rootNodeIndex = 0;
@@ -212,9 +212,10 @@ void VulkanMesh::ProcessNode(aiNode* node, const aiScene* scene, const aiMatrix4
         ProcessNode(node->mChildren[i], scene, nodeTransform);
 }
 
-void VulkanMesh::ProcessMesh(aiMesh* mesh, const aiScene* /*scene*/, const aiMatrix4x4& nodeTransform)
+void VulkanMesh::ProcessMesh(aiMesh* mesh, const aiScene* scene, const aiMatrix4x4& nodeTransform)
 {
-    uint32_t baseIndex = static_cast<uint32_t>(vertices.size());
+    uint32_t baseIndex      = static_cast<uint32_t>(vertices.size());
+    uint32_t firstIndexSlot = static_cast<uint32_t>(indices.size());
 
     // For skinned meshes the bone/animation pipeline already accumulates the
     // full node-transform chain via ProcessNodeHierarchy, so we must NOT bake
@@ -317,6 +318,16 @@ void VulkanMesh::ProcessMesh(aiMesh* mesh, const aiScene* /*scene*/, const aiMat
     for (uint32_t i = 0; i < mesh->mNumFaces; i++)
         for (uint32_t j = 0; j < mesh->mFaces[i].mNumIndices; j++)
             indices.push_back(baseIndex + mesh->mFaces[i].mIndices[j]);
+
+    // Record sub-mesh range
+    SubMeshInfo info;
+    info.firstIndex  = firstIndexSlot;
+    info.indexCount  = static_cast<uint32_t>(indices.size()) - firstIndexSlot;
+    if (mesh->mMaterialIndex < scene->mNumMaterials)
+        info.name = scene->mMaterials[mesh->mMaterialIndex]->GetName().C_Str();
+    else
+        info.name = mesh->mName.C_Str();
+    m_submeshes.push_back(info);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -498,6 +509,19 @@ void VulkanMesh::DrawInstanced(vk::CommandBuffer cmd, uint32_t firstInstance, ui
     cmd.bindVertexBuffers(0, vb, offset);
     cmd.bindIndexBuffer(indexBuffer.GetBuffer(), 0, vk::IndexType::eUint32);
     cmd.drawIndexed(indexCount, instanceCount, 0, 0, firstInstance);
+}
+
+void VulkanMesh::DrawSubMesh(vk::CommandBuffer cmd, uint32_t submeshIndex,
+                              uint32_t firstInstance, uint32_t instanceCount)
+{
+    if (submeshIndex >= m_submeshes.size()) return;
+    const SubMeshInfo& sm = m_submeshes[submeshIndex];
+
+    vk::Buffer     vb     = vertexBuffer.GetBuffer();
+    vk::DeviceSize offset = 0;
+    cmd.bindVertexBuffers(0, vb, offset);
+    cmd.bindIndexBuffer(indexBuffer.GetBuffer(), 0, vk::IndexType::eUint32);
+    cmd.drawIndexed(sm.indexCount, instanceCount, sm.firstIndex, 0, firstInstance);
 }
 
 void VulkanMesh::Destroy()

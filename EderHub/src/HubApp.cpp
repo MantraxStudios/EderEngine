@@ -566,6 +566,7 @@ void HubApp::CreateProject()
         fs::create_directories(content + "/textures");
         fs::create_directories(content + "/meshes");
         fs::create_directories(content + "/shaders");
+        fs::create_directories(content + "/fonts");
     }
     catch (const std::exception& e)
     {
@@ -578,6 +579,7 @@ void HubApp::CreateProject()
     const struct { fs::path src; fs::path dst; } copies[] = {
         { gameContent / "shaders", fs::path(content) / "shaders" },
         { gameContent / "meshes",  fs::path(content) / "meshes"  },
+        { gameContent / "fonts",   fs::path(content) / "fonts"   },
     };
     for (const auto& c : copies)
     {

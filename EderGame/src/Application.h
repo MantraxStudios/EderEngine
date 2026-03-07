@@ -23,12 +23,14 @@
 #include "Renderer/Vulkan/VulkanOcclusionPass.h"
 #include "Renderer/Vulkan/VulkanVolumetricLight.h"
 #include "Renderer/Vulkan/VulkanVolumetricFog.h"
+#include "Renderer/Vulkan/VulkanPostProcessPass.h"
 #include "Renderer/Vulkan/BoneSSBO.h"
 #include "EderCore.h"
 #include "Physics/PhysicsSystem.h"
 #include <unordered_map>
 #include <string>
 #include <thread>
+#include <memory>
 
 // ────────────────────────────────────────────────────────────────────────────
 // Application
@@ -164,13 +166,21 @@ private:
     glm::mat4 m_cascadeMatrices[VulkanShadowMap::NUM_CASCADES] = {};
     glm::vec4 m_cascadeSplits  = {};
 
+    // ── Custom post-process graph ─────────────────────────────────────────────
+    Krayon::PostProcessGraph                           m_ppGraph;
+    std::vector<std::unique_ptr<VulkanPostProcessPass>> m_ppPasses;
+    bool                                               m_ppDirty = false;
+
+    void RebuildPostProcessPasses();
+
     // ── Post-process running output (advances each active pass) ──────────────
     VulkanFramebuffer* m_postFb = nullptr;
 
     // ── Mesh hot-reload tracking (keyed by entity id, value = last loaded GUID) ─
-    std::unordered_map<uint32_t, uint64_t>    m_lastMeshGuid;
-    std::unordered_map<uint32_t, uint64_t>    m_lastAnimMeshGuid;
-    std::unordered_map<uint32_t, std::string> m_lastMaterialName;
+    std::unordered_map<uint32_t, uint64_t>                 m_lastMeshGuid;
+    std::unordered_map<uint32_t, uint64_t>                 m_lastAnimMeshGuid;
+    std::unordered_map<uint32_t, std::string>              m_lastMaterialName;
+    std::unordered_map<uint32_t, std::vector<std::string>> m_lastSubMeshMaterials;
     // Texture hot-swap tracking: matName → last-loaded albedoTexGuid
     std::unordered_map<std::string, uint64_t> m_lastMatTexGuid;
     // Per-entity bone matrices (populated by UpdateAnimations, consumed by DrawSkinned callback)

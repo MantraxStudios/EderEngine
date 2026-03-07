@@ -17,10 +17,21 @@
 //    mesh.path=assets/hero.fbx
 //    ...
 //    [/entity]
+//
+//    [postprocess]
+//    effect.count=N
+//    effect.0.name=...
+//    effect.0.shader=shaders/my_effect.frag.spv
+//    effect.0.enabled=1
+//    effect.0.paramcount=2
+//    effect.0.params=0.5 1.0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
+//    ...
+//    [/postprocess]
 // ─────────────────────────────────────────────────────────────────────────────
 
 #include "ECS/Registry.h"
 #include "ECS/Entity.h"
+#include "PostProcess/PostProcessGraph.h"
 #include "ECS/Components/TagComponent.h"
 #include "ECS/Components/TransformComponent.h"
 #include "ECS/Components/MeshRendererComponent.h"
@@ -54,9 +65,10 @@ public:
     //  `sceneName` defaults to the file stem.
     //  Returns true on success.
     // ─────────────────────────────────────────────────────────────────────────
-    static bool Save(const std::string& path,
-                     Registry&          reg,
-                     const std::string& sceneName = "")
+    static bool Save(const std::string&      path,
+                     Registry&               reg,
+                     const std::string&      sceneName = "",
+                     const PostProcessGraph* ppGraph   = nullptr)
     {
         namespace fs = std::filesystem;
         std::ofstream f(path, std::ios::trunc);
@@ -116,6 +128,26 @@ public:
                 f << "mesh.matName="    << Escape(m.materialName) << "\n";
                 f << "mesh.castShadow=" << (m.castShadow ? 1 : 0) << "\n";
                 f << "mesh.visible="    << (m.visible    ? 1 : 0) << "\n";
+                if (!m.subMeshMaterialGuids.empty())
+                {
+                    f << "mesh.submesh.count=" << m.subMeshMaterialGuids.size() << "\n";
+                    f << "mesh.submesh.guids=";
+                    for (size_t si = 0; si < m.subMeshMaterialGuids.size(); ++si)
+                    {
+                        if (si > 0) f << ' ';
+                        char buf2[32];
+                        snprintf(buf2, sizeof(buf2), "%llx", (unsigned long long)m.subMeshMaterialGuids[si]);
+                        f << buf2;
+                    }
+                    f << "\n";
+                    f << "mesh.submesh.names=";
+                    for (size_t si = 0; si < m.subMeshMaterialNames.size(); ++si)
+                    {
+                        if (si > 0) f << '|';
+                        f << Escape(m.subMeshMaterialNames[si]);
+                    }
+                    f << "\n";
+                }
             }
 
             // ── LightComponent ────────────────────────────────────────────────
@@ -246,6 +278,29 @@ public:
             f << "[/entity]\n\n";
         }
 
+        // ── PostProcessGraph ──────────────────────────────────────────────────
+        if (ppGraph && !ppGraph->effects.empty())
+        {
+            f << "[postprocess]\n";
+            f << "effect.count=" << ppGraph->effects.size() << "\n";
+            for (size_t i = 0; i < ppGraph->effects.size(); ++i)
+            {
+                const auto& fx = ppGraph->effects[i];
+                f << "effect." << i << ".name="       << Escape(fx.name)           << "\n";
+                f << "effect." << i << ".shader="     << Escape(fx.fragShaderPath) << "\n";
+                f << "effect." << i << ".enabled="    << (fx.enabled ? 1 : 0)     << "\n";
+                f << "effect." << i << ".paramcount=" << fx.paramCount             << "\n";
+                f << "effect." << i << ".params=";
+                for (int p = 0; p < 16; ++p)
+                {
+                    if (p > 0) f << ' ';
+                    f << fx.params[p];
+                }
+                f << "\n";
+            }
+            f << "[/postprocess]\n\n";
+        }
+
         return true;
     }
 
@@ -262,11 +317,12 @@ public:
     // ─────────────────────────────────────────────────────────────────────────
     static bool Load(const std::string& path,
                      Registry&          reg,
-                     std::string*       outSceneName = nullptr)
+                     std::string*       outSceneName = nullptr,
+                     PostProcessGraph*  outPpGraph   = nullptr)
     {
         std::ifstream f(path);
         if (!f.is_open()) return false;
-        return ParseStream(f, reg, outSceneName);
+        return ParseStream(f, reg, outSceneName, outPpGraph);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -274,38 +330,59 @@ public:
     // ─────────────────────────────────────────────────────────────────────────
     static bool LoadFromBytes(const std::vector<uint8_t>& bytes,
                               Registry&                   reg,
-                              std::string*                outSceneName = nullptr)
+                              std::string*                outSceneName = nullptr,
+                              PostProcessGraph*           outPpGraph   = nullptr)
     {
         const std::string text(bytes.begin(), bytes.end());
         std::istringstream ss(text);
-        return ParseStream(ss, reg, outSceneName);
+        return ParseStream(ss, reg, outSceneName, outPpGraph);
     }
 
 private:
     // ─────────────────────────────────────────────────────────────────────────
     //  ParseStream — shared istream-based scene parser used by Load + LoadFromBytes
     // ─────────────────────────────────────────────────────────────────────────
-    static bool ParseStream(std::istream& f,
-                            Registry&     reg,
-                            std::string*  outSceneName)
+    static bool ParseStream(std::istream&     f,
+                            Registry&         reg,
+                            std::string*      outSceneName,
+                            PostProcessGraph* outPpGraph = nullptr)
     {
         struct Block { std::unordered_map<std::string, std::string> kv; };
         std::vector<Block> blocks;
-        Block* cur = nullptr;
+        Block* cur     = nullptr;
+        bool   inPP    = false;
+        std::unordered_map<std::string, std::string> ppKV;
         std::string line;
 
         while (std::getline(f, line))
         {
             TrimRight(line);
             if (line.empty() || line[0] == '#') continue;
+
             if (line == "[entity]")
             {
                 blocks.push_back({});
                 cur = &blocks.back();
+                inPP = false;
             }
             else if (line == "[/entity]")
             {
                 cur = nullptr;
+            }
+            else if (line == "[postprocess]")
+            {
+                inPP = true;
+                cur  = nullptr;
+            }
+            else if (line == "[/postprocess]")
+            {
+                inPP = false;
+            }
+            else if (inPP)
+            {
+                const size_t eq = line.find('=');
+                if (eq != std::string::npos)
+                    ppKV[line.substr(0, eq)] = line.substr(eq + 1);
             }
             else if (cur)
             {
@@ -321,6 +398,28 @@ private:
                 {
                     if (line.substr(0, eq) == "name")
                         *outSceneName = Unescape(line.substr(eq + 1));
+                }
+            }
+        }
+
+        // ── Parse PostProcessGraph ────────────────────────────────────────────
+        if (outPpGraph && ppKV.count("effect.count"))
+        {
+            outPpGraph->effects.clear();
+            int count = std::stoi(ppKV.at("effect.count"));
+            outPpGraph->effects.resize(count);
+            for (int i = 0; i < count; ++i)
+            {
+                auto& fx      = outPpGraph->effects[i];
+                std::string pfx = "effect." + std::to_string(i) + ".";
+                if (ppKV.count(pfx + "name"))       fx.name           = Unescape(ppKV.at(pfx + "name"));
+                if (ppKV.count(pfx + "shader"))     fx.fragShaderPath = Unescape(ppKV.at(pfx + "shader"));
+                if (ppKV.count(pfx + "enabled"))    fx.enabled        = ppKV.at(pfx + "enabled") == "1";
+                if (ppKV.count(pfx + "paramcount")) fx.paramCount     = std::stoi(ppKV.at(pfx + "paramcount"));
+                if (ppKV.count(pfx + "params"))
+                {
+                    std::istringstream ps(ppKV.at(pfx + "params"));
+                    for (int p = 0; p < 16; ++p) ps >> fx.params[p];
                 }
             }
         }
@@ -383,6 +482,34 @@ private:
                 if (kv.count("mesh.matName")) m.materialName = Unescape(kv.at("mesh.matName"));
                 if (kv.count("mesh.castShadow")) m.castShadow = kv.at("mesh.castShadow") == "1";
                 if (kv.count("mesh.visible"))    m.visible    = kv.at("mesh.visible")    == "1";
+                if (kv.count("mesh.submesh.count"))
+                {
+                    int smCount = std::stoi(kv.at("mesh.submesh.count"));
+                    m.subMeshMaterialGuids.resize(smCount, 0);
+                    m.subMeshMaterialNames.resize(smCount);
+                    if (kv.count("mesh.submesh.guids"))
+                    {
+                        std::istringstream gs(kv.at("mesh.submesh.guids"));
+                        std::string tok;
+                        for (int si = 0; si < smCount && gs >> tok; ++si)
+                            try { m.subMeshMaterialGuids[si] = std::stoull(tok, nullptr, 16); } catch (...) {}
+                    }
+                    if (kv.count("mesh.submesh.names"))
+                    {
+                        std::string raw = kv.at("mesh.submesh.names");
+                        size_t pos = 0, si = 0;
+                        while (si < (size_t)smCount)
+                        {
+                            size_t sep = raw.find('|', pos);
+                            std::string token = (sep == std::string::npos)
+                                ? raw.substr(pos)
+                                : raw.substr(pos, sep - pos);
+                            m.subMeshMaterialNames[si++] = Unescape(token);
+                            if (sep == std::string::npos) break;
+                            pos = sep + 1;
+                        }
+                    }
+                }
             }
 
             // LightComponent
