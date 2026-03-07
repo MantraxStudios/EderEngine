@@ -17,6 +17,8 @@ public:
     void Shutdown();
     void Update(float dt);
     void HandleEvent(const SDL_Event& event);
+    void SetWindow(SDL_Window* window) { m_window = window; }
+    bool HasFocusedInput() const;
 
     void SetScreenSize(float w, float h);
 
@@ -52,8 +54,9 @@ private:
     float ScreenToVirtualX(float sx) const;
     float ScreenToVirtualY(float sy) const;
 
-    uint32_t m_nextId  = 1;
+    uint32_t m_nextId   = 1;
     uint32_t m_dragging = 0;
+    SDL_Window* m_window = nullptr;
 
     std::unordered_map<uint32_t, UIElement> m_elements;
 

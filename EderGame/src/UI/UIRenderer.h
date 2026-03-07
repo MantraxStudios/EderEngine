@@ -8,16 +8,27 @@
 #include "UITypes.h"
 #include <imgui/imstb_truetype.h>
 
+struct UIGlyphInfo
+{
+    float u0, v0, u1, v1;
+    float xOff, yOff;
+    float xAdvance;
+    float w, h;
+};
+
 struct UIFontAtlas
 {
-    static constexpr int W = 512;
-    static constexpr int H = 512;
+    static constexpr int W          = 512;
+    static constexpr int H          = 512;
     static constexpr int FIRST_CHAR = 32;
     static constexpr int NUM_CHARS  = 96;
 
-    std::vector<stbtt_bakedchar> glyphs;
-    float                        bakedSize = 24.f;
-    bool                         loaded    = false;
+    std::vector<UIGlyphInfo> glyphs;
+    float                    bakedSize = 24.f;
+    float                    ascent    = 0.f;
+    float                    descent   = 0.f;
+    float                    lineGap   = 0.f;
+    bool                     loaded    = false;
 
     vk::raii::Image        image     = nullptr;
     vk::raii::DeviceMemory memory    = nullptr;
@@ -75,22 +86,22 @@ private:
 
     void UploadFontBitmap(const uint8_t* pixels, int w, int h);
 
-    vk::raii::CommandPool CreateOneTimePool();
-    vk::CommandBuffer     BeginOneTime(vk::raii::CommandPool& pool);
-    void                  EndOneTime(vk::raii::CommandPool& pool, vk::CommandBuffer cmd);
+    vk::raii::CommandPool   CreateOneTimePool();
+    vk::raii::CommandBuffer BeginOneTime(vk::raii::CommandPool& pool);
+    void                    EndOneTime(vk::raii::CommandBuffer& cmd);
 
-    vk::raii::DescriptorSetLayout m_dsl        = nullptr;
-    vk::raii::PipelineLayout      m_layout     = nullptr;
-    vk::raii::Pipeline            m_pipeline   = nullptr;
-    vk::raii::DescriptorPool      m_pool       = nullptr;
+    vk::raii::DescriptorSetLayout m_dsl      = nullptr;
+    vk::raii::PipelineLayout      m_layout   = nullptr;
+    vk::raii::Pipeline            m_pipeline = nullptr;
+    vk::raii::DescriptorPool      m_pool     = nullptr;
 
-    std::vector<vk::raii::DescriptorSet>          m_allocatedSets;
+    std::vector<vk::raii::DescriptorSet>             m_allocatedSets;
     std::unordered_map<VkImageView, VkDescriptorSet> m_setCache;
 
-    VulkanTexture  m_whiteTex;
+    VulkanTexture     m_whiteTex;
     vk::DescriptorSet m_whiteDS = VK_NULL_HANDLE;
 
-    UIFontAtlas    m_font;
+    UIFontAtlas       m_font;
     vk::DescriptorSet m_fontDS = VK_NULL_HANDLE;
 
     std::unordered_map<std::string, VulkanTexture*> m_texCache;

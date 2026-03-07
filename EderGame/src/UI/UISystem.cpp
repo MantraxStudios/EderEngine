@@ -143,11 +143,11 @@ void UISystem::HandleEvent(const SDL_Event& event)
                 {
                     elem.cursorTimer   = 0.f;
                     elem.cursorVisible = true;
-                    SDL_StartTextInput(nullptr);
+                    SDL_StartTextInput(m_window);
                 }
                 else if (!elem.focused && wasFocused)
                 {
-                    SDL_StopTextInput(nullptr);
+                    SDL_StopTextInput(m_window);
                 }
             }
         }
@@ -193,23 +193,35 @@ void UISystem::HandleEvent(const SDL_Event& event)
             {
                 if (event.key.key == SDLK_BACKSPACE && !elem.inputText.empty())
                 {
-                    elem.inputText.pop_back();
+                    // UTF-8 safe: eliminar el último codepoint completo
+                    auto& s = elem.inputText;
+                    while (!s.empty() && (s.back() & 0xC0) == 0x80)
+                        s.pop_back();
+                    if (!s.empty()) s.pop_back();
                 }
                 else if (event.key.key == SDLK_RETURN || event.key.key == SDLK_KP_ENTER)
                 {
                     if (elem.onSubmit) elem.onSubmit(elem.inputText);
                     elem.focused = false;
-                    SDL_StopTextInput(nullptr);
+                    SDL_StopTextInput(m_window);
                 }
                 else if (event.key.key == SDLK_ESCAPE)
                 {
                     elem.focused = false;
-                    SDL_StopTextInput(nullptr);
+                    SDL_StopTextInput(m_window);
                 }
                 break;
             }
         }
     }
+}
+
+bool UISystem::HasFocusedInput() const
+{
+    for (auto& [id, elem] : m_elements)
+        if (elem.type == UIElementType::InputField && elem.focused)
+            return true;
+    return false;
 }
 
 uint32_t UISystem::CreateElement(const UIElement& elem)

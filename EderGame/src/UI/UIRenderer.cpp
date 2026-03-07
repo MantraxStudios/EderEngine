@@ -3,7 +3,6 @@
 #include <Renderer/Vulkan/VulkanInstance.h>
 #include <Renderer/Vulkan/VulkanSwapchain.h>
 #include <IO/AssetManager.h>
-#include <imgui/imstb_truetype.h>
 #include <fstream>
 #include <cstring>
 #include <iostream>
@@ -35,10 +34,10 @@ std::vector<uint32_t> UIRenderer::LoadSpv(const std::string& path)
     std::ifstream file(path, std::ios::binary | std::ios::ate);
     if (!file.is_open())
         throw std::runtime_error("[UIRenderer] cannot open shader: " + path);
-    size_t size = static_cast<size_t>(file.tellg());
-    std::vector<uint32_t> buf(size / sizeof(uint32_t));
+    size_t sz = static_cast<size_t>(file.tellg());
+    std::vector<uint32_t> buf(sz / sizeof(uint32_t));
     file.seekg(0);
-    file.read(reinterpret_cast<char*>(buf.data()), size);
+    file.read(reinterpret_cast<char*>(buf.data()), sz);
     return buf;
 }
 
@@ -51,7 +50,7 @@ vk::raii::CommandPool UIRenderer::CreateOneTimePool()
     return vk::raii::CommandPool(device, ci);
 }
 
-vk::CommandBuffer UIRenderer::BeginOneTime(vk::raii::CommandPool& pool)
+vk::raii::CommandBuffer UIRenderer::BeginOneTime(vk::raii::CommandPool& pool)
 {
     auto& device = VulkanInstance::Get().GetDevice();
     vk::CommandBufferAllocateInfo ai{};
@@ -59,20 +58,20 @@ vk::CommandBuffer UIRenderer::BeginOneTime(vk::raii::CommandPool& pool)
     ai.level              = vk::CommandBufferLevel::ePrimary;
     ai.commandBufferCount = 1;
     auto bufs = device.allocateCommandBuffers(ai);
-
     vk::CommandBufferBeginInfo bi{};
     bi.flags = vk::CommandBufferUsageFlagBits::eOneTimeSubmit;
     bufs[0].begin(bi);
-    return *bufs[0];
+    return std::move(bufs[0]);
 }
 
-void UIRenderer::EndOneTime(vk::raii::CommandPool& pool, vk::CommandBuffer cmd)
+void UIRenderer::EndOneTime(vk::raii::CommandBuffer& cmd)
 {
     cmd.end();
     auto& instance = VulkanInstance::Get();
+    vk::CommandBuffer raw = *cmd;
     vk::SubmitInfo si{};
     si.commandBufferCount = 1;
-    si.pCommandBuffers    = &cmd;
+    si.pCommandBuffers    = &raw;
     instance.GetGraphicsQueue().submit(si, nullptr);
     instance.GetGraphicsQueue().waitIdle();
 }
@@ -90,13 +89,12 @@ void UIRenderer::UploadFontBitmap(const uint8_t* pixels, int w, int h)
         throw std::runtime_error("[UIRenderer] No suitable memory type");
     };
 
-    // Expand R8 atlas to RGBA8 (R=G=B=A=font_value) for portable hardware sampling
     std::vector<uint8_t> rgba(w * h * 4);
     for (int i = 0; i < w * h; ++i)
     {
-        rgba[i*4+0] = pixels[i];
-        rgba[i*4+1] = pixels[i];
-        rgba[i*4+2] = pixels[i];
+        rgba[i*4+0] = 255;
+        rgba[i*4+1] = 255;
+        rgba[i*4+2] = 255;
         rgba[i*4+3] = pixels[i];
     }
 
@@ -121,14 +119,14 @@ void UIRenderer::UploadFontBitmap(const uint8_t* pixels, int w, int h)
     stagingMem.unmapMemory();
 
     vk::ImageCreateInfo ici{};
-    ici.imageType   = vk::ImageType::e2D;
-    ici.format      = vk::Format::eR8G8B8A8Unorm;
-    ici.extent      = vk::Extent3D{ (uint32_t)w, (uint32_t)h, 1u };
-    ici.mipLevels   = 1;
-    ici.arrayLayers = 1;
-    ici.samples     = vk::SampleCountFlagBits::e1;
-    ici.tiling      = vk::ImageTiling::eOptimal;
-    ici.usage       = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
+    ici.imageType     = vk::ImageType::e2D;
+    ici.format        = vk::Format::eR8G8B8A8Unorm;
+    ici.extent        = vk::Extent3D{ (uint32_t)w, (uint32_t)h, 1u };
+    ici.mipLevels     = 1;
+    ici.arrayLayers   = 1;
+    ici.samples       = vk::SampleCountFlagBits::e1;
+    ici.tiling        = vk::ImageTiling::eOptimal;
+    ici.usage         = vk::ImageUsageFlagBits::eTransferDst | vk::ImageUsageFlagBits::eSampled;
     ici.initialLayout = vk::ImageLayout::eUndefined;
     m_font.image = vk::raii::Image(device, ici);
 
@@ -143,12 +141,12 @@ void UIRenderer::UploadFontBitmap(const uint8_t* pixels, int w, int h)
     auto cmd  = BeginOneTime(pool);
 
     vk::ImageMemoryBarrier barrier{};
-    barrier.oldLayout           = vk::ImageLayout::eUndefined;
-    barrier.newLayout           = vk::ImageLayout::eTransferDstOptimal;
-    barrier.image               = *m_font.image;
-    barrier.subresourceRange    = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
-    barrier.srcAccessMask       = {};
-    barrier.dstAccessMask       = vk::AccessFlagBits::eTransferWrite;
+    barrier.oldLayout        = vk::ImageLayout::eUndefined;
+    barrier.newLayout        = vk::ImageLayout::eTransferDstOptimal;
+    barrier.image            = *m_font.image;
+    barrier.subresourceRange = { vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1 };
+    barrier.srcAccessMask    = {};
+    barrier.dstAccessMask    = vk::AccessFlagBits::eTransferWrite;
     cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTopOfPipe, vk::PipelineStageFlagBits::eTransfer,
                         {}, {}, {}, barrier);
 
@@ -157,14 +155,14 @@ void UIRenderer::UploadFontBitmap(const uint8_t* pixels, int w, int h)
     copy.imageExtent      = vk::Extent3D{ (uint32_t)w, (uint32_t)h, 1u };
     cmd.copyBufferToImage(*staging, *m_font.image, vk::ImageLayout::eTransferDstOptimal, copy);
 
-    barrier.oldLayout   = vk::ImageLayout::eTransferDstOptimal;
-    barrier.newLayout   = vk::ImageLayout::eShaderReadOnlyOptimal;
+    barrier.oldLayout     = vk::ImageLayout::eTransferDstOptimal;
+    barrier.newLayout     = vk::ImageLayout::eShaderReadOnlyOptimal;
     barrier.srcAccessMask = vk::AccessFlagBits::eTransferWrite;
     barrier.dstAccessMask = vk::AccessFlagBits::eShaderRead;
     cmd.pipelineBarrier(vk::PipelineStageFlagBits::eTransfer, vk::PipelineStageFlagBits::eFragmentShader,
                         {}, {}, {}, barrier);
 
-    EndOneTime(pool, cmd);
+    EndOneTime(cmd);
 
     vk::ImageViewCreateInfo vci{};
     vci.image            = *m_font.image;
@@ -203,37 +201,98 @@ void UIRenderer::LoadFont(const std::string& path, float size)
 
     if (ttfData.empty()) return;
 
-    if (m_font.loaded) { m_font.image = nullptr; m_font.memory = nullptr;
-                         m_font.imageView = nullptr; m_font.sampler = nullptr; }
-
-    m_font.glyphs.resize(UIFontAtlas::NUM_CHARS);
-    m_font.bakedSize = size;
-
-    std::vector<uint8_t> bitmap(UIFontAtlas::W * UIFontAtlas::H);
-    int result = stbtt_BakeFontBitmap(
-        ttfData.data(), 0, size, bitmap.data(),
-        UIFontAtlas::W, UIFontAtlas::H,
-        UIFontAtlas::FIRST_CHAR, UIFontAtlas::NUM_CHARS,
-        m_font.glyphs.data());
-
-    if (result <= 0)
+    if (m_font.loaded)
     {
-        std::cerr << "[UIRenderer] stbtt_BakeFontBitmap failed (result=" << result << ")\n";
+        m_font.image     = nullptr;
+        m_font.memory    = nullptr;
+        m_font.imageView = nullptr;
+        m_font.sampler   = nullptr;
+        m_font.loaded    = false;
+    }
+
+    stbtt_fontinfo info{};
+    if (!stbtt_InitFont(&info, ttfData.data(), stbtt_GetFontOffsetForIndex(ttfData.data(), 0)))
+    {
+        std::cerr << "[UIRenderer] stbtt_InitFont failed: " << path << "\n";
         return;
     }
 
-    auto maxPx = *std::max_element(bitmap.begin(), bitmap.end());
-    std::cout << "[UIRenderer] Atlas baked OK, result=" << result
-              << " maxPixel=" << (int)maxPx << "\n";
-    if (maxPx == 0)
+    float scale = stbtt_ScaleForPixelHeight(&info, size);
+
+    int iAscent, iDescent, iLineGap;
+    stbtt_GetFontVMetrics(&info, &iAscent, &iDescent, &iLineGap);
+    m_font.ascent    = (float)iAscent   * scale;
+    m_font.descent   = (float)iDescent  * scale;
+    m_font.lineGap   = (float)iLineGap  * scale;
+    m_font.bakedSize = size;
+
+    std::vector<uint8_t> bitmap(UIFontAtlas::W * UIFontAtlas::H, 0);
+    m_font.glyphs.resize(UIFontAtlas::NUM_CHARS);
+
+    int cursorX = 1;
+    int cursorY = 1;
+    int rowH    = 0;
+    const int PAD = 1;
+
+    for (int i = 0; i < UIFontAtlas::NUM_CHARS; ++i)
     {
-        std::cerr << "[UIRenderer] Atlas is all zeros - font data invalid\n";
-        return;
+        int codepoint = UIFontAtlas::FIRST_CHAR + i;
+
+        int gw, gh, xoff, yoff;
+        unsigned char* gbm = stbtt_GetCodepointBitmap(
+            &info, scale, scale, codepoint, &gw, &gh, &xoff, &yoff);
+
+        int adv, lsb;
+        stbtt_GetCodepointHMetrics(&info, codepoint, &adv, &lsb);
+
+        UIGlyphInfo& g = m_font.glyphs[i];
+        g.xAdvance = (float)adv * scale;
+
+        if (!gbm || gw == 0 || gh == 0)
+        {
+            g.xOff = 0.f; g.yOff = 0.f;
+            g.w    = 0.f; g.h    = 0.f;
+            g.u0   = 0.f; g.v0   = 0.f;
+            g.u1   = 0.f; g.v1   = 0.f;
+            if (gbm) stbtt_FreeBitmap(gbm, nullptr);
+            continue;
+        }
+
+        if (cursorX + gw + PAD > UIFontAtlas::W)
+        {
+            cursorX  = 1;
+            cursorY += rowH + PAD;
+            rowH     = 0;
+        }
+
+        if (cursorY + gh + PAD > UIFontAtlas::H)
+        {
+            stbtt_FreeBitmap(gbm, nullptr);
+            std::cerr << "[UIRenderer] Font atlas full at glyph " << codepoint << "\n";
+            break;
+        }
+
+        for (int row = 0; row < gh; ++row)
+            std::memcpy(&bitmap[(cursorY + row) * UIFontAtlas::W + cursorX],
+                        gbm + row * gw, gw);
+
+        g.u0   = (float)cursorX        / (float)UIFontAtlas::W;
+        g.v0   = (float)cursorY        / (float)UIFontAtlas::H;
+        g.u1   = (float)(cursorX + gw) / (float)UIFontAtlas::W;
+        g.v1   = (float)(cursorY + gh) / (float)UIFontAtlas::H;
+        g.xOff = (float)xoff;
+        g.yOff = (float)yoff;
+        g.w    = (float)gw;
+        g.h    = (float)gh;
+
+        rowH    = std::max(rowH, gh);
+        cursorX += gw + PAD;
+
+        stbtt_FreeBitmap(gbm, nullptr);
     }
 
     UploadFontBitmap(bitmap.data(), UIFontAtlas::W, UIFontAtlas::H);
     m_font.loaded = true;
-    std::cout << "[UIRenderer] Font loaded: " << path << " @ " << size << "px\n";
 }
 
 vk::DescriptorSet UIRenderer::GetOrCreateDescriptorSet(vk::ImageView view, vk::Sampler sampler)
@@ -407,11 +466,11 @@ void UIRenderer::Destroy()
     m_font.imageView = nullptr;
     m_font.sampler   = nullptr;
     m_font.loaded    = false;
-    m_pipeline   = nullptr;
-    m_layout     = nullptr;
-    m_dsl        = nullptr;
-    m_pool       = nullptr;
-    s_renderer   = nullptr;
+    m_pipeline = nullptr;
+    m_layout   = nullptr;
+    m_dsl      = nullptr;
+    m_pool     = nullptr;
+    s_renderer = nullptr;
 }
 
 void UIRenderer::DrawQuad(vk::CommandBuffer cmd,
@@ -425,9 +484,10 @@ void UIRenderer::DrawQuad(vk::CommandBuffer cmd,
     cmd.bindDescriptorSets(vk::PipelineBindPoint::eGraphics, *m_layout, 0, dsBind, nullptr);
 
     UIPushConstants pc{};
-    pc.rectX   = rx; pc.rectY = ry; pc.rectW = rw; pc.rectH = rh;
-    pc.uvX0    = u0; pc.uvY0  = v0; pc.uvX1  = u1; pc.uvY1  = v1;
-    pc.colorR  = color.r; pc.colorG = color.g; pc.colorB = color.b; pc.colorA = color.a;
+    pc.rectX   = rx;      pc.rectY  = ry;      pc.rectW = rw; pc.rectH = rh;
+    pc.uvX0    = u0;      pc.uvY0   = v0;      pc.uvX1  = u1; pc.uvY1  = v1;
+    pc.colorR  = color.r; pc.colorG = color.g;
+    pc.colorB  = color.b; pc.colorA = color.a;
     pc.scale   = m_scale;
     pc.offsetX = m_offsetX;
     pc.offsetY = m_offsetY;
@@ -446,66 +506,36 @@ void UIRenderer::DrawText(vk::CommandBuffer cmd, const UIElement& e,
 {
     if (!m_font.loaded || e.text.empty()) return;
 
-    const std::string& str = e.text;
-
-    // One-time diagnostic to help debug text rendering
-    static bool s_debugOnce = false;
-    if (!s_debugOnce)
-    {
-        s_debugOnce = true;
-        int ci0 = (int)(uint8_t)str[0] - UIFontAtlas::FIRST_CHAR;
-        if (ci0 >= 0 && ci0 < UIFontAtlas::NUM_CHARS)
-        {
-            float tx = 0.f, ty = 0.f;
-            stbtt_aligned_quad dbgQ;
-            stbtt_GetBakedQuad(m_font.glyphs.data(), UIFontAtlas::W, UIFontAtlas::H, ci0, &tx, &ty, &dbgQ, 1);
-            float scl = fontSize / m_font.bakedSize;
-            float sY  = ry + rh * 0.5f - fontSize * 0.5f + fontSize * 0.75f;
-            std::cout << "[UIRenderer] DrawText first-glyph: char='" << str[0]
-                      << "' uv=(" << dbgQ.s0 << "," << dbgQ.t0 << ")-(" << dbgQ.s1 << "," << dbgQ.t1 << ")"
-                      << " gx=" << (rx + dbgQ.x0 * scl) << " gy=" << (sY + dbgQ.y0 * scl)
-                      << " gw=" << (dbgQ.x1 - dbgQ.x0) * scl << " gh=" << (dbgQ.y1 - dbgQ.y0) * scl
-                      << " bakedSize=" << m_font.bakedSize << " fontSize=" << fontSize << " scale=" << scl
-                      << " fontDS=" << (m_fontDS ? "valid" : "NULL") << "\n";
-        }
-    }
-    float scale = fontSize / m_font.bakedSize;
+    float scale     = fontSize / m_font.bakedSize;
+    float baselineY = ry + (rh - (m_font.ascent + m_font.descent)) * 0.5f + m_font.ascent;
 
     float totalW = 0.f;
-    float xpos = 0.f, ypos = 0.f;
-    for (char c : str)
+    for (char c : e.text)
     {
         int ci = (int)(uint8_t)c - UIFontAtlas::FIRST_CHAR;
         if (ci < 0 || ci >= UIFontAtlas::NUM_CHARS) continue;
-        stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(m_font.glyphs.data(), UIFontAtlas::W, UIFontAtlas::H, ci, &xpos, &ypos, &q, 1);
-        totalW = xpos;
+        totalW += m_font.glyphs[ci].xAdvance * scale;
     }
-    totalW *= scale;
 
-    float startX = rx;
-    float startY = ry + rh * 0.5f - fontSize * 0.5f + fontSize * 0.75f;
+    float penX = centered ? rx + (rw - totalW) * 0.5f : rx;
 
-    if (centered)
-        startX = rx + (rw - totalW) * 0.5f;
-
-    xpos = 0.f;
-    ypos = 0.f;
-
-    for (char c : str)
+    for (char c : e.text)
     {
         int ci = (int)(uint8_t)c - UIFontAtlas::FIRST_CHAR;
         if (ci < 0 || ci >= UIFontAtlas::NUM_CHARS) continue;
 
-        stbtt_aligned_quad q;
-        stbtt_GetBakedQuad(m_font.glyphs.data(), UIFontAtlas::W, UIFontAtlas::H, ci, &xpos, &ypos, &q, 1);
+        const UIGlyphInfo& g = m_font.glyphs[ci];
 
-        float gx = startX + q.x0 * scale;
-        float gy = startY + q.y0 * scale;
-        float gw = (q.x1 - q.x0) * scale;
-        float gh = (q.y1 - q.y0) * scale;
+        if (g.w > 0.f && g.h > 0.f)
+        {
+            float gx = penX      + g.xOff * scale;
+            float gy = baselineY + g.yOff * scale;
+            float gw = g.w * scale;
+            float gh = g.h * scale;
+            DrawQuad(cmd, gx, gy, gw, gh, g.u0, g.v0, g.u1, g.v1, color, 2.f, m_fontDS);
+        }
 
-        DrawQuad(cmd, gx, gy, gw, gh, q.s0, q.t0, q.s1, q.t1, color, 2.f, m_fontDS);
+        penX += g.xAdvance * scale;
     }
 }
 
@@ -550,13 +580,13 @@ void UIRenderer::DrawSlider(vk::CommandBuffer cmd, const UIElement& e)
 
     DrawQuad(cmd, rx, ry, rw, rh, 0.f, 0.f, 1.f, 1.f, e.color, 0.f, m_whiteDS);
 
-    float t   = (e.maxValue > e.minValue) ? (e.value - e.minValue) / (e.maxValue - e.minValue) : 0.f;
+    float t     = (e.maxValue > e.minValue) ? (e.value - e.minValue) / (e.maxValue - e.minValue) : 0.f;
     float fillW = rw * t;
     if (fillW > 0.f)
         DrawQuad(cmd, rx, ry, fillW, rh, 0.f, 0.f, 1.f, 1.f, e.fillColor, 0.f, m_whiteDS);
 
-    float handleW  = rh;
-    float handleX  = rx + fillW - handleW * 0.5f;
+    float handleW = rh;
+    float handleX = rx + fillW - handleW * 0.5f;
     handleX = std::clamp(handleX, rx, rx + rw - handleW);
     DrawQuad(cmd, handleX, ry, handleW, rh, 0.f, 0.f, 1.f, 1.f, e.handleColor, 0.f, m_whiteDS);
 }
@@ -572,17 +602,17 @@ void UIRenderer::DrawInputField(vk::CommandBuffer cmd, const UIElement& e)
         ? glm::vec4(0.4f, 0.7f, 1.f, 1.f)
         : glm::vec4(0.5f, 0.5f, 0.5f, 1.f);
     float bw = 2.f;
-    DrawQuad(cmd, rx,        ry,        rw, bw, 0.f, 0.f, 1.f, 1.f, borderColor, 0.f, m_whiteDS);
-    DrawQuad(cmd, rx,        ry+rh-bw,  rw, bw, 0.f, 0.f, 1.f, 1.f, borderColor, 0.f, m_whiteDS);
-    DrawQuad(cmd, rx,        ry,        bw, rh, 0.f, 0.f, 1.f, 1.f, borderColor, 0.f, m_whiteDS);
-    DrawQuad(cmd, rx+rw-bw,  ry,        bw, rh, 0.f, 0.f, 1.f, 1.f, borderColor, 0.f, m_whiteDS);
+    DrawQuad(cmd, rx,       ry,       rw, bw, 0.f, 0.f, 1.f, 1.f, borderColor, 0.f, m_whiteDS);
+    DrawQuad(cmd, rx,       ry+rh-bw, rw, bw, 0.f, 0.f, 1.f, 1.f, borderColor, 0.f, m_whiteDS);
+    DrawQuad(cmd, rx,       ry,       bw, rh, 0.f, 0.f, 1.f, 1.f, borderColor, 0.f, m_whiteDS);
+    DrawQuad(cmd, rx+rw-bw, ry,       bw, rh, 0.f, 0.f, 1.f, 1.f, borderColor, 0.f, m_whiteDS);
 
-    UIElement textElem    = e;
+    UIElement textElem = e;
     const std::string& displayStr = e.inputText.empty() && !e.focused
         ? e.placeholder
         : e.inputText;
-    textElem.text      = displayStr + (e.focused && e.cursorVisible ? "|" : "");
-    glm::vec4 tc       = e.inputText.empty() && !e.focused
+    textElem.text = displayStr + (e.focused && e.cursorVisible ? "|" : "");
+    glm::vec4 tc  = e.inputText.empty() && !e.focused
         ? glm::vec4(0.5f, 0.5f, 0.5f, 1.f)
         : e.textColor;
 
@@ -594,7 +624,7 @@ void UIRenderer::DrawElement(vk::CommandBuffer cmd, const UIElement& e)
 {
     switch (e.type)
     {
-    case UIElementType::Image:      DrawImage(cmd, e);      break;
+    case UIElementType::Image: DrawImage(cmd, e); break;
     case UIElementType::Text:
     {
         glm::vec4 rect = UISystem::Get().ComputeVirtualRect(e);

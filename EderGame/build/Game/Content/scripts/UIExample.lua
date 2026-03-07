@@ -176,6 +176,7 @@ function OnStart()
         UI.setVisible(menuTitle, false)
         UI.setVisible(playBtn,   false)
         UI.setVisible(quitBtn,   false)
+        Scene.load("scenes/Untitled.scene")
     end)
 
     quitBtn = UI.button({

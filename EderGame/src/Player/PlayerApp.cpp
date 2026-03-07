@@ -28,10 +28,6 @@
 #include "Audio/AudioSystem.h"
 #include "UI/UISystem.h"
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Run
-// ─────────────────────────────────────────────────────────────────────────────
-
 int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
 {
     const std::string title = gameName.empty() ? "EderPlayer" : gameName;
@@ -55,7 +51,6 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
         prevTime = currTime;
         physAccum += dt;
 
-        // ── Scene transition (queued by Scene.load()) ─────────────────────────
         {
             std::string next = LuaScriptSystem::Get().ConsumePendingScene();
             if (!next.empty())
@@ -71,10 +66,10 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
                     Krayon::SceneSerializer::LoadFromBytes(bytes, m_registry);
                 else
                     Krayon::SceneSerializer::Load(next, m_registry);
+                UISystem::Get().Init();
                 PhysicsSystem::Get().Init();
                 LuaScriptSystem::Get().Init();
                 AudioSystem::Get().Init();
-                UISystem::Get().Init();
                 physAccum = 0.0f;
             }
         }
@@ -124,10 +119,6 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
     return 0;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Init
-// ─────────────────────────────────────────────────────────────────────────────
-
 void PlayerApp::Init(const std::string& windowTitle, const std::string& initialScene)
 {
     SDL_Init(SDL_INIT_VIDEO);
@@ -137,7 +128,6 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
     if (!m_window)
         throw std::runtime_error("SDL_CreateWindow failed");
 
-    // Camera — FPS mode
     m_camera.fpsMode = true;
     m_camera.fpsPos  = { 0.0f, 2.0f, 12.0f };
     m_camera.SetOrientation(0.0f, 0.0f);
@@ -184,18 +174,14 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
         }
     }
 
+    UISystem::Get().Init();
+    UISystem::Get().SetWindow(m_window);
+    m_uiRenderer.Create(VulkanSwapchain::Get().GetFormat(),
+                        VulkanRenderer::Get().GetDepthFormat());
     PhysicsSystem::Get().Init();
     LuaScriptSystem::Get().Init();
     AudioSystem::Get().Init();
-
-    UISystem::Get().Init();
-    m_uiRenderer.Create(VulkanSwapchain::Get().GetFormat(),
-                        VulkanRenderer::Get().GetDepthFormat());
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  RunPreview / InitPreview  — editor play mode
-// ─────────────────────────────────────────────────────────────────────────────
 
 int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
 {
@@ -221,7 +207,6 @@ int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
         prevTime = currTime;
         physAccum += dt;
 
-        // ── Scene transition (queued by Scene.load()) ─────────────────────────
         {
             std::string next = LuaScriptSystem::Get().ConsumePendingScene();
             if (!next.empty())
@@ -237,10 +222,10 @@ int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
                     Krayon::SceneSerializer::LoadFromBytes(bytes, m_registry);
                 else
                     Krayon::SceneSerializer::Load(next, m_registry);
+                UISystem::Get().Init();
                 PhysicsSystem::Get().Init();
                 LuaScriptSystem::Get().Init();
                 AudioSystem::Get().Init();
-                UISystem::Get().Init();
                 physAccum = 0.0f;
             }
         }
@@ -342,18 +327,14 @@ void PlayerApp::InitPreview(const std::string& scenePath)
             std::cout << "[EderPlayer] Preview scene loaded: " << loadedName << "\n";
     }
 
+    UISystem::Get().Init();
+    UISystem::Get().SetWindow(m_window);
+    m_uiRenderer.Create(VulkanSwapchain::Get().GetFormat(),
+                        VulkanRenderer::Get().GetDepthFormat());
     PhysicsSystem::Get().Init();
     LuaScriptSystem::Get().Init();
     AudioSystem::Get().Init();
-
-    UISystem::Get().Init();
-    m_uiRenderer.Create(VulkanSwapchain::Get().GetFormat(),
-                        VulkanRenderer::Get().GetDepthFormat());
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  InitMaterials
-// ─────────────────────────────────────────────────────────────────────────────
 
 void PlayerApp::InitMaterials()
 {
@@ -409,10 +390,6 @@ void PlayerApp::InitMaterials()
     m_glassMat3.BindTexture(0, m_albedoTex);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Shutdown
-// ─────────────────────────────────────────────────────────────────────────────
-
 void PlayerApp::Shutdown()
 {
     VulkanInstance::Get().GetDevice().waitIdle();
@@ -445,10 +422,6 @@ void PlayerApp::Shutdown()
     SDL_Quit();
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  Input & Events
-// ─────────────────────────────────────────────────────────────────────────────
-
 void PlayerApp::PollEvents()
 {
     SDL_Event event;
@@ -466,7 +439,7 @@ void PlayerApp::PollEvents()
             VulkanRenderer::Get().SetFramebufferResized();
             break;
         case SDL_EVENT_KEY_DOWN:
-            if (event.key.scancode == SDL_SCANCODE_ESCAPE)
+            if (event.key.scancode == SDL_SCANCODE_ESCAPE && !UISystem::Get().HasFocusedInput())
                 m_running = false;
             break;
         default:
@@ -477,6 +450,8 @@ void PlayerApp::PollEvents()
 
 void PlayerApp::ProcessInput(float dt)
 {
+    if (UISystem::Get().HasFocusedInput()) return;
+
     float mx, my;
     const bool rmb = (SDL_GetMouseState(&mx, &my) & SDL_BUTTON_RMASK) != 0;
 
@@ -521,10 +496,6 @@ void PlayerApp::ProcessInput(float dt)
     if (keys[SDL_SCANCODE_SPACE]) m_camera.fpsPos.y += speed * dt;
     if (keys[SDL_SCANCODE_LCTRL]) m_camera.fpsPos.y -= speed * dt;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  UpdateLightBuffer
-// ─────────────────────────────────────────────────────────────────────────────
 
 void PlayerApp::UpdateLightBuffer()
 {
@@ -628,10 +599,6 @@ void PlayerApp::UpdateLightBuffer()
     m_lights.Update            (m_camera.GetPosition());
     m_lights.SetSkyAmbient     (glm::vec3(0.04f), glm::vec3(0.04f));
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  SyncECSToScene
-// ─────────────────────────────────────────────────────────────────────────────
 
 void PlayerApp::SyncECSToScene()
 {
@@ -783,7 +750,6 @@ void PlayerApp::SyncECSToScene()
         obj.material->SetFloat("alphaThreshold", threshold);
     }
 
-    // Active CameraComponent entity → m_camera
     m_registry.Each<CameraComponent>([&](Entity e, CameraComponent& cam)
     {
         if (!cam.isActive) return;
@@ -801,10 +767,6 @@ void PlayerApp::SyncECSToScene()
                                 std::asin(glm::clamp(fwd.y, -1.0f, 1.0f)));
     });
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-//  UpdateAnimations
-// ─────────────────────────────────────────────────────────────────────────────
 
 void PlayerApp::UpdateAnimations(float dt)
 {
@@ -907,10 +869,6 @@ void PlayerApp::UpdateAnimations(float dt)
     m_boneSSBO.Upload(s_identity);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  RenderShadowPasses
-// ─────────────────────────────────────────────────────────────────────────────
-
 void PlayerApp::RenderShadowPasses(vk::CommandBuffer cmd)
 {
     for (uint32_t c = 0; c < VulkanShadowMap::NUM_CASCADES; ++c)
@@ -950,10 +908,6 @@ void PlayerApp::RenderShadowPasses(vk::CommandBuffer cmd)
     m_pointShadowMap.TransitionToShaderRead(cmd, 0);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-//  RenderMainPass
-// ─────────────────────────────────────────────────────────────────────────────
-
 void PlayerApp::RenderMainPass(vk::CommandBuffer cmd)
 {
     auto& sc     = VulkanSwapchain::Get();
@@ -962,12 +916,10 @@ void PlayerApp::RenderMainPass(vk::CommandBuffer cmd)
 
     VulkanRenderer::Get().BeginMainPass();
 
-    // Opaque geometry
     m_pipeline.Bind(cmd);
     m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
     m_scene.Draw(cmd, m_pipeline, m_camera, aspect, m_lights);
 
-    // Skinned (animated) objects
     m_pipeline.Bind(cmd);
     m_scene.DrawSkinned(cmd, m_pipeline, m_camera, aspect, m_lights,
         [this, &cmd](uint32_t entityId)
@@ -978,10 +930,8 @@ void PlayerApp::RenderMainPass(vk::CommandBuffer cmd)
             m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
         });
 
-    // Skybox
     m_skybox.Draw(cmd, m_camera.GetView(), m_camera.GetProjection(aspect), -m_activeDirDir);
 
-    // Transparents
     m_pipeline.BindTransparent(cmd);
     m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
     m_scene.DrawTransparent(cmd, m_pipeline, m_camera, aspect, m_lights);
