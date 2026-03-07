@@ -1,20 +1,22 @@
-# 🚀 Rendering Engine
+# 🚀 EderEngine
 
-A modern real-time rendering engine built with performance and scalability in mind.
+A modern **3D game engine** built with **C++** and the **Vulkan API**, designed with performance, flexibility, and scalability in mind.
+
+EderEngine provides a powerful foundation for modern real-time rendering and game development.
 
 ---
 
-## 🛠 Requirements
+# 🛠 Requirements
 
 Make sure you have the following installed and added to your system **Environment PATH**:
 
-- LLVM  
-- Ninja  
-- CMake  
+* LLVM
+* Ninja
+* CMake
 
 ---
 
-## 🔨 Build Instructions
+# 🔨 Build Instructions
 
 Clone the repository and run:
 
@@ -27,29 +29,72 @@ The compiled binaries will be generated inside the `build` directory.
 
 ---
 
-## ✨ Features
+# ✨ Features
 
-### 🖼 Rendering
-- Depth Buffer
-- Frame Buffer
-- Shadow Mapping  
-  - Cascaded Shadow Maps (CSM)  
-  - Directional Light Shadows  
+## 🖼 Rendering
 
-### 💡 Lighting System
-- Point Lights  
-- Spot Lights  
-- Directional Lights  
+* Depth Buffer
+* Frame Buffer
+* Shadow Mapping
 
-### 🎥 Camera System
-- Fully functional scene navigation system  
+  * Cascaded Shadow Maps (CSM)
+  * Directional Light Shadows
 
-### 🎨 Post Processing
-- Coming Soon 🚧  
+## 💡 Lighting System
+
+* Point Lights
+* Spot Lights
+* Directional Lights
+* Volumetric Lighting
+* Fog
+
+## 🎮 Physics System
+
+* Box Collider
+* Sphere Collider
+* Capsule Collider
+* Character Controller
+* **CharacterController Collision Events**
+* RayCast
+
+## 🎬 Animation
+
+* Animator System
+
+## 🔊 Audio
+
+* **FMOD Audio Integration**
+
+## 📦 Engine Systems
+
+* Lua Scripting
+* 3D Model Loading
+* Sun Shift System
+* Compile Game System
+
+## 🎨 Post Processing
+
+* Coming Soon 🚧
 
 ---
 
-## 📌 Notes
+# 📚 Documentation
 
-This engine is under active development.  
-More features and optimizations will be added soon.
+Full documentation, tutorials, and guides:
+
+https://mantraxtools.store/
+
+---
+
+# 💬 Community
+
+Join the **EderEngine community on Discord**:
+
+https://discord.gg/zG7rSsUGEz
+
+---
+
+# 📌 Notes
+
+EderEngine is currently under **active development**.
+More features, optimizations, and tools will be added in future releases.
