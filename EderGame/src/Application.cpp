@@ -24,6 +24,7 @@
 #include "ECS/Components/VolumetricFogComponent.h"
 #include "ECS/Components/AnimationComponent.h"
 #include "ECS/Components/CameraComponent.h"
+#include "ECS/Components/HierarchyComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 #include "Renderer/VulkanRenderer.h"
 #include "Renderer/Vulkan/VulkanInstance.h"
@@ -62,7 +63,6 @@ int Application::Run()
 
         if (m_playingInline && m_editor.GetPlayState() == PlayState::Playing)
         {
-            // ── Scene transition (queued by Scene.load()) ─────────────────────
             {
                 std::string next = LuaScriptSystem::Get().ConsumePendingScene();
                 if (!next.empty())
@@ -1305,7 +1305,59 @@ void Application::RenderSceneView(vk::CommandBuffer cmd)
     m_scene.DrawTransparent(cmd, m_pipeline, m_camera, aspect, m_lights);
 
     glm::mat4 vp = m_camera.GetProjection(aspect) * m_camera.GetView();
-    m_gizmo.Draw(cmd, m_registry, vp, m_editor.GetSelected());
+
+    Entity selected = m_editor.GetSelected();
+
+    // Shim: promote every entity with a parent to world-space so the gizmo
+    // reads correct positions for ALL handles, not just the selected one.
+    struct ShimEntry { Entity e; TransformComponent saved; glm::mat4 shimmed; };
+    std::vector<ShimEntry> shims;
+
+    m_registry.Each<TransformComponent>([&](Entity e, TransformComponent& tr)
+    {
+        Entity parent = NULL_ENTITY;
+        if (m_registry.Has<HierarchyComponent>(e))
+            parent = m_registry.Get<HierarchyComponent>(e).parent;
+        if (parent == NULL_ENTITY || !m_registry.Has<TransformComponent>(parent)) return;
+
+        ShimEntry s;
+        s.e      = e;
+        s.saved  = tr;
+        TransformSystem::DecomposeInto(TransformSystem::GetWorldMatrix(e, m_registry), tr);
+        s.shimmed = tr.GetMatrix();
+        shims.push_back(s);
+    });
+
+    m_gizmo.Draw(cmd, m_registry, vp, selected);
+
+    for (auto& s : shims)
+    {
+        auto& tr             = m_registry.Get<TransformComponent>(s.e);
+        glm::mat4 worldAfter = tr.GetMatrix();
+
+        bool changed = false;
+        for (int col = 0; col < 4 && !changed; ++col)
+            for (int row = 0; row < 4 && !changed; ++row)
+                if (std::abs(worldAfter[col][row] - s.shimmed[col][row]) > 1e-5f)
+                    changed = true;
+
+        if (changed && s.e == selected)
+        {
+            Entity parent = NULL_ENTITY;
+            if (m_registry.Has<HierarchyComponent>(s.e))
+                parent = m_registry.Get<HierarchyComponent>(s.e).parent;
+
+            glm::mat4 invParent = (parent != NULL_ENTITY && m_registry.Has<TransformComponent>(parent))
+                ? glm::inverse(TransformSystem::GetWorldMatrix(parent, m_registry))
+                : glm::mat4(1.0f);
+
+            TransformSystem::DecomposeInto(invParent * worldAfter, tr);
+        }
+        else
+        {
+            tr = s.saved;
+        }
+    }
 
     m_debugFb.EndRendering(cmd);
     m_debugFb.TransitionToShaderRead(cmd);
