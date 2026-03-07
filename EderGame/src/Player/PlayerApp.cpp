@@ -26,6 +26,7 @@
 #include "Physics/PhysicsSystem.h"
 #include "Scripting/LuaScriptSystem.h"
 #include "Audio/AudioSystem.h"
+#include "UI/UISystem.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Run
@@ -59,6 +60,7 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
             std::string next = LuaScriptSystem::Get().ConsumePendingScene();
             if (!next.empty())
             {
+                UISystem::Get().DestroyAll();
                 LuaScriptSystem::Get().Shutdown();
                 PhysicsSystem::Get().Shutdown();
                 AudioSystem::Get().Shutdown();
@@ -72,6 +74,7 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
                 PhysicsSystem::Get().Init();
                 LuaScriptSystem::Get().Init();
                 AudioSystem::Get().Init();
+                UISystem::Get().Init();
                 physAccum = 0.0f;
             }
         }
@@ -100,6 +103,8 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
             PhysicsSystem::Get().DispatchEvents(m_registry);
             LuaScriptSystem::Get().Update(m_registry, PHYSICS_DT);
         }
+
+        UISystem::Get().Update(dt);
 
         {
             glm::vec3 fwd = m_camera.GetForward() * -1.0f;
@@ -182,6 +187,10 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
     PhysicsSystem::Get().Init();
     LuaScriptSystem::Get().Init();
     AudioSystem::Get().Init();
+
+    UISystem::Get().Init();
+    m_uiRenderer.Create(VulkanSwapchain::Get().GetFormat(),
+                        VulkanRenderer::Get().GetDepthFormat());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -217,6 +226,7 @@ int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
             std::string next = LuaScriptSystem::Get().ConsumePendingScene();
             if (!next.empty())
             {
+                UISystem::Get().DestroyAll();
                 LuaScriptSystem::Get().Shutdown();
                 PhysicsSystem::Get().Shutdown();
                 AudioSystem::Get().Shutdown();
@@ -230,6 +240,7 @@ int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
                 PhysicsSystem::Get().Init();
                 LuaScriptSystem::Get().Init();
                 AudioSystem::Get().Init();
+                UISystem::Get().Init();
                 physAccum = 0.0f;
             }
         }
@@ -257,6 +268,8 @@ int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
             PhysicsSystem::Get().DispatchEvents(m_registry);
             LuaScriptSystem::Get().Update(m_registry, PHYSICS_DT);
         }
+
+        UISystem::Get().Update(dt);
 
         {
             glm::vec3 fwd = m_camera.GetForward() * -1.0f;
@@ -332,6 +345,10 @@ void PlayerApp::InitPreview(const std::string& scenePath)
     PhysicsSystem::Get().Init();
     LuaScriptSystem::Get().Init();
     AudioSystem::Get().Init();
+
+    UISystem::Get().Init();
+    m_uiRenderer.Create(VulkanSwapchain::Get().GetFormat(),
+                        VulkanRenderer::Get().GetDepthFormat());
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -421,6 +438,8 @@ void PlayerApp::Shutdown()
     PhysicsSystem::Get().Shutdown();
     LuaScriptSystem::Get().Shutdown();
     AudioSystem::Get().Shutdown();
+    UISystem::Get().Shutdown();
+    m_uiRenderer.Destroy();
 
     SDL_DestroyWindow(m_window);
     SDL_Quit();
@@ -435,6 +454,8 @@ void PlayerApp::PollEvents()
     SDL_Event event;
     while (SDL_PollEvent(&event))
     {
+        UISystem::Get().HandleEvent(event);
+
         switch (event.type)
         {
         case SDL_EVENT_QUIT:
@@ -964,4 +985,6 @@ void PlayerApp::RenderMainPass(vk::CommandBuffer cmd)
     m_pipeline.BindTransparent(cmd);
     m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
     m_scene.DrawTransparent(cmd, m_pipeline, m_camera, aspect, m_lights);
+
+    m_uiRenderer.Draw(cmd);
 }

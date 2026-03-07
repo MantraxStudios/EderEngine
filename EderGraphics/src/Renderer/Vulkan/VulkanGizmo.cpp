@@ -14,10 +14,6 @@
 #include <cstring>
 #include <glm/gtc/constants.hpp>
 
-// ---------------------------------------------------------------------------
-// Shader loading
-// ---------------------------------------------------------------------------
-
 std::vector<uint32_t> VulkanGizmo::LoadSpv(const std::string& path)
 {
     auto& am = Krayon::AssetManager::Get();
@@ -42,15 +38,10 @@ std::vector<uint32_t> VulkanGizmo::LoadSpv(const std::string& path)
     return buf;
 }
 
-// ---------------------------------------------------------------------------
-// Create / Destroy
-// ---------------------------------------------------------------------------
-
 void VulkanGizmo::Create(vk::Format colorFormat, vk::Format depthFormat)
 {
     auto& device = VulkanInstance::Get().GetDevice();
 
-    // Push constant: mat4 viewProj (64 B) + vec4 color (16 B) = 80 B
     vk::PushConstantRange pcRange{};
     pcRange.stageFlags = vk::ShaderStageFlagBits::eVertex |
                          vk::ShaderStageFlagBits::eFragment;
@@ -94,7 +85,6 @@ void VulkanGizmo::BuildPipeline(vk::Format colorFormat, vk::Format depthFormat)
     stages[1].module = *fragMod;
     stages[1].pName  = "main";
 
-    // Vertex input: binding 0, stride = 12 bytes (vec3)
     vk::VertexInputBindingDescription binding{};
     binding.binding   = 0;
     binding.stride    = sizeof(Vertex);
@@ -127,12 +117,10 @@ void VulkanGizmo::BuildPipeline(vk::Format colorFormat, vk::Format depthFormat)
     vk::PipelineMultisampleStateCreateInfo multisampling{};
     multisampling.rasterizationSamples = vk::SampleCountFlagBits::e1;
 
-    // No depth test — gizmos always visible on top
     vk::PipelineDepthStencilStateCreateInfo depthStencil{};
     depthStencil.depthTestEnable  = vk::False;
     depthStencil.depthWriteEnable = vk::False;
 
-    // Alpha blend so gizmos don't completely cover the scene
     vk::PipelineColorBlendAttachmentState colorAtt{};
     colorAtt.blendEnable         = vk::True;
     colorAtt.srcColorBlendFactor = vk::BlendFactor::eSrcAlpha;
@@ -184,10 +172,6 @@ void VulkanGizmo::Destroy()
     pipelineLayout = nullptr;
 }
 
-// ---------------------------------------------------------------------------
-// Geometry helpers
-// ---------------------------------------------------------------------------
-
 void VulkanGizmo::AddCross(std::vector<Vertex>& v, glm::vec3 p, float s)
 {
     v.push_back({p.x - s, p.y,     p.z    }); v.push_back({p.x + s, p.y,     p.z    });
@@ -213,18 +197,15 @@ void VulkanGizmo::AddCircle(std::vector<Vertex>& v, glm::vec3 c,
 void VulkanGizmo::AddCone(std::vector<Vertex>& v, glm::vec3 origin,
                            glm::vec3 dir, float range, float angleDeg, int N)
 {
-    glm::vec3 d   = glm::normalize(dir);
-    glm::vec3 tmp = glm::abs(d.y) < 0.9f ? glm::vec3(0, 1, 0) : glm::vec3(1, 0, 0);
+    glm::vec3 d     = glm::normalize(dir);
+    glm::vec3 tmp   = glm::abs(d.y) < 0.9f ? glm::vec3(0, 1, 0) : glm::vec3(1, 0, 0);
     glm::vec3 right = glm::normalize(glm::cross(d, tmp));
     glm::vec3 up    = glm::cross(right, d);
+    float     r     = range * std::tan(glm::radians(angleDeg));
+    glm::vec3 tip   = origin + d * range;
 
-    float     r   = range * std::tan(glm::radians(angleDeg));
-    glm::vec3 tip = origin + d * range;
-
-    // Circle at the open end
     AddCircle(v, tip, right, up, r, N);
 
-    // 4 rays from origin to circle edge
     for (int i = 0; i < 4; i++)
     {
         float     a    = glm::two_pi<float>() * static_cast<float>(i) / 4.0f;
@@ -234,12 +215,9 @@ void VulkanGizmo::AddCone(std::vector<Vertex>& v, glm::vec3 origin,
     }
 }
 
-// Draw the 12 edges of an axis-aligned box defined by halfExtents and center,
-// all transformed by the entity world matrix.
 void VulkanGizmo::AddBox(std::vector<Vertex>& v, const glm::mat4& world,
                           const glm::vec3& halfExtents, const glm::vec3& center)
 {
-    // 8 local-space corners
     glm::vec3 corners[8];
     for (int i = 0; i < 8; i++)
     {
@@ -250,11 +228,10 @@ void VulkanGizmo::AddBox(std::vector<Vertex>& v, const glm::mat4& world,
         glm::vec4 w = world * glm::vec4(local, 1.0f);
         corners[i]  = { w.x, w.y, w.z };
     }
-    // 12 edges (each as a pair of corner indices)
     static const int edges[12][2] = {
-        {0,1},{2,3},{4,5},{6,7},   // along X
-        {0,2},{1,3},{4,6},{5,7},   // along Y
-        {0,4},{1,5},{2,6},{3,7}    // along Z
+        {0,1},{2,3},{4,5},{6,7},
+        {0,2},{1,3},{4,6},{5,7},
+        {0,4},{1,5},{2,6},{3,7}
     };
     for (auto& e : edges)
     {
@@ -263,31 +240,25 @@ void VulkanGizmo::AddBox(std::vector<Vertex>& v, const glm::mat4& world,
     }
 }
 
-// Draw a capsule wireframe: two end-cap circles + four connecting lines +
-// hemisphere arcs at both ends (all in world space).
 void VulkanGizmo::AddCapsule(std::vector<Vertex>& v, const glm::mat4& world,
                               float radius, float halfHeight,
                               const glm::vec3& center, int N)
 {
-    // Local-space up axis is Y; capsule axis runs from -halfHeight to +halfHeight.
-    // We transform the world matrix's Y axis and a pair of perpendicular axes.
     glm::vec3 worldCenter = glm::vec3(world * glm::vec4(center, 1.0f));
-    glm::vec3 axisY  = glm::normalize(glm::vec3(world[1])); // column 1 (local Y)
+    glm::vec3 axisY  = glm::normalize(glm::vec3(world[1]));
     glm::vec3 axisX  = glm::normalize(glm::vec3(world[0]));
     glm::vec3 axisZ  = glm::normalize(glm::vec3(world[2]));
     float     scaleY = glm::length(glm::vec3(world[1]));
     float     scaleX = glm::length(glm::vec3(world[0]));
-    float     wHH    = halfHeight * scaleY;  // scaled half-height
-    float     wR     = radius    * scaleX;   // scaled radius
+    float     wHH    = halfHeight * scaleY;
+    float     wR     = radius * scaleX;
 
     glm::vec3 top    = worldCenter + axisY * wHH;
     glm::vec3 bottom = worldCenter - axisY * wHH;
 
-    // Body circles at both ends
     AddCircle(v, top,    axisX, axisZ, wR, N);
     AddCircle(v, bottom, axisX, axisZ, wR, N);
 
-    // 4 vertical lines connecting the two circles
     for (int i = 0; i < 4; i++)
     {
         float     a  = glm::two_pi<float>() * static_cast<float>(i) / 4.0f;
@@ -296,10 +267,9 @@ void VulkanGizmo::AddCapsule(std::vector<Vertex>& v, const glm::mat4& world,
         v.push_back({bottom.x + dt.x, bottom.y + dt.y, bottom.z + dt.z});
     }
 
-    // Hemisphere arcs — two semicircles at the top cap (XY and ZY planes)
-    int halfN = N / 2;
-    float step = glm::pi<float>() / static_cast<float>(halfN);
-    for (int pass = 0; pass < 2; pass++)           // XY arc and ZY arc
+    int   halfN = N / 2;
+    float step  = glm::pi<float>() / static_cast<float>(halfN);
+    for (int pass = 0; pass < 2; pass++)
     {
         glm::vec3 side = (pass == 0) ? axisX : axisZ;
         for (int i = 0; i < halfN; i++)
@@ -313,7 +283,7 @@ void VulkanGizmo::AddCapsule(std::vector<Vertex>& v, const glm::mat4& world,
         }
         for (int i = 0; i < halfN; i++)
         {
-            float     a0 = step * static_cast<float>(i)  + glm::pi<float>();
+            float     a0 = step * static_cast<float>(i)     + glm::pi<float>();
             float     a1 = step * static_cast<float>(i + 1) + glm::pi<float>();
             glm::vec3 p0 = bottom + side * (wR * std::cos(a0)) - axisY * (wR * std::sin(a0 - glm::pi<float>()));
             glm::vec3 p1 = bottom + side * (wR * std::cos(a1)) - axisY * (wR * std::sin(a1 - glm::pi<float>()));
@@ -322,10 +292,6 @@ void VulkanGizmo::AddCapsule(std::vector<Vertex>& v, const glm::mat4& world,
         }
     }
 }
-
-// ---------------------------------------------------------------------------
-// Draw
-// ---------------------------------------------------------------------------
 
 void VulkanGizmo::Draw(vk::CommandBuffer cmd,
                         const Registry&  registry,
@@ -338,55 +304,44 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
 
     for (Entity e : registry.GetEntities())
     {
-        if (!registry.Has<LightComponent>(e)     ) continue;
-        if (!registry.Has<TransformComponent>(e) ) continue;
+        if (!registry.Has<LightComponent>(e))     continue;
+        if (!registry.Has<TransformComponent>(e)) continue;
 
         const auto& t = registry.Get<TransformComponent>(e);
         const auto& l = registry.Get<LightComponent>(e);
 
-        bool      isSel = (e == selectedEntity);
-        glm::vec3 pos   = t.position;
-        // Selected: bright yellow. Normal: light color, semi-transparent.
+        bool isSel = (e == selectedEntity);
+
+        glm::mat4 world = t.GetMatrix();
+        glm::vec3 pos   = glm::vec3(world[3]);
+
         glm::vec4 col = isSel
             ? glm::vec4(1.0f, 0.95f, 0.20f, 1.0f)
             : glm::vec4(l.color, 0.70f);
-
-        // Scale factor: selected gizmos are slightly larger
-        float selScale = isSel ? 1.35f : 1.0f;
 
         uint32_t start = static_cast<uint32_t>(verts.size());
 
         if (l.type == LightType::Point)
         {
-            // Small cross at the pivot + 3 circles at the ACTUAL range radius
-            constexpr float cross = 0.35f;
-            float ringR = l.range * selScale;   // exact range — no scaling/clamping
-            AddCross (verts, pos, cross * selScale);
-            AddCircle(verts, pos, {1,0,0}, {0,1,0}, ringR, 32);   // XY plane
-            AddCircle(verts, pos, {1,0,0}, {0,0,1}, ringR, 32);   // XZ plane
-            AddCircle(verts, pos, {0,1,0}, {0,0,1}, ringR, 32);   // YZ plane
+            AddCross (verts, pos, 0.35f);
+            AddCircle(verts, pos, {1,0,0}, {0,1,0}, l.range, 32);
+            AddCircle(verts, pos, {1,0,0}, {0,0,1}, l.range, 32);
+            AddCircle(verts, pos, {0,1,0}, {0,0,1}, l.range, 32);
         }
         else if (l.type == LightType::Directional)
         {
-            // 5 downward arrows in a fan
-            float arrowLen = 2.0f * selScale;
             for (int i = -2; i <= 2; i++)
             {
-                glm::vec3 p = pos + glm::vec3(static_cast<float>(i) * 0.6f * selScale, 0.0f, 0.0f);
-                verts.push_back({p.x, p.y + arrowLen * 0.75f, p.z});
-                verts.push_back({p.x, p.y - arrowLen * 0.25f, p.z});
+                glm::vec3 p = pos + glm::vec3(static_cast<float>(i) * 0.6f, 0.0f, 0.0f);
+                verts.push_back({p.x, p.y + 1.5f, p.z});
+                verts.push_back({p.x, p.y - 0.5f, p.z});
             }
         }
         else if (l.type == LightType::Spot)
         {
-            // Cross at origin + cone sized by actual range and outer angle
-            AddCross(verts, pos, 0.35f * selScale);
-
-            glm::mat4 m   = t.GetMatrix();
-            glm::vec3 dir = glm::normalize(glm::vec3(m * glm::vec4(0.0f, -1.0f, 0.0f, 0.0f)));
-
-            float coneRange = l.range * selScale;   // exact range — no scaling/clamping
-            AddCone(verts, pos, dir, coneRange, l.outerConeAngle, 20);
+            AddCross(verts, pos, 0.35f);
+            glm::vec3 dir = glm::normalize(glm::vec3(world * glm::vec4(0.0f, -1.0f, 0.0f, 0.0f)));
+            AddCone(verts, pos, dir, l.range, l.outerConeAngle, 20);
         }
 
         uint32_t count = static_cast<uint32_t>(verts.size()) - start;
@@ -394,7 +349,6 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
             calls.push_back({start, count, col});
     }
 
-    // ── Collider wireframes ─────────────────────────────────────────────────
     for (Entity e : registry.GetEntities())
     {
         if (!registry.Has<ColliderComponent>(e))  continue;
@@ -405,9 +359,9 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
 
         bool      isSel = (e == selectedEntity);
         glm::vec4 color;
-        if      (isSel)         color = glm::vec4(0.20f, 1.00f, 0.20f, 1.00f); // bright green
-        else if (col.isTrigger) color = glm::vec4(0.00f, 0.90f, 0.90f, 0.75f); // cyan
-        else                    color = glm::vec4(0.15f, 0.80f, 0.15f, 0.75f); // green
+        if      (isSel)         color = glm::vec4(0.20f, 1.00f, 0.20f, 1.00f);
+        else if (col.isTrigger) color = glm::vec4(0.00f, 0.90f, 0.90f, 0.75f);
+        else                    color = glm::vec4(0.15f, 0.80f, 0.15f, 0.75f);
 
         glm::mat4 world = t.GetMatrix();
         uint32_t  start = static_cast<uint32_t>(verts.size());
@@ -418,12 +372,11 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
         }
         else if (col.shape == ColliderShape::Sphere)
         {
-            // Transform center to world
             glm::vec3 wPos = glm::vec3(world * glm::vec4(col.center, 1.0f));
             float     wR   = col.radius * glm::length(glm::vec3(world[0]));
-            AddCircle(verts, wPos, {1,0,0}, {0,1,0}, wR, 24); // XY
-            AddCircle(verts, wPos, {1,0,0}, {0,0,1}, wR, 24); // XZ
-            AddCircle(verts, wPos, {0,1,0}, {0,0,1}, wR, 24); // YZ
+            AddCircle(verts, wPos, {1,0,0}, {0,1,0}, wR, 24);
+            AddCircle(verts, wPos, {1,0,0}, {0,0,1}, wR, 24);
+            AddCircle(verts, wPos, {0,1,0}, {0,0,1}, wR, 24);
         }
         else if (col.shape == ColliderShape::Capsule)
         {
@@ -435,7 +388,6 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
             calls.push_back({start, count, color});
     }
 
-    // ── CharacterController wireframes ─────────────────────────────────────
     for (Entity e : registry.GetEntities())
     {
         if (!registry.Has<CharacterControllerComponent>(e)) continue;
@@ -446,12 +398,12 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
 
         bool      isSel = (e == selectedEntity);
         glm::vec4 color = isSel
-            ? glm::vec4(1.0f, 0.75f, 0.10f, 1.00f)  // bright orange when selected
-            : glm::vec4(1.0f, 0.55f, 0.10f, 0.75f);  // muted orange
+            ? glm::vec4(1.0f, 0.75f, 0.10f, 1.00f)
+            : glm::vec4(1.0f, 0.55f, 0.10f, 0.75f);
 
-        glm::mat4    world    = t.GetMatrix();
-        float        halfHgt  = std::max((cc.height * 0.5f) - cc.radius, 0.0f);
-        uint32_t     startIdx = static_cast<uint32_t>(verts.size());
+        glm::mat4 world   = t.GetMatrix();
+        float     halfHgt = std::max((cc.height * 0.5f) - cc.radius, 0.0f);
+        uint32_t  startIdx = static_cast<uint32_t>(verts.size());
 
         AddCapsule(verts, world, cc.radius, halfHgt, cc.center, 24);
 
@@ -460,7 +412,6 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
             calls.push_back({startIdx, cnt, color});
     }
 
-    // ── Lua / C++ debug lines (Debug.drawRay etc.) ───────────────────────────────
     for (const auto& line : Krayon::DebugDraw::Get().GetLines())
     {
         uint32_t start = static_cast<uint32_t>(verts.size());
@@ -476,7 +427,7 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
 
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
 
-    vk::Buffer    buf    = vertexBuffer.GetBuffer();
+    vk::Buffer     buf    = vertexBuffer.GetBuffer();
     vk::DeviceSize offset = 0;
     cmd.bindVertexBuffers(0, buf, offset);
 

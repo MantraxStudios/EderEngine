@@ -17,8 +17,6 @@
 class TransformSystem
 {
 public:
-    // ── Matrices ─────────────────────────────────────────────────────────────
-    
     static glm::mat4 GetLocalMatrix(Entity e, const Registry& registry)
     {
         if (!registry.Has<TransformComponent>(e)) return glm::mat4(1.0f);

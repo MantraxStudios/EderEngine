@@ -24,6 +24,7 @@
 #include "Renderer/Vulkan/VulkanPointShadowPipeline.h"
 #include "Renderer/Vulkan/BoneSSBO.h"
 #include "EderCore.h"
+#include "UI/UIRenderer.h"
 
 class PlayerApp
 {
@@ -111,6 +112,8 @@ private:
 
     glm::mat4 m_cascadeMatrices[VulkanShadowMap::NUM_CASCADES] = {};
     glm::vec4 m_cascadeSplits  = {};
+
+    UIRenderer m_uiRenderer;
 
     // ── Mesh hot-swap tracking ────────────────────────────────────────────────
     std::unordered_map<uint32_t, uint64_t>    m_lastMeshGuid;

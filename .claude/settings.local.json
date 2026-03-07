@@ -15,7 +15,14 @@
       "Bash(glslc shaders/skybox.vert -o shaders/skybox.vert.spv)",
       "Bash(ninja)",
       "Bash(python3:*)",
-      "WebFetch(domain:nvidia-omniverse.github.io)"
+      "WebFetch(domain:nvidia-omniverse.github.io)",
+      "Bash(glslc --version)",
+      "Bash(glslc ui.vert -o ui.vert.spv)",
+      "Bash(glslc ui.frag -o ui.frag.spv)",
+      "Bash(cmake --build . --target EderPlayer)",
+      "Bash(xxd \"c:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/Game/Content/shaders/ui.frag.spv.data\")",
+      "Bash(glslc --target-env=vulkan1.0 ui.frag -o ui.frag.spv)",
+      "Bash(glslc --target-env=vulkan1.0 ui.vert -o ui.vert.spv)"
     ]
   }
 }

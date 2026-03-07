@@ -28,6 +28,7 @@ namespace fs = std::filesystem;
 #include "ECS/Components/AudioSourceComponent.h"
 #include "Audio/AudioSystem.h"
 #include "ECS/Systems/TransformSystem.h"
+#include "UI/UISystem.h"
 #include <IO/AssetManager.h>
 #include <IO/DebugDraw.h>
 #include "Physics/PhysicsSystem.h"
@@ -1597,4 +1598,6 @@ void LuaScriptSystem::BindAPI()
         if (s_reg && s_reg->Has<AudioSourceComponent>((Entity)e))
             s_reg->Get<AudioSourceComponent>((Entity)e).maxDistance = v;
     };
+
+    UISystem::Get().BindLua(m_lua);
 }

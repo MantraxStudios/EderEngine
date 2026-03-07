@@ -514,6 +514,7 @@ code {
       <a class="sidebar-link" href="#" onclick="return showPage('input')"><span class="dot"></span>Input</a>
       <a class="sidebar-link" href="#" onclick="return showPage('scene')"><span class="dot"></span>Scene</a>
       <a class="sidebar-link" href="#" onclick="return showPage('audiosource')"><span class="dot"></span>AudioSource</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('ui')"><span class="dot"></span>UI System</a>
     </div>
     <div class="sidebar-section">
       <span class="sidebar-label">Examples</span>
@@ -1888,6 +1889,247 @@ GRAVITY = <span class="num">-9.81</span>
         <a class="pnav-btn" href="#" onclick="return showPage('scene')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Scene</span></a>
         <a class="pnav-btn next" href="#" onclick="return showPage('examples')"><span class="pnav-dir">Next →</span><span class="pnav-title">Examples</span></a>
       </div>
+    </section>
+
+    <!-- ══════════════════════════════ UI ════════════════════════════════════ -->
+    <section class="page" id="page-ui">
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>UI System</span></div>
+      <h2>UI System <span class="badge">Utility</span></h2>
+      <p class="page-desc">Immediate-mode 2D UI rendered over the 3D scene. All elements are created from Lua and auto-scale to maintain a 1920×1080 virtual canvas regardless of actual screen resolution.</p>
+
+      <h3>Coordinate System</h3>
+      <p class="page-desc">Positions are defined in <strong>virtual pixels</strong> (1920×1080). At runtime the canvas is letterboxed uniformly to fit any screen while preserving the aspect ratio. The origin of each element is its <strong>top-left corner</strong>, offset from the chosen anchor point.</p>
+
+      <h3>Anchor Constants — <code>UIAnchor</code></h3>
+      <table class="api-table">
+        <thead><tr><th>Constant</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>UIAnchor.TopLeft</code></td><td>Top-left corner of the screen (0, 0)</td></tr>
+          <tr><td><code>UIAnchor.TopCenter</code></td><td>Top edge, horizontally centered (960, 0)</td></tr>
+          <tr><td><code>UIAnchor.TopRight</code></td><td>Top-right corner (1920, 0)</td></tr>
+          <tr><td><code>UIAnchor.MiddleLeft</code></td><td>Left edge, vertically centered (0, 540)</td></tr>
+          <tr><td><code>UIAnchor.MiddleCenter</code></td><td>Exact screen center (960, 540)</td></tr>
+          <tr><td><code>UIAnchor.MiddleRight</code></td><td>Right edge, vertically centered (1920, 540)</td></tr>
+          <tr><td><code>UIAnchor.BottomLeft</code></td><td>Bottom-left corner (0, 1080)</td></tr>
+          <tr><td><code>UIAnchor.BottomCenter</code></td><td>Bottom edge, horizontally centered (960, 1080)</td></tr>
+          <tr><td><code>UIAnchor.BottomRight</code></td><td>Bottom-right corner (1920, 1080)</td></tr>
+        </tbody>
+      </table>
+      <div class="note">Position <code>(x, y)</code> is an offset added to the anchor point. Use negative values to move elements inward from right/bottom anchors.</div>
+
+      <h3>Element Constructors</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>UI.image(params)</code></td><td><span class="ret-badge">int</span></td><td>Creates an image (textured quad). See params below.</td></tr>
+          <tr><td><code>UI.text(params)</code></td><td><span class="ret-badge">int</span></td><td>Creates a text label.</td></tr>
+          <tr><td><code>UI.button(params)</code></td><td><span class="ret-badge">int</span></td><td>Creates a clickable button with a text label.</td></tr>
+          <tr><td><code>UI.slider(params)</code></td><td><span class="ret-badge">int</span></td><td>Creates a horizontal value slider.</td></tr>
+          <tr><td><code>UI.inputField(params)</code></td><td><span class="ret-badge">int</span></td><td>Creates a keyboard-input text field.</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Common Parameters (all elements)</h3>
+      <table class="api-table">
+        <thead><tr><th>Key</th><th>Type</th><th>Default</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>anchor</code></td><td>UIAnchor</td><td>UIAnchor.TopLeft</td><td>Screen anchor reference point</td></tr>
+          <tr><td><code>x, y</code></td><td>number</td><td>0, 0</td><td>Virtual-pixel offset from anchor</td></tr>
+          <tr><td><code>width, height</code></td><td>number</td><td>varies</td><td>Size in virtual pixels</td></tr>
+          <tr><td><code>zOrder</code></td><td>int</td><td>0</td><td>Draw order — higher values render on top</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Button Extra Parameters</h3>
+      <table class="api-table">
+        <thead><tr><th>Key</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>text</code></td><td>string</td><td>Label text (centered)</td></tr>
+          <tr><td><code>color</code></td><td>{r,g,b,a}</td><td>Background color</td></tr>
+          <tr><td><code>textColor</code></td><td>{r,g,b,a}</td><td>Text color</td></tr>
+          <tr><td><code>fontSize</code></td><td>number</td><td>Font size in virtual pixels</td></tr>
+          <tr><td><code>onClick</code></td><td>function</td><td>Called when clicked</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Slider Extra Parameters</h3>
+      <table class="api-table">
+        <thead><tr><th>Key</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>value</code></td><td>number</td><td>Initial value</td></tr>
+          <tr><td><code>min, max</code></td><td>number</td><td>Value range (default 0..1)</td></tr>
+          <tr><td><code>bgColor</code></td><td>{r,g,b,a}</td><td>Track background color</td></tr>
+          <tr><td><code>fillColor</code></td><td>{r,g,b,a}</td><td>Filled portion color</td></tr>
+          <tr><td><code>handleColor</code></td><td>{r,g,b,a}</td><td>Handle knob color</td></tr>
+          <tr><td><code>onChanged</code></td><td>function(v)</td><td>Called while dragging with current value</td></tr>
+        </tbody>
+      </table>
+
+      <h3>InputField Extra Parameters</h3>
+      <table class="api-table">
+        <thead><tr><th>Key</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>placeholder</code></td><td>string</td><td>Greyed text shown when empty and unfocused</td></tr>
+          <tr><td><code>color</code></td><td>{r,g,b,a}</td><td>Background color</td></tr>
+          <tr><td><code>textColor</code></td><td>{r,g,b,a}</td><td>Input text color</td></tr>
+          <tr><td><code>fontSize</code></td><td>number</td><td>Font size</td></tr>
+          <tr><td><code>onSubmit</code></td><td>function(s)</td><td>Called when Enter is pressed with the current text</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Image Extra Parameters</h3>
+      <table class="api-table">
+        <thead><tr><th>Key</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>texture</code></td><td>string</td><td>Asset path to texture image</td></tr>
+          <tr><td><code>color</code></td><td>{r,g,b,a}</td><td>Tint color (white = no tint)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Manipulation API</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>UI.setVisible(id, bool)</code></td><td></td><td>Show or hide an element</td></tr>
+          <tr><td><code>UI.isVisible(id)</code></td><td><span class="ret-badge">bool</span></td><td>Returns current visibility</td></tr>
+          <tr><td><code>UI.setPosition(id, x, y)</code></td><td></td><td>Change position offset in virtual pixels</td></tr>
+          <tr><td><code>UI.setSize(id, w, h)</code></td><td></td><td>Change element size</td></tr>
+          <tr><td><code>UI.setColor(id, r, g, b, a)</code></td><td></td><td>Change background/tint color</td></tr>
+          <tr><td><code>UI.setTextColor(id, r, g, b, a)</code></td><td></td><td>Change text color</td></tr>
+          <tr><td><code>UI.setText(id, str)</code></td><td></td><td>Set element label text</td></tr>
+          <tr><td><code>UI.getText(id)</code></td><td><span class="ret-badge">string</span></td><td>Get current text</td></tr>
+          <tr><td><code>UI.setFontSize(id, size)</code></td><td></td><td>Change font size in virtual pixels</td></tr>
+          <tr><td><code>UI.setAnchor(id, anchor)</code></td><td></td><td>Change anchor point</td></tr>
+          <tr><td><code>UI.setZOrder(id, z)</code></td><td></td><td>Change draw order</td></tr>
+          <tr><td><code>UI.setValue(id, v)</code></td><td></td><td>Set slider value (clamped to min/max)</td></tr>
+          <tr><td><code>UI.getValue(id)</code></td><td><span class="ret-badge">number</span></td><td>Get current slider value</td></tr>
+          <tr><td><code>UI.getInputText(id)</code></td><td><span class="ret-badge">string</span></td><td>Get typed text from an InputField</td></tr>
+          <tr><td><code>UI.setInputText(id, str)</code></td><td></td><td>Programmatically set InputField text</td></tr>
+          <tr><td><code>UI.destroy(id)</code></td><td></td><td>Remove element</td></tr>
+          <tr><td><code>UI.destroyAll()</code></td><td></td><td>Remove all UI elements</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Font &amp; Screen API</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>UI.loadFont(path, size)</code></td><td></td><td>Load a TTF font for text rendering. Call once in <code>OnStart</code>.</td></tr>
+          <tr><td><code>UI.screenWidth()</code></td><td><span class="ret-badge">number</span></td><td>Actual screen width in pixels</td></tr>
+          <tr><td><code>UI.screenHeight()</code></td><td><span class="ret-badge">number</span></td><td>Actual screen height in pixels</td></tr>
+          <tr><td><code>UI.virtualWidth()</code></td><td><span class="ret-badge">number</span></td><td>Always 1920</td></tr>
+          <tr><td><code>UI.virtualHeight()</code></td><td><span class="ret-badge">number</span></td><td>Always 1080</td></tr>
+        </tbody>
+      </table>
+
+      <div class="note"><strong>Text rendering requires a font.</strong> Call <code>UI.loadFont("fonts/opensans.ttf", 32)</code> before creating text or button elements. Without a loaded font, text will not be visible.</div>
+
+      <h3>Example — HUD with score and health bar</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua — hud.lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">local</span> scoreLabel, healthSlider
+
+<span class="kw">function</span> <span class="fn">OnStart</span>()
+    <span class="tbl">UI</span>.loadFont(<span class="str">"fonts/opensans.ttf"</span>, <span class="num">32</span>)
+
+    scoreLabel = <span class="tbl">UI</span>.text({
+        anchor   = <span class="tbl">UIAnchor</span>.TopLeft,
+        x        = <span class="num">20</span>, y = <span class="num">20</span>,
+        text     = <span class="str">"Score: 0"</span>,
+        color    = { r=<span class="num">1</span>, g=<span class="num">1</span>, b=<span class="num">0</span>, a=<span class="num">1</span> },
+        fontSize = <span class="num">28</span>,
+        zOrder   = <span class="num">10</span>
+    })
+
+    healthSlider = <span class="tbl">UI</span>.slider({
+        anchor      = <span class="tbl">UIAnchor</span>.BottomLeft,
+        x           = <span class="num">20</span>, y = <span class="num">-50</span>,
+        width       = <span class="num">300</span>, height = <span class="num">18</span>,
+        value       = <span class="num">1.0</span>,
+        min         = <span class="num">0</span>, max = <span class="num">1</span>,
+        bgColor     = { r=<span class="num">0.2</span>, g=<span class="num">0.2</span>, b=<span class="num">0.2</span>, a=<span class="num">1</span> },
+        fillColor   = { r=<span class="num">0.9</span>, g=<span class="num">0.2</span>, b=<span class="num">0.2</span>, a=<span class="num">1</span> },
+        handleColor = { r=<span class="num">1</span>,   g=<span class="num">0.4</span>, b=<span class="num">0.4</span>, a=<span class="num">1</span> }
+    })
+<span class="kw">end</span>
+
+<span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="tbl">UI</span>.setText(scoreLabel, <span class="str">"Score: "</span> .. score)
+    <span class="tbl">UI</span>.setValue(healthSlider, health / maxHealth)
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Example — Main menu with buttons</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua — main_menu.lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnStart</span>()
+    <span class="tbl">UI</span>.loadFont(<span class="str">"fonts/opensans.ttf"</span>, <span class="num">32</span>)
+
+    <span class="tbl">UI</span>.image({
+        anchor  = <span class="tbl">UIAnchor</span>.MiddleCenter,
+        x       = <span class="num">-400</span>, y = <span class="num">-250</span>,
+        width   = <span class="num">800</span>, height = <span class="num">500</span>,
+        texture = <span class="str">"textures/menu_bg.png"</span>
+    })
+
+    <span class="tbl">UI</span>.button({
+        anchor    = <span class="tbl">UIAnchor</span>.MiddleCenter,
+        x         = <span class="num">-120</span>, y = <span class="num">-40</span>,
+        width     = <span class="num">240</span>, height = <span class="num">55</span>,
+        text      = <span class="str">"Play"</span>,
+        fontSize  = <span class="num">26</span>,
+        color     = { r=<span class="num">0.15</span>, g=<span class="num">0.55</span>, b=<span class="num">0.25</span>, a=<span class="num">1</span> },
+        textColor = { r=<span class="num">1</span>, g=<span class="num">1</span>, b=<span class="num">1</span>, a=<span class="num">1</span> },
+        onClick   = <span class="kw">function</span>()
+            Scene.load(<span class="str">"scenes/game.scene"</span>)
+        <span class="kw">end</span>
+    })
+
+    <span class="tbl">UI</span>.button({
+        anchor   = <span class="tbl">UIAnchor</span>.MiddleCenter,
+        x        = <span class="num">-120</span>, y = <span class="num">30</span>,
+        width    = <span class="num">240</span>, height = <span class="num">55</span>,
+        text     = <span class="str">"Quit"</span>,
+        fontSize = <span class="num">26</span>,
+        color    = { r=<span class="num">0.55</span>, g=<span class="num">0.15</span>, b=<span class="num">0.15</span>, a=<span class="num">1</span> },
+        onClick  = <span class="kw">function</span>()
+            os.exit(<span class="num">0</span>)
+        <span class="kw">end</span>
+    })
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Example — Settings panel with InputField and Slider</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua — settings.lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">local</span> nameField, volSlider
+
+<span class="kw">function</span> <span class="fn">OnStart</span>()
+    <span class="tbl">UI</span>.loadFont(<span class="str">"fonts/opensans.ttf"</span>, <span class="num">28</span>)
+
+    nameField = <span class="tbl">UI</span>.inputField({
+        anchor      = <span class="tbl">UIAnchor</span>.MiddleCenter,
+        x           = <span class="num">-200</span>, y = <span class="num">-80</span>,
+        width       = <span class="num">400</span>, height = <span class="num">48</span>,
+        placeholder = <span class="str">"Enter your name..."</span>,
+        fontSize    = <span class="num">22</span>,
+        onSubmit    = <span class="kw">function</span>(text)
+            <span class="fn">print</span>(<span class="str">"Name set to: "</span> .. text)
+        <span class="kw">end</span>
+    })
+
+    volSlider = <span class="tbl">UI</span>.slider({
+        anchor    = <span class="tbl">UIAnchor</span>.MiddleCenter,
+        x         = <span class="num">-150</span>, y = <span class="num">10</span>,
+        width     = <span class="num">300</span>, height = <span class="num">20</span>,
+        value     = <span class="num">0.8</span>,
+        onChanged = <span class="kw">function</span>(v)
+            AudioSource.setVolume(ambienceEntity, v)
+        <span class="kw">end</span>
+    })
+<span class="kw">end</span></pre>
+      </div>
+
     </section>
 
   </main>

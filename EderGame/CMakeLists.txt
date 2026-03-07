@@ -150,6 +150,9 @@ set(PLAYER_SOURCES
     src/Physics/PhysicsSystem.cpp
     src/Scripting/LuaScriptSystem.cpp
     src/Audio/AudioSystem.cpp
+    src/UI/UISystem.cpp
+    src/UI/UIRenderer.cpp
+    src/UI/UIFontImpl.cpp
 )
 
 add_executable(EderPlayer ${PLAYER_SOURCES})
