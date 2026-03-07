@@ -25,6 +25,8 @@ namespace fs = std::filesystem;
 #include "ECS/Components/LayerComponent.h"
 #include "ECS/Components/CameraComponent.h"
 #include "ECS/Components/CharacterControllerComponent.h"
+#include "ECS/Components/AudioSourceComponent.h"
+#include "Audio/AudioSystem.h"
 #include "ECS/Systems/TransformSystem.h"
 #include <IO/AssetManager.h>
 #include <IO/DebugDraw.h>
@@ -1511,5 +1513,88 @@ void LuaScriptSystem::BindAPI()
     SceneT["load"] = [this](const std::string& path)
     {
         m_pendingScene = path;
+    };
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // AudioSource table
+    // Controls FMOD audio sources attached to entities.
+    // ─────────────────────────────────────────────────────────────────────────
+    sol::table AS = m_lua.create_named_table("AudioSource");
+
+    AS["has"] = [](int e) -> bool {
+        return s_reg && s_reg->Has<AudioSourceComponent>((Entity)e);
+    };
+
+    // play(entity)   — start / restart playback
+    AS["play"] = [](int e) {
+        if (s_reg && s_reg->Has<AudioSourceComponent>((Entity)e))
+            AudioSystem::Get().Play((Entity)e, *s_reg);
+    };
+
+    // stop(entity)   — stop playback
+    AS["stop"] = [](int e) {
+        AudioSystem::Get().Stop((Entity)e);
+    };
+
+    // pause(entity)  — pause without resetting position
+    AS["pause"] = [](int e) {
+        AudioSystem::Get().Pause((Entity)e);
+    };
+
+    // resume(entity) — resume after pause
+    AS["resume"] = [](int e) {
+        AudioSystem::Get().Resume((Entity)e);
+    };
+
+    // isPlaying(entity) → bool
+    AS["isPlaying"] = [](int e) -> bool {
+        return AudioSystem::Get().IsPlaying((Entity)e);
+    };
+
+    // setVolume(entity, volume)  — [0.0, 1.0]
+    AS["setVolume"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<AudioSourceComponent>((Entity)e))
+            s_reg->Get<AudioSourceComponent>((Entity)e).volume = v;
+        AudioSystem::Get().SetVolume((Entity)e, v);
+    };
+
+    AS["getVolume"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<AudioSourceComponent>((Entity)e)) return 1.0f;
+        return s_reg->Get<AudioSourceComponent>((Entity)e).volume;
+    };
+
+    AS["setLoop"] = [](int e, bool v) {
+        if (s_reg && s_reg->Has<AudioSourceComponent>((Entity)e))
+            s_reg->Get<AudioSourceComponent>((Entity)e).loop = v;
+    };
+
+    AS["isLoop"] = [](int e) -> bool {
+        if (!s_reg || !s_reg->Has<AudioSourceComponent>((Entity)e)) return false;
+        return s_reg->Get<AudioSourceComponent>((Entity)e).loop;
+    };
+
+    AS["setMuted"] = [](int e, bool v) {
+        if (!s_reg || !s_reg->Has<AudioSourceComponent>((Entity)e)) return;
+        s_reg->Get<AudioSourceComponent>((Entity)e).muted = v;
+    };
+
+    AS["isMuted"] = [](int e) -> bool {
+        if (!s_reg || !s_reg->Has<AudioSourceComponent>((Entity)e)) return false;
+        return s_reg->Get<AudioSourceComponent>((Entity)e).muted;
+    };
+
+    AS["setSpatial"] = [](int e, bool v) {
+        if (s_reg && s_reg->Has<AudioSourceComponent>((Entity)e))
+            s_reg->Get<AudioSourceComponent>((Entity)e).spatial = v;
+    };
+
+    AS["setMinDistance"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<AudioSourceComponent>((Entity)e))
+            s_reg->Get<AudioSourceComponent>((Entity)e).minDistance = v;
+    };
+
+    AS["setMaxDistance"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<AudioSourceComponent>((Entity)e))
+            s_reg->Get<AudioSourceComponent>((Entity)e).maxDistance = v;
     };
 }

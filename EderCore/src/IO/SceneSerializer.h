@@ -32,6 +32,7 @@
 #include "ECS/Components/RigidbodyComponent.h"
 #include "ECS/Components/ScriptComponent.h"
 #include "ECS/Components/CharacterControllerComponent.h"
+#include "ECS/Components/AudioSourceComponent.h"
 
 #include <fstream>
 #include <sstream>
@@ -223,6 +224,23 @@ public:
                 f << "fog.fogEnd="         << fog.fogEnd         << "\n";
                 f << "fog.scatterStr="     << fog.scatterStrength << "\n";
                 f << "fog.maxFog="         << fog.maxFogAmount   << "\n";
+            }
+
+            // ── AudioSourceComponent ──────────────────────────────────────────
+            if (reg.Has<AudioSourceComponent>(e))
+            {
+                const auto& au = reg.Get<AudioSourceComponent>(e);
+                char buf[32];
+                snprintf(buf, sizeof(buf), "%llx", (unsigned long long)au.audioGuid);
+                f << "audio.guid="        << buf                       << "\n";
+                f << "audio.path="        << Escape(au.audioPath)      << "\n";
+                f << "audio.volume="      << au.volume                 << "\n";
+                f << "audio.minDist="     << au.minDistance            << "\n";
+                f << "audio.maxDist="     << au.maxDistance            << "\n";
+                f << "audio.loop="        << (au.loop        ? 1 : 0) << "\n";
+                f << "audio.playOnAwake=" << (au.playOnAwake ? 1 : 0) << "\n";
+                f << "audio.spatial="     << (au.spatial     ? 1 : 0) << "\n";
+                f << "audio.muted="       << (au.muted       ? 1 : 0) << "\n";
             }
 
             f << "[/entity]\n\n";
@@ -455,6 +473,22 @@ private:
                 if (kv.count("cc.slopeLimit")) cc.slopeLimit = std::stof(kv.at("cc.slopeLimit"));
                 if (kv.count("cc.skinWidth"))  cc.skinWidth  = std::stof(kv.at("cc.skinWidth"));
                 if (kv.count("cc.center"))     cc.center     = ParseVec3(kv.at("cc.center"));
+            }
+
+            // AudioSourceComponent
+            if (kv.count("audio.guid"))
+            {
+                auto& au = reg.Add<AudioSourceComponent>(e);
+                try { au.audioGuid = std::stoull(kv.at("audio.guid"), nullptr, 16); } catch (...) {}
+                if (kv.count("audio.path"))        au.audioPath    = Unescape(kv.at("audio.path"));
+                if (kv.count("audio.volume"))      au.volume       = std::stof(kv.at("audio.volume"));
+                if (kv.count("audio.minDist"))     au.minDistance  = std::stof(kv.at("audio.minDist"));
+                if (kv.count("audio.maxDist"))     au.maxDistance  = std::stof(kv.at("audio.maxDist"));
+                if (kv.count("audio.loop"))        au.loop         = kv.at("audio.loop")        == "1";
+                if (kv.count("audio.playOnAwake")) au.playOnAwake  = kv.at("audio.playOnAwake") == "1";
+                if (kv.count("audio.spatial"))     au.spatial      = kv.at("audio.spatial")     == "1";
+                if (kv.count("audio.muted"))       au.muted        = kv.at("audio.muted")       == "1";
+                au.started = false; // always re-trigger playOnAwake after load
             }
 
             // VolumetricFogComponent

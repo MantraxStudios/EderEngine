@@ -13,6 +13,9 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 # Paths
 set(EDERCORE_DIR ${CMAKE_SOURCE_DIR}/../EderCore)
 set(EDERGRAPHICS_DIR ${CMAKE_SOURCE_DIR}/../EderGraphics)
+set(FMOD_INCLUDE ${EDERCORE_DIR}/vendor/include)
+set(FMOD_LIB     ${EDERCORE_DIR}/vendor/lib/fmod_vc.lib)
+set(FMOD_DLL     ${EDERCORE_DIR}/vendor/lib/fmod.dll)
 set(JOLT_INCLUDE ${EDERCORE_DIR}/vendor/include)
 set(JOLT_LIB ${EDERCORE_DIR}/vendor/lib/Jolt.lib)
 set(EDERGRAPHICS_INCLUDE ${EDERGRAPHICS_DIR}/src)
@@ -55,6 +58,7 @@ target_include_directories(EderGame PRIVATE
     ${EDERGRAPHICS_VENDOR_INCLUDE}
     ${CMAKE_SOURCE_DIR}/vendor/include
     ${JOLT_INCLUDE}
+    ${FMOD_INCLUDE}
 )
 
 # --------------------------------------------------
@@ -101,6 +105,7 @@ if (WIN32)
         ${EDERGRAPHICS_VENDOR_LIB}/vulkan-1.lib
         ${JOLT_LIB}
         ${LUA_LIB_DIR}/lua54.lib
+        ${FMOD_LIB}
     )
 
     # Copiar lua54.dll
@@ -126,6 +131,14 @@ if (WIN32)
         $<TARGET_FILE_DIR:EderGame>
         COMMENT "Copiando SDL3.dll"
     )
+
+    # Copiar fmod.dll
+    add_custom_command(TARGET EderGame POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${FMOD_DLL}"
+        $<TARGET_FILE_DIR:EderGame>
+        COMMENT "Copiando fmod.dll"
+    )
 endif()
 
 # --------------------------------------------------
@@ -136,6 +149,7 @@ set(PLAYER_SOURCES
     src/Player/PlayerApp.cpp
     src/Physics/PhysicsSystem.cpp
     src/Scripting/LuaScriptSystem.cpp
+    src/Audio/AudioSystem.cpp
 )
 
 add_executable(EderPlayer ${PLAYER_SOURCES})
@@ -147,6 +161,7 @@ target_include_directories(EderPlayer PRIVATE
     ${EDERGRAPHICS_VENDOR_INCLUDE}
     ${CMAKE_SOURCE_DIR}/vendor/include
     ${JOLT_INCLUDE}
+    ${FMOD_INCLUDE}
 )
 
 target_compile_definitions(EderPlayer PRIVATE
@@ -183,6 +198,7 @@ if (WIN32)
         ${EDERGRAPHICS_VENDOR_LIB}/vulkan-1.lib
         ${JOLT_LIB}
         ${LUA_LIB_DIR}/lua54.lib
+        ${FMOD_LIB}
     )
 
     target_compile_definitions(EderPlayer PRIVATE
@@ -209,6 +225,13 @@ if (WIN32)
         "${EDERGRAPHICS_VENDOR_LIB}/SDL3.dll"
         $<TARGET_FILE_DIR:EderPlayer>
         COMMENT "Copiando SDL3.dll para EderPlayer"
+    )
+
+    add_custom_command(TARGET EderPlayer POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${FMOD_DLL}"
+        $<TARGET_FILE_DIR:EderPlayer>
+        COMMENT "Copiando fmod.dll para EderPlayer"
     )
 endif()
 

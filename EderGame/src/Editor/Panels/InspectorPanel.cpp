@@ -10,6 +10,7 @@
 #include "ECS/Components/ColliderComponent.h"
 #include "ECS/Components/ScriptComponent.h"
 #include "ECS/Components/CharacterControllerComponent.h"
+#include "ECS/Components/AudioSourceComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 #include "Physics/PhysicsSystem.h"
 #include "Scripting/LuaScriptSystem.h"
@@ -187,6 +188,7 @@ void InspectorPanel::OnDraw()
     DrawColliderComponent();
     DrawCharacterControllerComponent();
     DrawScriptComponent();
+    DrawAudioSourceComponent();
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -833,6 +835,51 @@ void InspectorPanel::DrawScriptComponent()
 
 // ─────────────────────────────────────────────────────────────────────────────
 
+void InspectorPanel::DrawAudioSourceComponent()
+{
+    if (!registry->Has<AudioSourceComponent>(selected)) return;
+
+    if (ComponentHeader<AudioSourceComponent>("Audio Source", registry, selected,
+            ImVec4(0.20f, 0.85f, 0.90f, 1.0f)))
+    {
+        auto& au = registry->Get<AudioSourceComponent>(selected);
+
+        // ── Audio clip drop slot ──────────────────────────────────
+        {
+            std::string newPath; uint64_t newGuid = 0;
+            if (AssetDropField("Clip", Krayon::AssetType::Audio, au.audioPath, newPath, newGuid))
+            {
+                au.audioGuid = newGuid;
+                au.audioPath = newPath;
+                au.started   = false; // reload on next Update
+            }
+        }
+
+        ImGui::Spacing();
+        ImGui::DragFloat("Volume",       &au.volume,      0.01f, 0.0f, 1.0f, "%.2f");
+
+        ImGui::Spacing();
+        ImGui::Checkbox("Loop",          &au.loop);
+        ImGui::SameLine(120);
+        ImGui::Checkbox("Play On Awake", &au.playOnAwake);
+        ImGui::Checkbox("Spatial (3D)",  &au.spatial);
+        ImGui::SameLine(120);
+        ImGui::Checkbox("Muted",         &au.muted);
+
+        if (au.spatial)
+        {
+            ImGui::Spacing();
+            ImGui::TextDisabled("-- 3D Attenuation --");
+            ImGui::DragFloat("Min Distance", &au.minDistance, 0.1f, 0.01f, 500.0f, "%.2f");
+            ImGui::DragFloat("Max Distance", &au.maxDistance, 1.0f, 1.0f,  2000.0f, "%.2f");
+        }
+
+        ImGui::Spacing();
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 void InspectorPanel::DrawAddComponent()
 {
     const bool canAddTransform    = !registry->Has<TransformComponent>(selected);
@@ -844,9 +891,10 @@ void InspectorPanel::DrawAddComponent()
     const bool canAddCollider     = !registry->Has<ColliderComponent>(selected);
     const bool canAddCC           = !registry->Has<CharacterControllerComponent>(selected);
     const bool canAddScript       = !registry->Has<ScriptComponent>(selected);
+    const bool canAddAudio        = !registry->Has<AudioSourceComponent>(selected);
     const bool anyAvailable       = canAddTransform || canAddMeshRenderer || canAddLight
                                  || canAddFog || canAddAnim || canAddRigidbody || canAddCollider
-                                 || canAddCC || canAddScript;
+                                 || canAddCC || canAddScript || canAddAudio;
 
     float btnW = ImGui::GetContentRegionAvail().x;
     ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.18f, 0.18f, 0.18f, 1.0f));
@@ -884,6 +932,8 @@ void InspectorPanel::DrawAddComponent()
         }
         if (canAddScript && ImGui::MenuItem("   Script"))
             registry->Add<ScriptComponent>(selected);
+        if (canAddAudio && ImGui::MenuItem("   Audio Source"))
+            registry->Add<AudioSourceComponent>(selected);
         ImGui::EndPopup();
     }
 }

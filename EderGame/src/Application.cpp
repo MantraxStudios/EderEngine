@@ -30,6 +30,7 @@
 #include "Renderer/Vulkan/VulkanSwapchain.h"
 #include "Physics/PhysicsSystem.h"
 #include "Scripting/LuaScriptSystem.h"
+#include "Audio/AudioSystem.h"
 #include <IO/AssetManager.h>
 #include <IO/SceneSerializer.h>
 #include <IO/DebugDraw.h>
@@ -68,6 +69,7 @@ int Application::Run()
                 {
                     LuaScriptSystem::Get().Shutdown();
                     PhysicsSystem::Get().Shutdown();
+                    AudioSystem::Get().Shutdown();
                     m_registry.Clear();
                     m_scene.GetObjects().clear();
                     const auto bytes = Krayon::AssetManager::Get().GetBytes(next);
@@ -77,6 +79,7 @@ int Application::Run()
                         Krayon::SceneSerializer::Load(next, m_registry);
                     PhysicsSystem::Get().Init();
                     LuaScriptSystem::Get().Init();
+                    AudioSystem::Get().Init();
                     physAccum = 0.0f;
                 }
             }
@@ -96,6 +99,14 @@ int Application::Run()
                 physAccum -= PHYSICS_DT;
                 ++steps;
             }
+
+            {
+                glm::vec3 fwd = m_camera.GetForward() * -1.0f;;
+                glm::vec3 up  = m_camera.GetUp();
+                AudioSystem::Get().SetListenerTransform(m_camera.fpsPos, fwd, up);
+            }
+
+            AudioSystem::Get().Update(m_registry, dt);
 
             if (steps >= MAX_PHYSICS_STEPS)
                 physAccum = 0.0f;
@@ -200,6 +211,7 @@ void Application::Init()
     m_editor.SetSceneViewFramebuffer(&m_debugFb);
     PhysicsSystem::Get().Init();
     LuaScriptSystem::Get().Init();
+    AudioSystem::Get().Init();
     WireEditorCallbacks();
 }
 
@@ -323,6 +335,7 @@ void Application::StartPlayMode()
 
         PhysicsSystem::Get().Init();
         LuaScriptSystem::Get().Init();
+        AudioSystem::Get().Init();
         m_playingInline = true;
 
         m_editor.AppendBuildLog("[Play] Running inline in editor.");
@@ -402,6 +415,7 @@ void Application::StopPlayMode()
     {
         PhysicsSystem::Get().Shutdown();
         LuaScriptSystem::Get().Shutdown();
+        AudioSystem::Get().Shutdown();
         m_playingInline = false;
 
         if (!m_tempScenePath.empty())
@@ -741,6 +755,7 @@ void Application::Shutdown()
 
     PhysicsSystem::Get().Shutdown();
     LuaScriptSystem::Get().Shutdown();
+    AudioSystem::Get().Shutdown();
     SDL_DestroyWindow(m_window);
     SDL_Quit();
 }

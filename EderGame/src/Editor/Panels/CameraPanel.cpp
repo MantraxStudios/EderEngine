@@ -39,9 +39,6 @@ void CameraPanel::OnDraw()
     ImGui::SeparatorText("Movement");
 
     ImGui::SetNextItemWidth(-70);
-    ImGui::DragFloat("Speed##cam",  &camera->moveSpeed,  0.5f, 0.5f, 500.0f, "%.1f");
-
-    ImGui::SetNextItemWidth(-70);
     ImGui::DragFloat3("Position##cam", &camera->fpsPos.x, 0.1f);
 
     ImGui::Spacing();

@@ -512,6 +512,8 @@ code {
       <a class="sidebar-link" href="#" onclick="return showPage('camera')"><span class="dot"></span>Camera</a>
       <a class="sidebar-link" href="#" onclick="return showPage('charcontroller')"><span class="dot"></span>CharacterController</a>
       <a class="sidebar-link" href="#" onclick="return showPage('input')"><span class="dot"></span>Input</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('scene')"><span class="dot"></span>Scene</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('audiosource')"><span class="dot"></span>AudioSource</a>
     </div>
     <div class="sidebar-section">
       <span class="sidebar-label">Examples</span>
@@ -1469,7 +1471,7 @@ GRAVITY = <span class="num">-9.81</span>
 
       <div class="page-nav">
         <a class="pnav-btn" href="#" onclick="return showPage('charcontroller')"><span class="pnav-dir">← Previous</span><span class="pnav-title">CharacterController</span></a>
-        <a class="pnav-btn next" href="#" onclick="return showPage('examples')"><span class="pnav-dir">Next →</span><span class="pnav-title">Examples</span></a>
+        <a class="pnav-btn next" href="#" onclick="return showPage('scene')"><span class="pnav-dir">Next →</span><span class="pnav-title">Scene</span></a>
       </div>
     </section>
 
@@ -1741,6 +1743,153 @@ GRAVITY = <span class="num">-9.81</span>
       </div>
     </section>
 
+    <!-- ════════════════════════════ SCENE ════════════════════════════════ -->
+    <section class="page" id="page-scene">
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>Scene</span></div>
+      <h2>Scene <span class="badge">Utility</span></h2>
+      <p class="page-desc">Load scenes at runtime. The transition happens at the end of the current frame so it is safe to call from any callback.</p>
+
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Scene.load(path)</code></td><td></td><td>Schedules a scene load. <code>path</code> is relative to the project content folder (e.g. <code>"scenes/level2.scene"</code>)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Notes</h3>
+      <ul style="margin:.6rem 0 1.2rem 1.4rem;color:var(--text2);line-height:2">
+        <li>Calling <code>Scene.load</code> more than once per frame uses the last call.</li>
+        <li>All ECS state is reset when a new scene is loaded — audio, physics and scripts restart cleanly.</li>
+      </ul>
+
+      <h3>Example — transition on trigger</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnTriggerEnter</span>(other)
+    <span class="tbl">Scene</span>.load(<span class="str">&quot;scenes/level2.scene&quot;</span>)
+<span class="kw">end</span></pre>
+      </div>
+
+      <div class="page-nav">
+        <a class="pnav-btn" href="#" onclick="return showPage('input')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Input</span></a>
+        <a class="pnav-btn next" href="#" onclick="return showPage('audiosource')"><span class="pnav-dir">Next →</span><span class="pnav-title">AudioSource</span></a>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════ AUDIOSOURCE ══════════════════════════════ -->
+    <section class="page" id="page-audiosource">
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>AudioSource</span></div>
+      <h2>AudioSource <span class="badge">Component</span></h2>
+      <p class="page-desc">Controls FMOD audio sources attached to entities. Supports 2D and 3D spatial playback, volume, looping, and muting.</p>
+
+      <h3>Presence</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>AudioSource.has(e)</code></td><td><span class="ret-badge">bool</span></td><td>Returns <code>true</code> if the entity has an AudioSource component</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Playback</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>AudioSource.play(e)</code></td><td></td><td>Start or restart playback from the beginning</td></tr>
+          <tr><td><code>AudioSource.stop(e)</code></td><td></td><td>Stop playback and reset position</td></tr>
+          <tr><td><code>AudioSource.pause(e)</code></td><td></td><td>Pause at the current position</td></tr>
+          <tr><td><code>AudioSource.resume(e)</code></td><td></td><td>Resume from where it was paused</td></tr>
+          <tr><td><code>AudioSource.isPlaying(e)</code></td><td><span class="ret-badge">bool</span></td><td>True if the channel is currently active</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Volume &amp; mute</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>AudioSource.setVolume(e, v)</code></td><td></td><td>Set volume in range <code>[0.0, 1.0]</code></td></tr>
+          <tr><td><code>AudioSource.getVolume(e)</code></td><td><span class="ret-badge">float</span></td><td>Current volume</td></tr>
+          <tr><td><code>AudioSource.setMuted(e, bool)</code></td><td></td><td>Mute / unmute without changing the stored volume</td></tr>
+          <tr><td><code>AudioSource.isMuted(e)</code></td><td><span class="ret-badge">bool</span></td><td>Is currently muted?</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Loop &amp; spatial</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>AudioSource.setLoop(e, bool)</code></td><td></td><td>Enable / disable looping</td></tr>
+          <tr><td><code>AudioSource.isLoop(e)</code></td><td><span class="ret-badge">bool</span></td><td>Is looping enabled?</td></tr>
+          <tr><td><code>AudioSource.setSpatial(e, bool)</code></td><td></td><td>Switch between 2D (false) and 3D positional (true) audio</td></tr>
+          <tr><td><code>AudioSource.setMinDistance(e, dist)</code></td><td></td><td>Distance at which the sound is at full volume (3D only)</td></tr>
+          <tr><td><code>AudioSource.setMaxDistance(e, dist)</code></td><td></td><td>Distance at which the sound is fully attenuated (3D only)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Inspector properties</h3>
+      <p style="color:var(--text2);margin:.4rem 0 1.2rem">These are configured in the editor but can also be driven from Lua at runtime.</p>
+      <table class="api-table">
+        <thead><tr><th>Property</th><th>Type</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td>Audio clip</td><td>Asset slot</td><td>Drag a <code>.wav</code> or <code>.mp3</code> from the Content Browser</td></tr>
+          <tr><td>Volume</td><td>float 0–1</td><td>Playback volume</td></tr>
+          <tr><td>Loop</td><td>bool</td><td>Replay when the clip ends</td></tr>
+          <tr><td>Play On Awake</td><td>bool</td><td>Start playing automatically when Play Mode begins</td></tr>
+          <tr><td>Muted</td><td>bool</td><td>Silence without stopping the channel</td></tr>
+          <tr><td>Spatial</td><td>bool</td><td>Enable 3D positional audio; the source follows the entity's Transform</td></tr>
+          <tr><td>Min Distance</td><td>float</td><td>Full-volume radius (spatial only)</td></tr>
+          <tr><td>Max Distance</td><td>float</td><td>Silence radius (spatial only, linear rolloff)</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Example — footstep sounds</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">local</span> stepTimer = <span class="num">0</span>
+<span class="kw">local</span> STEP_INTERVAL = <span class="num">0.45</span>
+
+<span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="kw">local</span> h = <span class="tbl">Input</span>.getAxis(<span class="str">&quot;Horizontal&quot;</span>)
+    <span class="kw">local</span> v = <span class="tbl">Input</span>.getAxis(<span class="str">&quot;Vertical&quot;</span>)
+    <span class="kw">local</span> moving = math.abs(h) + math.abs(v) &gt; <span class="num">0.1</span>
+
+    <span class="kw">if</span> moving <span class="kw">and</span> <span class="tbl">CharacterController</span>.isGrounded(this_entity) <span class="kw">then</span>
+        stepTimer = stepTimer + dt
+        <span class="kw">if</span> stepTimer &gt;= STEP_INTERVAL <span class="kw">then</span>
+            stepTimer = <span class="num">0</span>
+            <span class="tbl">AudioSource</span>.play(this_entity)
+        <span class="kw">end</span>
+    <span class="kw">else</span>
+        stepTimer = <span class="num">0</span>
+    <span class="kw">end</span>
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Example — spatial ambient sound</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnStart</span>()
+    <span class="tbl">AudioSource</span>.setSpatial(this_entity, <span class="kw">true</span>)
+    <span class="tbl">AudioSource</span>.setMinDistance(this_entity, <span class="num">3</span>)
+    <span class="tbl">AudioSource</span>.setMaxDistance(this_entity, <span class="num">20</span>)
+    <span class="tbl">AudioSource</span>.setLoop(this_entity, <span class="kw">true</span>)
+    <span class="tbl">AudioSource</span>.play(this_entity)
+<span class="kw">end</span>
+
+<span class="kw">function</span> <span class="fn">OnTriggerEnter</span>(other)
+    <span class="tbl">AudioSource</span>.setMuted(this_entity, <span class="kw">false</span>)
+<span class="kw">end</span>
+
+<span class="kw">function</span> <span class="fn">OnTriggerExit</span>(other)
+    <span class="tbl">AudioSource</span>.setMuted(this_entity, <span class="kw">true</span>)
+<span class="kw">end</span></pre>
+      </div>
+
+      <div class="page-nav">
+        <a class="pnav-btn" href="#" onclick="return showPage('scene')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Scene</span></a>
+        <a class="pnav-btn next" href="#" onclick="return showPage('examples')"><span class="pnav-dir">Next →</span><span class="pnav-title">Examples</span></a>
+      </div>
+    </section>
+
   </main>
 </div>
 
@@ -1829,6 +1978,8 @@ const searchIndex = [
   { page:'camera',       tag:'Component', title:'Camera',              sub:'setActive getActive hasCamera add remove setFOV getFOV setNear setFar nearPlane farPlane isActive follow zoom cut' },
   { page:'charcontroller',tag:'Component', title:'CharacterController', sub:'move isGrounded getVelocity add remove has setRadius setHeight setSlopeLimit setStepOffset capsule kinematic sweep physics grounded jump' },
   { page:'input',        tag:'Utility',   title:'Input',               sub:'getKey getKeyDown getKeyUp getMouseButton getMouseButtonDown getMouseButtonUp getMousePosition getMouseDelta getAxis Horizontal Vertical KEY_W KEY_A KEY_S KEY_D KEY_SPACE MB_LEFT MB_RIGHT keyboard mouse scancode' },
+  { page:'scene',        tag:'Utility',   title:'Scene',               sub:'load transition level scene change path runtime load scene file' },
+  { page:'audiosource',  tag:'Component', title:'AudioSource',         sub:'play stop pause resume isPlaying setVolume getVolume setLoop isLoop setMuted isMuted setSpatial setMinDistance setMaxDistance fmod spatial 3D audio sound wav mp3 loop mute volume distance rolloff' },
   { page:'examples',     tag:'Examples',  title:'Code Examples',       sub:'move pulse light animation collision log save config hierarchy damage raycast layer' },
 ];
 

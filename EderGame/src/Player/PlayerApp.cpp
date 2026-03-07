@@ -25,6 +25,7 @@
 #include <IO/SceneSerializer.h>
 #include "Physics/PhysicsSystem.h"
 #include "Scripting/LuaScriptSystem.h"
+#include "Audio/AudioSystem.h"
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  Run
@@ -60,6 +61,7 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
             {
                 LuaScriptSystem::Get().Shutdown();
                 PhysicsSystem::Get().Shutdown();
+                AudioSystem::Get().Shutdown();
                 m_registry.Clear();
                 m_scene.GetObjects().clear();
                 const auto bytes = Krayon::AssetManager::Get().GetBytes(next);
@@ -69,6 +71,7 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
                     Krayon::SceneSerializer::Load(next, m_registry);
                 PhysicsSystem::Get().Init();
                 LuaScriptSystem::Get().Init();
+                AudioSystem::Get().Init();
                 physAccum = 0.0f;
             }
         }
@@ -78,7 +81,7 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
 
         VulkanRenderer::Get().BeginFrame();
         if (!VulkanRenderer::Get().IsFrameStarted())
-            continue;   // swapchain rebuilt — skip frame, no resize needed
+            continue;
 
         UpdateLightBuffer();
 
@@ -97,6 +100,14 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
             PhysicsSystem::Get().DispatchEvents(m_registry);
             LuaScriptSystem::Get().Update(m_registry, PHYSICS_DT);
         }
+
+        {
+            glm::vec3 fwd = m_camera.GetForward() * -1.0f;
+            glm::vec3 up  = m_camera.GetUp();
+            AudioSystem::Get().SetListenerTransform(m_camera.fpsPos, fwd, up);
+        }
+
+        AudioSystem::Get().Update(m_registry, dt);
 
         RenderShadowPasses(cmd);
         RenderMainPass(cmd);
@@ -132,7 +143,6 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
     VulkanRenderer::Get().Init();
     VulkanRenderer::Get().SetWindow(m_window);
 
-    // Main PBR pipeline
     m_pipeline.Create(
         "shaders/triangle.vert.spv",
         "shaders/triangle.frag.spv",
@@ -141,7 +151,6 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
 
     InitMaterials();
 
-    // Shadow system
     m_shadowMap.Create(1024);
     m_shadowPipeline.Create(m_shadowMap.GetFormat());
     m_spotShadowMap.Create(1024);
@@ -153,12 +162,10 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
     m_lights.BindSpotShadowMap (m_spotShadowMap.GetArrayView(),      m_spotShadowMap.GetSampler());
     m_lights.BindPointShadowMap(m_pointShadowMap.GetCubeArrayView(), m_pointShadowMap.GetSampler());
 
-    // Skybox + bone buffer
     m_skybox.Create(VulkanSwapchain::Get().GetFormat(),
                     VulkanRenderer::Get().GetDepthFormat());
     m_boneSSBO.Create(m_pipeline);
 
-    // Load initial scene from PAK if provided
     if (!initialScene.empty())
     {
         auto& AM = Krayon::AssetManager::Get();
@@ -174,14 +181,11 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
 
     PhysicsSystem::Get().Init();
     LuaScriptSystem::Get().Init();
+    AudioSystem::Get().Init();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  RunPreview / InitPreview  — editor play mode
-//
-//  Assets are already initialised with a raw (non-PAK) workdir by
-//  PlayerMain before this is called.  We load the scene from the absolute
-//  path the editor wrote and run the full physics + scripting loop.
 // ─────────────────────────────────────────────────────────────────────────────
 
 int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
@@ -215,6 +219,7 @@ int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
             {
                 LuaScriptSystem::Get().Shutdown();
                 PhysicsSystem::Get().Shutdown();
+                AudioSystem::Get().Shutdown();
                 m_registry.Clear();
                 m_scene.GetObjects().clear();
                 const auto bytes = Krayon::AssetManager::Get().GetBytes(next);
@@ -224,6 +229,7 @@ int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
                     Krayon::SceneSerializer::Load(next, m_registry);
                 PhysicsSystem::Get().Init();
                 LuaScriptSystem::Get().Init();
+                AudioSystem::Get().Init();
                 physAccum = 0.0f;
             }
         }
@@ -252,6 +258,14 @@ int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
             LuaScriptSystem::Get().Update(m_registry, PHYSICS_DT);
         }
 
+        {
+            glm::vec3 fwd = m_camera.GetForward() * -1.0f;
+            glm::vec3 up  = m_camera.GetUp();
+            AudioSystem::Get().SetListenerTransform(m_camera.fpsPos, fwd, up);
+        }
+
+        AudioSystem::Get().Update(m_registry, dt);
+
         RenderShadowPasses(cmd);
         RenderMainPass(cmd);
 
@@ -266,7 +280,6 @@ void PlayerApp::InitPreview(const std::string& scenePath)
 {
     SDL_Init(SDL_INIT_VIDEO);
 
-    // Borderless when embedded into the editor viewport; normal window otherwise.
     const SDL_WindowFlags wflags = m_borderless
         ? (SDL_WINDOW_VULKAN | SDL_WINDOW_BORDERLESS)
         : (SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
@@ -307,7 +320,6 @@ void PlayerApp::InitPreview(const std::string& scenePath)
                     VulkanRenderer::Get().GetDepthFormat());
     m_boneSSBO.Create(m_pipeline);
 
-    // Load scene from absolute file path (loose-file mode)
     if (!scenePath.empty())
     {
         std::string loadedName;
@@ -319,6 +331,7 @@ void PlayerApp::InitPreview(const std::string& scenePath)
 
     PhysicsSystem::Get().Init();
     LuaScriptSystem::Get().Init();
+    AudioSystem::Get().Init();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -369,7 +382,6 @@ void PlayerApp::InitMaterials()
     m_glassMat3.SetFloat("emissiveIntensity", 0.0f);
     m_glassMat3.opacity = 0.45f;
 
-    // Try to load a default albedo texture; fall back to a solid white if absent
     try   { m_albedoTex.Load("assets/bush01.png"); }
     catch (...) { m_albedoTex.CreateDefault(); }
 
@@ -408,6 +420,7 @@ void PlayerApp::Shutdown()
 
     PhysicsSystem::Get().Shutdown();
     LuaScriptSystem::Get().Shutdown();
+    AudioSystem::Get().Shutdown();
 
     SDL_DestroyWindow(m_window);
     SDL_Quit();
@@ -489,7 +502,7 @@ void PlayerApp::ProcessInput(float dt)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  UpdateLightBuffer (identical to Application)
+//  UpdateLightBuffer
 // ─────────────────────────────────────────────────────────────────────────────
 
 void PlayerApp::UpdateLightBuffer()
@@ -596,7 +609,7 @@ void PlayerApp::UpdateLightBuffer()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  SyncECSToScene (identical to Application)
+//  SyncECSToScene
 // ─────────────────────────────────────────────────────────────────────────────
 
 void PlayerApp::SyncECSToScene()
@@ -769,7 +782,7 @@ void PlayerApp::SyncECSToScene()
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  UpdateAnimations (identical to Application)
+//  UpdateAnimations
 // ─────────────────────────────────────────────────────────────────────────────
 
 void PlayerApp::UpdateAnimations(float dt)
@@ -874,7 +887,7 @@ void PlayerApp::UpdateAnimations(float dt)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  RenderShadowPasses (identical to Application)
+//  RenderShadowPasses
 // ─────────────────────────────────────────────────────────────────────────────
 
 void PlayerApp::RenderShadowPasses(vk::CommandBuffer cmd)
@@ -917,7 +930,7 @@ void PlayerApp::RenderShadowPasses(vk::CommandBuffer cmd)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-//  RenderMainPass — renders scene directly to the swapchain (no editor overlay)
+//  RenderMainPass
 // ─────────────────────────────────────────────────────────────────────────────
 
 void PlayerApp::RenderMainPass(vk::CommandBuffer cmd)
@@ -951,6 +964,4 @@ void PlayerApp::RenderMainPass(vk::CommandBuffer cmd)
     m_pipeline.BindTransparent(cmd);
     m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
     m_scene.DrawTransparent(cmd, m_pipeline, m_camera, aspect, m_lights);
-
-    // No debug overlay — player renders directly to swapchain final output
 }

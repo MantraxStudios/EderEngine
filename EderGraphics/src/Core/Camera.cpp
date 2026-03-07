@@ -1,70 +1,73 @@
 #include "Camera.h"
 #include <glm/gtc/matrix_transform.hpp>
-#include <algorithm>
-#include <cmath>
+#include <glm/gtc/quaternion.hpp>
 
-Camera::Camera(glm::vec3 target, float distance, float fov)
-    : target(target)
-    , distance(distance)
-    , azimuth(0.0f)
-    , elevation(glm::radians(20.0f))
-    , fov(fov)
+Camera::Camera() = default;
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Internal quaternion
+//  Build: yaw around world +Y first, then pitch around local +X.
+//  This is the standard FPS decomposition and avoids gimbal lock.
+// ─────────────────────────────────────────────────────────────────────────────
+glm::quat Camera::GetQuat() const
 {
+    return glm::angleAxis(m_yaw,   glm::vec3(0.0f, 1.0f, 0.0f))
+         * glm::angleAxis(m_pitch, glm::vec3(1.0f, 0.0f, 0.0f));
 }
 
-void Camera::Orbit(float dx, float dy)
-{
-    azimuth   -= dx * 0.005f;
-    elevation  = std::clamp(elevation + dy * 0.005f, glm::radians(-89.0f), glm::radians(89.0f));
-}
-
-void Camera::Zoom(float delta)
-{
-    distance = std::max(0.5f, distance - delta * 0.4f);
-}
-
+// ─────────────────────────────────────────────────────────────────────────────
+//  Mouse look
+// ─────────────────────────────────────────────────────────────────────────────
 void Camera::FPSLook(float dx, float dy)
 {
-    azimuth  += dx * 0.0018f;
-    elevation = std::clamp(elevation - dy * 0.0018f,
-                           glm::radians(-89.0f), glm::radians(89.0f));
+    constexpr float kSens = 0.0018f;
+    m_yaw   += (dx * kSens) * -1.0f;
+    m_pitch  = glm::clamp(m_pitch - dy * kSens,
+                          glm::radians(-89.0f), glm::radians(89.0f));
 }
 
-void Camera::SetOrientation(float azimuthRad, float elevationRad)
+// ─────────────────────────────────────────────────────────────────────────────
+//  Direct orientation set (called from CameraComponent sync)
+// ─────────────────────────────────────────────────────────────────────────────
+void Camera::SetOrientation(float yawRad, float pitchRad)
 {
-    azimuth   = azimuthRad;
-    elevation = elevationRad;
+    m_yaw   = yawRad;
+    m_pitch = glm::clamp(pitchRad,
+                         glm::radians(-89.0f), glm::radians(89.0f));
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Direction vectors — all derived from the quaternion
+// ─────────────────────────────────────────────────────────────────────────────
 glm::vec3 Camera::GetForward() const
 {
-    return glm::normalize(glm::vec3(
-         std::sin(azimuth)  * std::cos(elevation),
-         std::sin(elevation),
-        -std::cos(azimuth)  * std::cos(elevation)));
+    return GetQuat() * glm::vec3(0.0f, 0.0f, -1.0f);
 }
 
 glm::vec3 Camera::GetRight() const
 {
-    return glm::normalize(glm::vec3(std::cos(azimuth), 0.0f, std::sin(azimuth)));
+    return GetQuat() * glm::vec3(1.0f, 0.0f, 0.0f);
 }
 
-glm::vec3 Camera::GetPosition() const
+glm::vec3 Camera::GetUp() const
 {
-    if (fpsMode) return fpsPos;
-    return target + glm::vec3(
-        distance * std::cos(elevation) * std::sin(azimuth),
-        distance * std::sin(elevation),
-        distance * std::cos(elevation) * std::cos(azimuth));
+    return GetQuat() * glm::vec3(0.0f, 1.0f, 0.0f);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  View matrix  =  R^-1 * T^-1
+//  Constructed from the quaternion directly — no lookAt trigonometry.
+// ─────────────────────────────────────────────────────────────────────────────
 glm::mat4 Camera::GetView() const
 {
-    if (fpsMode)
-        return glm::lookAt(fpsPos, fpsPos + GetForward(), glm::vec3(0.0f, 1.0f, 0.0f));
-    return glm::lookAt(GetPosition(), target, glm::vec3(0.0f, 1.0f, 0.0f));
+    glm::mat4 R = glm::mat4_cast(glm::inverse(GetQuat()));
+    glm::mat4 T = glm::translate(glm::mat4(1.0f), -fpsPos);
+    return R * T;
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Projection matrix (Vulkan Y-flip applied)
+// ─────────────────────────────────────────────────────────────────────────────
 glm::mat4 Camera::GetProjection(float aspect) const
 {
     glm::mat4 proj = glm::perspective(glm::radians(fov), aspect, nearPlane, farPlane);

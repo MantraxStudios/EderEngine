@@ -13,6 +13,7 @@
 
 #include <glm/glm.hpp>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 #include <memory>
 #include <cstdint>
@@ -204,6 +205,10 @@ private:
 
     // pending controller movement (set by MoveController, consumed in Step)
     std::unordered_map<Entity, glm::vec3> m_pendingDisplacement;
+
+    // per-character contact tracking for Enter/Stay/Exit events
+    // key = entity, value = set of body-index IDs in contact last frame
+    std::unordered_map<Entity, std::unordered_set<uint32_t>> m_controllerPrevContacts;
 
     // per-frame write-back caches for controllers → WriteBackControllers
     std::unordered_map<Entity, bool>      m_controllerGrounded;

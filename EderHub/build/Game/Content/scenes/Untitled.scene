@@ -1,0 +1,200 @@
+version=1
+name=Untitled
+
+[entity]
+id=1
+tag.name=Entity
+transform.pos=-4.017608 -1.230605 -2.464318
+transform.rot=-0.000000 0.000000 0.000000
+transform.scale=1.000000 1.000000 1.000000
+mesh.guid=e064c46f5ac5c8ad
+mesh.path=meshes/cylinder.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+script.guid=552962c7578b2f05
+script.path=scripts/playercontroller.lua
+cc.radius=0.3
+cc.height=1.8
+cc.stepOffset=0.3
+cc.slopeLimit=45
+cc.skinWidth=0.05
+cc.center=0.000000 0.000000 0.000000
+[/entity]
+
+[entity]
+id=2
+tag.name=Floor
+transform.pos=0.000000 -3.695736 0.000000
+transform.rot=-0.000000 0.000000 0.000000
+transform.scale=25.000000 1.000000 25.000000
+mesh.guid=264d75c6f89d75ce
+mesh.path=meshes/cube.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.3
+collider.dynFric=0.3
+collider.restitution=0.3
+collider.isTrigger=0
+[/entity]
+
+[entity]
+id=3
+tag.name=Trigger
+transform.pos=0.000000 -1.857617 -2.549778
+transform.rot=-0.000000 0.000000 0.000000
+transform.scale=3.000000 3.000000 3.000000
+mesh.guid=264d75c6f89d75ce
+mesh.path=meshes/cube.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.3
+collider.dynFric=0.3
+collider.restitution=0.3
+collider.isTrigger=1
+script.guid=77e6194401f4c07e
+script.path=scripts/triggerzone.lua
+[/entity]
+
+[entity]
+id=4
+tag.name=Sun Light
+transform.pos=0.000000 0.000000 0.000000
+transform.rot=93.755997 -180.000000 -180.000000
+transform.scale=1.000000 0.999990 0.999990
+light.type=0
+light.color=1.000000 1.000000 1.000000
+light.intensity=1
+light.range=10
+light.innerCone=15
+light.outerCone=30
+light.castShadow=0
+light.vol.enabled=0
+light.vol.steps=64
+light.vol.density=0.008
+light.vol.absorption=0
+light.vol.g=0.3
+light.vol.intensity=0.5
+light.vol.maxDist=40
+light.vol.jitter=1
+light.vol.tint=1.000000 0.950000 0.850000
+light.shafts.enabled=0
+light.shafts.density=1
+light.shafts.bloom=10
+light.shafts.decay=0.999
+light.shafts.weight=3
+light.shafts.exposure=10
+light.shafts.sunRadius=0.2
+light.shafts.tint=1.000000 0.950000 0.850000
+[/entity]
+
+[entity]
+id=5
+tag.name=Point Light
+transform.pos=3.374527 2.703470 -4.167315
+transform.rot=-0.000000 0.000000 0.000000
+transform.scale=1.000000 1.000000 1.000000
+light.type=1
+light.color=0.133333 0.133333 0.133333
+light.intensity=0.15
+light.range=20
+light.innerCone=15
+light.outerCone=30
+light.castShadow=1
+light.vol.enabled=0
+light.vol.steps=64
+light.vol.density=0.008
+light.vol.absorption=0
+light.vol.g=0.3
+light.vol.intensity=0.5
+light.vol.maxDist=40
+light.vol.jitter=1
+light.vol.tint=1.000000 0.950000 0.850000
+light.shafts.enabled=0
+light.shafts.density=1
+light.shafts.bloom=1
+light.shafts.decay=0.97
+light.shafts.weight=2
+light.shafts.exposure=0.85
+light.shafts.sunRadius=0.012
+light.shafts.tint=1.000000 0.950000 0.850000
+[/entity]
+
+[entity]
+id=6
+tag.name=Entity
+transform.pos=3.333371 -3.100433 7.794489
+transform.rot=-0.000000 0.000000 0.000000
+transform.scale=1.000000 1.000000 1.000000
+mesh.guid=9fac0588536563a6
+mesh.path=meshes/sphere.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+[/entity]
+
+[entity]
+id=7
+tag.name=SpotLight
+transform.pos=6.537125 -1.589378 8.201498
+transform.rot=-0.000000 -9.980222 -70.000015
+transform.scale=0.999999 0.999998 0.999999
+light.type=2
+light.color=0.031111 0.031111 0.031111
+light.intensity=1
+light.range=10
+light.innerCone=15
+light.outerCone=30
+light.castShadow=1
+light.vol.enabled=0
+light.vol.steps=64
+light.vol.density=0.008
+light.vol.absorption=0
+light.vol.g=0.3
+light.vol.intensity=0.5
+light.vol.maxDist=40
+light.vol.jitter=1
+light.vol.tint=1.000000 0.950000 0.850000
+light.shafts.enabled=0
+light.shafts.density=1
+light.shafts.bloom=1
+light.shafts.decay=0.97
+light.shafts.weight=2
+light.shafts.exposure=0.85
+light.shafts.sunRadius=0.012
+light.shafts.tint=1.000000 0.950000 0.850000
+[/entity]
+
+[entity]
+id=8
+tag.name=Sound
+transform.pos=0.000000 0.000000 0.000000
+transform.rot=0.000000 0.000000 0.000000
+transform.scale=1.000000 1.000000 1.000000
+audio.guid=86265c547c4ecf8d
+audio.path=slushii x tokyo machine - bewm.mp3
+audio.volume=1
+audio.minDist=1
+audio.maxDist=50
+audio.loop=1
+audio.playOnAwake=1
+audio.spatial=1
+audio.muted=0
+[/entity]
+

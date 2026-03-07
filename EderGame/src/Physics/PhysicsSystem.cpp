@@ -272,6 +272,7 @@ void PhysicsSystem::Shutdown()
     m_pendingDisplacement.clear();
     m_controllerGrounded.clear();
     m_controllerVelocity.clear();
+    m_controllerPrevContacts.clear();
 
     m_physicsSystem.reset();
     m_jobSystem.reset();
@@ -452,6 +453,7 @@ void PhysicsSystem::DestroyController(Entity e)
     m_pendingDisplacement.erase(e);
     m_controllerGrounded.erase(e);
     m_controllerVelocity.erase(e);
+    m_controllerPrevContacts.erase(e);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -766,6 +768,49 @@ void PhysicsSystem::Step(float dt)
         bool grounded = (character->GetGroundState() == JPH::CharacterVirtual::EGroundState::OnGround);
         m_controllerGrounded[e] = grounded;
         m_controllerVelocity[e] = disp;
+
+        // ── Collision events for CharacterVirtual ────────────────────────
+        // CharacterVirtual is not a Jolt body so it never triggers ContactListener.
+        // Use GetActiveContacts() + frame-to-frame diff to generate Enter/Stay/Exit.
+        std::unordered_set<uint32_t> currentContacts;
+
+        for (const auto& contact : character->GetActiveContacts())
+        {
+            // mHadCollision=false means predictive (speculative) contact — skip
+            if (!contact.mHadCollision) continue;
+
+            uint32_t idx = contact.mBodyB.GetIndex();
+            auto entityIt = m_bodyEntityMap.find(idx);
+            if (entityIt == m_bodyEntityMap.end()) continue;
+
+            Entity other = entityIt->second;
+            bool isSensor = m_bodyIsSensor.count(idx) && m_bodyIsSensor.at(idx);
+
+            glm::vec3 pos    = ToGlm(contact.mPosition);
+            glm::vec3 normal = ToGlm(contact.mContactNormal);
+
+            auto& prev = m_controllerPrevContacts[e];
+            CollisionEventType type = prev.count(idx)
+                ? CollisionEventType::Stay
+                : CollisionEventType::Enter;
+
+            m_events.push_back({ type, e, other, pos, normal, isSensor });
+            currentContacts.insert(idx);
+        }
+
+        // Exit: bodies that were in contact last frame but not this frame
+        auto& prev = m_controllerPrevContacts[e];
+        for (uint32_t idx : prev)
+        {
+            if (currentContacts.count(idx)) continue;
+            auto entityIt = m_bodyEntityMap.find(idx);
+            if (entityIt == m_bodyEntityMap.end()) continue;
+            Entity other   = entityIt->second;
+            bool isSensor  = m_bodyIsSensor.count(idx) && m_bodyIsSensor.at(idx);
+            m_events.push_back({ CollisionEventType::Exit, e, other, {}, {}, isSensor });
+        }
+
+        prev = std::move(currentContacts);
     }
 }
 
