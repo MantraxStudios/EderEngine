@@ -1,0 +1,11 @@
+name=M_BlackDragonFur
+vertShaderGuid=0
+fragShaderGuid=0
+albedo=1.000000,1.000000,1.000000,1.000000
+roughness=0.5
+metallic=0
+emissive=0.000000,0.000000,0.000000
+albedoTexGuid=d92bc70d8ca4ff7e
+normalTexGuid=0
+roughnessTexGuid=0
+emissiveTexGuid=0

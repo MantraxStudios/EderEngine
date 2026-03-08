@@ -156,8 +156,14 @@ MeshRenderer.setVisible(e, bool)
 MeshRenderer.castsShadow(e)         --> bool
 MeshRenderer.setCastShadow(e, bool)
 
+-- Base (principal) material
 MeshRenderer.getMaterialName(e)     --> string
 MeshRenderer.setMaterialName(e, name)
+
+-- Material by index: idx=0 → base material; idx=1,2,… → sub-mesh overrides
+MeshRenderer.getSubMeshCount(e)             --> int
+MeshRenderer.getMaterialByIndex(e, idx)     --> string
+MeshRenderer.setMaterialByIndex(e, idx, name)
 ```
 
 ---
@@ -199,7 +205,18 @@ Light.getVolDensity(e)              --> float
 Light.setVolDensity(e, v)
 Light.getVolIntensity(e)            --> float
 Light.setVolIntensity(e, v)
+Light.getVolTint(e)                 --> {r, g, b}
 Light.setVolTint(e, r, g, b)
+Light.getVolNumSteps(e)             --> int    (ray-march quality, default 64)
+Light.setVolNumSteps(e, n)
+Light.getVolAbsorption(e)           --> float
+Light.setVolAbsorption(e, v)
+Light.getVolG(e)                    --> float  (Henyey-Greenstein anisotropy -1..1)
+Light.setVolG(e, v)
+Light.getVolMaxDistance(e)          --> float  (world units)
+Light.setVolMaxDistance(e, v)
+Light.getVolJitter(e)               --> float  (banding reduction, 0=off)
+Light.setVolJitter(e, v)
 
 -- Sun Shafts (Directional only)
 Light.isSunShaftsEnabled(e)         --> bool
@@ -208,7 +225,16 @@ Light.getShaftsDensity(e)           --> float
 Light.setShaftsDensity(e, v)
 Light.getShaftsExposure(e)          --> float
 Light.setShaftsExposure(e, v)
+Light.getShaftsTint(e)              --> {r, g, b}
 Light.setShaftsTint(e, r, g, b)
+Light.getShaftsBloomScale(e)        --> float
+Light.setShaftsBloomScale(e, v)
+Light.getShaftsDecay(e)             --> float  (per-step falloff, 0.9–0.99)
+Light.setShaftsDecay(e, v)
+Light.getShaftsWeight(e)            --> float
+Light.setShaftsWeight(e, v)
+Light.getShaftsSunRadius(e)         --> float  (angular radius of sun disk)
+Light.setShaftsSunRadius(e, v)
 ```
 
 ---
@@ -256,8 +282,23 @@ VolumetricFog.setFogStart(e, v)
 VolumetricFog.getFogEnd(e)          --> float  (metres)
 VolumetricFog.setFogEnd(e, v)
 
+VolumetricFog.getColor(e)           --> {r, g, b}
 VolumetricFog.setColor(e, r, g, b)
+
+VolumetricFog.setHorizonColor(e, r, g, b)    -- warm tint near horizon
+VolumetricFog.setSunScatterColor(e, r, g, b) -- forward-scatter glow toward sun
+
+VolumetricFog.getHeightFalloff(e)   --> float  (fog band thinning with altitude)
+VolumetricFog.setHeightFalloff(e, v)
+
+VolumetricFog.getHeightOffset(e)    --> float  (world-Y of full-density base)
+VolumetricFog.setHeightOffset(e, v)
+
+VolumetricFog.getScatterStrength(e) --> float  (mie forward-scatter 0–1)
 VolumetricFog.setScatterStrength(e, v)
+
+VolumetricFog.getMaxFogAmount(e)    --> float  (opacity ceiling, prevents whiteout)
+VolumetricFog.setMaxFogAmount(e, v)
 ```
 
 ---

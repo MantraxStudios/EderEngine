@@ -4,10 +4,57 @@
 #include "ECS/Components/HierarchyComponent.h"
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/MeshRendererComponent.h"
+#include "ECS/Components/AnimationComponent.h"
+#include "ECS/Components/CameraComponent.h"
+#include "ECS/Components/ScriptComponent.h"
+#include "ECS/Components/RigidbodyComponent.h"
+#include "ECS/Components/ColliderComponent.h"
+#include "ECS/Components/CharacterControllerComponent.h"
+#include "ECS/Components/AudioSourceComponent.h"
+#include "ECS/Components/VolumetricFogComponent.h"
+#include "ECS/Components/LayerComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 #include <imgui/imgui.h>
 #include <cstdio>
 #include <cstring>
+
+void HierarchyPanel::DuplicateSelected()
+{
+    if (!registry || selected == NULL_ENTITY) return;
+    Entity e    = selected;
+    Entity copy = registry->Create();
+    if (registry->Has<TagComponent>(e))
+    {
+        auto tag  = registry->Get<TagComponent>(e);
+        tag.name += " (copy)";
+        registry->Add<TagComponent>(copy) = tag;
+    }
+    if (registry->Has<TransformComponent>(e))
+        registry->Add<TransformComponent>(copy) = registry->Get<TransformComponent>(e);
+    if (registry->Has<MeshRendererComponent>(e))
+        registry->Add<MeshRendererComponent>(copy) = registry->Get<MeshRendererComponent>(e);
+    if (registry->Has<LightComponent>(e))
+        registry->Add<LightComponent>(copy) = registry->Get<LightComponent>(e);
+    if (registry->Has<AnimationComponent>(e))
+        registry->Add<AnimationComponent>(copy) = registry->Get<AnimationComponent>(e);
+    if (registry->Has<CameraComponent>(e))
+        registry->Add<CameraComponent>(copy) = registry->Get<CameraComponent>(e);
+    if (registry->Has<ScriptComponent>(e))
+        registry->Add<ScriptComponent>(copy) = registry->Get<ScriptComponent>(e);
+    if (registry->Has<RigidbodyComponent>(e))
+        registry->Add<RigidbodyComponent>(copy) = registry->Get<RigidbodyComponent>(e);
+    if (registry->Has<ColliderComponent>(e))
+        registry->Add<ColliderComponent>(copy) = registry->Get<ColliderComponent>(e);
+    if (registry->Has<CharacterControllerComponent>(e))
+        registry->Add<CharacterControllerComponent>(copy) = registry->Get<CharacterControllerComponent>(e);
+    if (registry->Has<AudioSourceComponent>(e))
+        registry->Add<AudioSourceComponent>(copy) = registry->Get<AudioSourceComponent>(e);
+    if (registry->Has<VolumetricFogComponent>(e))
+        registry->Add<VolumetricFogComponent>(copy) = registry->Get<VolumetricFogComponent>(e);
+    if (registry->Has<LayerComponent>(e))
+        registry->Add<LayerComponent>(copy) = registry->Get<LayerComponent>(e);
+    selected = copy;
+}
 
 void HierarchyPanel::DrawEntityNode(Entity e)
 {
@@ -40,7 +87,6 @@ void HierarchyPanel::DrawEntityNode(Entity e)
     if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
         selected = (selected == e) ? NULL_ENTITY : e;
 
-    // Drag source
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
     {
         ImGui::SetDragDropPayload("ENTITY_REPARENT", &e, sizeof(Entity));
@@ -48,7 +94,6 @@ void HierarchyPanel::DrawEntityNode(Entity e)
         ImGui::EndDragDropSource();
     }
 
-    // Drop target: become a parent
     if (ImGui::BeginDragDropTarget())
     {
         if (const ImGuiPayload* payload =
@@ -61,7 +106,6 @@ void HierarchyPanel::DrawEntityNode(Entity e)
         ImGui::EndDragDropTarget();
     }
 
-    // Context menu
     if (ImGui::BeginPopupContextItem())
     {
         ImGui::TextDisabled("%s%s", icon, name);
@@ -69,16 +113,8 @@ void HierarchyPanel::DrawEntityNode(Entity e)
 
         if (ImGui::MenuItem("Duplicate"))
         {
-            Entity copy = registry->Create();
-            if (registry->Has<TagComponent>(e))
-            {
-                auto tag  = registry->Get<TagComponent>(e);
-                tag.name += " (copy)";
-                registry->Add<TagComponent>(copy) = tag;
-            }
-            if (registry->Has<TransformComponent>(e))
-                registry->Add<TransformComponent>(copy) = registry->Get<TransformComponent>(e);
-            selected = copy;
+            selected = e;
+            DuplicateSelected();
         }
 
         bool hasParent = registry->Has<HierarchyComponent>(e)
@@ -129,7 +165,6 @@ void HierarchyPanel::OnDraw()
     const std::vector<Entity> entities = registry->GetEntities();
     int total = (int)entities.size();
 
-    // Search bar + add button
     float addBtnW = 26.0f;
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - addBtnW - ImGui::GetStyle().ItemSpacing.x);
     ImGui::InputTextWithHint("##search", "Search...", searchBuf, sizeof(searchBuf));
@@ -152,7 +187,6 @@ void HierarchyPanel::OnDraw()
 
     if (!hasFilter)
     {
-        // Tree view: only draw root entities (children are drawn recursively)
         for (Entity e : entities)
         {
             if (registry->Has<HierarchyComponent>(e)
@@ -207,7 +241,6 @@ void HierarchyPanel::OnDraw()
 
     ImGui::End();
 
-    // Deferred ops (after ImGui::End so the frame is clean)
     if (pendingAttach.child != NULL_ENTITY && pendingAttach.parent != NULL_ENTITY)
         TransformSystem::Attach(pendingAttach.child, pendingAttach.parent, *registry);
 

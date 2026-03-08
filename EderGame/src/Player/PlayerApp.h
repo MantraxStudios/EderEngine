@@ -9,6 +9,7 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <unordered_map>
+#include <memory>
 
 #include "Core/Camera.h"
 #include "Core/Scene.h"
@@ -84,7 +85,8 @@ private:
 
     VulkanPipeline m_pipeline;
     VulkanSkybox   m_skybox;
-    BoneSSBO       m_boneSSBO;
+    BoneSSBO       m_boneSSBO;          // identity fallback
+    std::unordered_map<uint32_t, std::unique_ptr<BoneSSBO>> m_entityBoneSSBO;
 
     VulkanShadowMap           m_shadowMap;
     VulkanShadowPipeline      m_shadowPipeline;
@@ -116,7 +118,10 @@ private:
     UIRenderer m_uiRenderer;
 
     // ── Mesh hot-swap tracking ────────────────────────────────────────────────
-    std::unordered_map<uint32_t, uint64_t>    m_lastMeshGuid;
-    std::unordered_map<uint32_t, uint64_t>    m_lastAnimMeshGuid;
-    std::unordered_map<uint32_t, std::string> m_lastMaterialName;
-    std::unordered_map<std::string, uint64_t> m_lastMatTexGuid;    std::unordered_map<uint32_t, std::vector<glm::mat4>> m_entityBoneMatrices;};
+    std::unordered_map<uint32_t, uint64_t>                   m_lastMeshGuid;
+    std::unordered_map<uint32_t, uint64_t>                   m_lastAnimMeshGuid;
+    std::unordered_map<uint32_t, std::string>                m_lastMaterialName;
+    std::unordered_map<std::string, uint64_t>                m_lastMatTexGuid;
+    std::unordered_map<uint32_t, std::vector<std::string>>   m_lastSubMeshMaterials;
+    std::unordered_map<uint32_t, std::vector<glm::mat4>>     m_entityBoneMatrices;
+};

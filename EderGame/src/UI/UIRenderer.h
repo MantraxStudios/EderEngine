@@ -57,7 +57,7 @@ class UIRenderer
 public:
     void Create (vk::Format swapFormat, vk::Format depthFormat);
     void Destroy();
-    void Draw   (vk::CommandBuffer cmd);
+    void Draw   (vk::CommandBuffer cmd, uint32_t overrideW = 0, uint32_t overrideH = 0);
 
     void LoadFont(const std::string& path, float size);
 

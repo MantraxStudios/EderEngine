@@ -174,54 +174,6 @@ void SceneViewPanel::OnDraw(GizmoMode gizmoMode, bool snap, float snapValue,
             TransformSystem::DecomposeInto(newLocal, tr);
         }
     }
-
-    // ── Gizmo mode overlay (top-left corner) ─────────────────────────────────
-    // Use contentScreenPos so the overlay is anchored to the rendered image,
-    // not to GetWindowPos() which includes the title bar and would place items
-    // outside the content region (triggering ImGui's SetCursorPos assertion).
-    if (contentScreenPos.x > 0.0f || contentScreenPos.y > 0.0f)
-    {
-    const ImVec2 vpMin  = contentScreenPos;
-    const float  pad    = 8.0f;
-    const float  btnSz  = 26.0f;
-    ImVec2       cursor = ImVec2(vpMin.x + pad, vpMin.y + pad);
-
-    ImDrawList* dl = ImGui::GetWindowDrawList();
-    dl->AddRectFilled(
-        ImVec2(cursor.x - 4, cursor.y - 3),
-        ImVec2(cursor.x + btnSz * 4 + 4 + (snap ? btnSz + 2 : 0), cursor.y + btnSz + 3),
-        IM_COL32(20, 20, 20, 180), 4.0f);
-
-    auto GizmoBtn = [&](const char* label, GizmoMode mode, ImVec4 activeCol) -> bool
-    {
-        bool isActive = (gizmoMode == mode);
-        ImGui::SetCursorScreenPos(cursor);
-        ImGui::PushID(label);
-        if (isActive) ImGui::PushStyleColor(ImGuiCol_Button, activeCol);
-        bool clicked = ImGui::Button(label, ImVec2(btnSz, btnSz));
-        if (isActive) ImGui::PopStyleColor();
-        ImGui::PopID();
-        cursor.x += btnSz + 2;
-        return clicked;
-    };
-
-    (void)GizmoBtn("T", GizmoMode::Translate, ImVec4(0.85f, 0.25f, 0.25f, 1.0f));
-    (void)GizmoBtn("R", GizmoMode::Rotate,    ImVec4(0.85f, 0.25f, 0.25f, 1.0f));
-    (void)GizmoBtn("S", GizmoMode::Scale,     ImVec4(0.85f, 0.25f, 0.25f, 1.0f));
-
-    // Snap indicator — SetCursorScreenPos only when we actually submit an item
-    if (snap)
-    {
-        ImGui::SetCursorScreenPos(cursor);
-        ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.85f, 0.25f, 0.25f, 1.0f));
-        char snapLabel[16];
-        snprintf(snapLabel, sizeof(snapLabel), "%.4g###snap", snapValue);
-        ImGui::Button(snapLabel, ImVec2(btnSz + 8, btnSz));
-        ImGui::PopStyleColor();
-        if (ImGui::IsItemHovered()) ImGui::SetTooltip("Snap ON: %.4g", snapValue);
-    }
-    } // end overlay guard
-
     ImGui::PopStyleVar();
     ImGui::End();
 }

@@ -100,8 +100,8 @@ void UISystem::HandleEvent(const SDL_Event& event)
 {
     if (event.type == SDL_EVENT_MOUSE_BUTTON_DOWN)
     {
-        float mx = (float)event.button.x;
-        float my = (float)event.button.y;
+        float mx = (float)event.button.x - m_vpOffsetX;
+        float my = (float)event.button.y - m_vpOffsetY;
 
         UIElement* newFocus = nullptr;
 
@@ -166,7 +166,7 @@ void UISystem::HandleEvent(const SDL_Event& event)
             {
                 UIElement& e = it->second;
                 glm::vec4 r  = ComputeVirtualRect(e);
-                float vx = ScreenToVirtualX((float)event.motion.x);
+                float vx = ScreenToVirtualX((float)event.motion.x - m_vpOffsetX);
                 float t  = (vx - r.x) / r.z;
                 t = std::clamp(t, 0.f, 1.f);
                 e.value = e.minValue + t * (e.maxValue - e.minValue);

@@ -4,6 +4,11 @@
 #include <sstream>
 #include <fstream>
 #include <algorithm>
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#endif
 
 namespace fs = std::filesystem;
 using namespace Krayon;
@@ -91,6 +96,12 @@ AssetBrowserPanel::ContentOf(const std::string& relDir) const
                            [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
 
             const AssetMeta* meta = AssetManager::Get().Find(rn);
+            if (!meta)
+            {
+                // File exists on disk but isn't registered yet — auto-register it
+                uint64_t guid = AssetManager::Get().Register(rn);
+                meta = AssetManager::Get().FindByGuid(guid);
+            }
             if (!meta) continue;
 
             item.isDir   = false;
@@ -113,6 +124,193 @@ AssetBrowserPanel::ContentOf(const std::string& relDir) const
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
+//  External drop: copy file into workDir and register it
+// ─────────────────────────────────────────────────────────────────────────────
+
+void AssetBrowserPanel::HandleExternalDrop(const std::string& absSourcePath,
+                                           const std::string& targetRelDir)
+{
+    const std::string wd = WorkDir();
+    if (wd.empty()) return;
+
+    // SDL3 provides paths as UTF-8; use u8path so Windows handles non-ASCII correctly
+    fs::path src = fs::u8path(absSourcePath);
+    std::error_code ec;
+    if (!fs::exists(src, ec))
+    {
+        std::cerr << "[AssetBrowser] Source not found: " << absSourcePath << "\n";
+        return;
+    }
+
+    // Only accept known asset types
+    std::string ext = src.extension().string();
+    std::transform(ext.begin(), ext.end(), ext.begin(),
+                   [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+    if (DetectTypeByExtension(ext) == AssetType::Unknown) return;
+
+    fs::path targetDir = targetRelDir.empty()
+        ? fs::path(wd)
+        : (fs::path(wd) / targetRelDir);
+
+    fs::create_directories(targetDir, ec);
+
+    // Use lowercased filename so the registered path is predictable
+    std::string stemLower = src.stem().string();
+    std::transform(stemLower.begin(), stemLower.end(), stemLower.begin(),
+                   [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+
+    fs::path dst = targetDir / (stemLower + ext);
+
+    // Avoid overwriting: append _1, _2 … until unique
+    if (fs::exists(dst, ec))
+    {
+        int n = 1;
+        do {
+            dst = targetDir / (stemLower + "_" + std::to_string(n++) + ext);
+        } while (fs::exists(dst, ec));
+    }
+
+    fs::copy_file(src, dst, ec);
+    if (ec)
+    {
+        std::cerr << "[AssetBrowser] Copy failed: " << ec.message() << "\n";
+        std::cerr << "[AssetBrowser]   src = " << fs::absolute(src) << "\n";
+        std::cerr << "[AssetBrowser]   dst = " << fs::absolute(dst) << "\n";
+        return;
+    }
+
+    std::cout << "[AssetBrowser] Copied to: " << fs::absolute(dst) << "\n";
+
+    // Build a clean lowercase relative path so Find() always matches
+    fs::path rel = fs::relative(dst, fs::absolute(wd), ec);
+    std::string relStr = rel.string();
+    std::replace(relStr.begin(), relStr.end(), '\\', '/');
+    std::transform(relStr.begin(), relStr.end(), relStr.begin(),
+                   [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+
+    AssetManager::Get().Register(relStr);
+    std::cout << "[AssetBrowser] Imported: " << relStr << "\n";
+}
+
+void AssetBrowserPanel::QueueImport(const std::vector<std::string>& paths)
+{
+    // Capture the current folder at drop time so files always land where expected
+    for (const auto& p : paths)
+        m_importQueue.push_back({ p, m_selectedDir });
+    m_importTotal += (int)paths.size();
+}
+
+void AssetBrowserPanel::DrawImportProgress()
+{
+    if (m_importTotal <= 0) return;
+
+    ImGui::OpenPopup("##import_progress");
+    ImGui::SetNextWindowSize(ImVec2(340, 100), ImGuiCond_Always);
+    ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
+                            ImGuiCond_Always, ImVec2(0.5f, 0.5f));
+
+    if (ImGui::BeginPopupModal("##import_progress", nullptr,
+            ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove))
+    {
+        ImGui::Text("Importing assets...");
+        ImGui::Spacing();
+
+        char label[32];
+        snprintf(label, sizeof(label), "%d / %d", m_importDone, m_importTotal);
+        float frac = m_importTotal > 0 ? (float)m_importDone / (float)m_importTotal : 0.f;
+        ImGui::ProgressBar(frac, ImVec2(-1.f, 0.f), label);
+
+        if (m_importDone >= m_importTotal)
+        {
+            ImGui::CloseCurrentPopup();
+            m_importTotal = 0;
+            m_importDone  = 0;
+        }
+        ImGui::EndPopup();
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  File watcher  (Windows ReadDirectoryChangesW, background thread)
+// ─────────────────────────────────────────────────────────────────────────────
+
+void AssetBrowserPanel::StartFileWatcher()
+{
+    m_watchStop  = false;
+    m_watchThread = std::thread([this]{ FileWatcherThread(); });
+}
+
+void AssetBrowserPanel::StopFileWatcher()
+{
+    m_watchStop = true;
+    if (m_watchThread.joinable())
+        m_watchThread.join();
+}
+
+void AssetBrowserPanel::FileWatcherThread()
+{
+#ifdef _WIN32
+    const std::string wd = WorkDir();
+    if (wd.empty()) return;
+
+    fs::path wdPath(wd);
+    HANDLE hDir = CreateFileW(
+        wdPath.wstring().c_str(),
+        FILE_LIST_DIRECTORY,
+        FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
+        nullptr,
+        OPEN_EXISTING,
+        FILE_FLAG_BACKUP_SEMANTICS | FILE_FLAG_OVERLAPPED,
+        nullptr
+    );
+    if (hDir == INVALID_HANDLE_VALUE) return;
+
+    HANDLE hEvent = CreateEvent(nullptr, FALSE, FALSE, nullptr);
+    if (!hEvent) { CloseHandle(hDir); return; }
+
+    OVERLAPPED ov{};
+    ov.hEvent = hEvent;
+
+    constexpr DWORD kBufSize = 8192;
+    alignas(DWORD) char buf[kBufSize];
+
+    // Issue first async request
+    ReadDirectoryChangesW(
+        hDir, buf, kBufSize, /*bWatchSubtree=*/TRUE,
+        FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME |
+        FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_SIZE,
+        nullptr, &ov, nullptr
+    );
+
+    while (!m_watchStop)
+    {
+        DWORD wait = WaitForSingleObject(hEvent, 300);
+        if (wait == WAIT_OBJECT_0)
+        {
+            DWORD bytes = 0;
+            if (GetOverlappedResult(hDir, &ov, &bytes, FALSE) && bytes > 0)
+                m_watchDirty = true;
+
+            ResetEvent(hEvent);
+
+            // Re-issue for next change
+            ReadDirectoryChangesW(
+                hDir, buf, kBufSize, TRUE,
+                FILE_NOTIFY_CHANGE_FILE_NAME | FILE_NOTIFY_CHANGE_DIR_NAME |
+                FILE_NOTIFY_CHANGE_LAST_WRITE | FILE_NOTIFY_CHANGE_SIZE,
+                nullptr, &ov, nullptr
+            );
+        }
+    }
+
+    CancelIo(hDir);
+    WaitForSingleObject(hEvent, 1000);
+    CloseHandle(hEvent);
+    CloseHandle(hDir);
+#endif
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 //  Main draw
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -131,6 +329,24 @@ void AssetBrowserPanel::OnDraw()
         ImGui::End();
         return;
     }
+
+    // ── File watcher: lazy start + dirty refresh ──────────────────
+    if (!m_watchThread.joinable())
+        StartFileWatcher();
+    if (m_watchDirty.exchange(false))
+        AssetManager::Get().Refresh();
+
+    // ── Import queue: process one file per frame ──────────────────
+    if (!m_importQueue.empty())
+    {
+        const auto& entry = m_importQueue.front();
+        HandleExternalDrop(entry.srcPath, entry.targetDir);
+        m_importQueue.erase(m_importQueue.begin());
+        m_importDone++;
+        if (m_importQueue.empty())
+            AssetManager::Get().Refresh();
+    }
+    DrawImportProgress();
 
     // Breadcrumb bar at the top
     DrawBreadcrumb();

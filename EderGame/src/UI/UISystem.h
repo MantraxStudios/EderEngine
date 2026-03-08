@@ -18,6 +18,7 @@ public:
     void Update(float dt);
     void HandleEvent(const SDL_Event& event);
     void SetWindow(SDL_Window* window) { m_window = window; }
+    void SetViewportOffset(float x, float y) { m_vpOffsetX = x; m_vpOffsetY = y; }
     bool HasFocusedInput() const;
 
     void SetScreenSize(float w, float h);
@@ -57,6 +58,8 @@ private:
     uint32_t m_nextId   = 1;
     uint32_t m_dragging = 0;
     SDL_Window* m_window = nullptr;
+    float m_vpOffsetX = 0.f;
+    float m_vpOffsetY = 0.f;
 
     std::unordered_map<uint32_t, UIElement> m_elements;
 

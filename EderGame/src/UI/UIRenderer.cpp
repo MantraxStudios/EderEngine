@@ -637,11 +637,19 @@ void UIRenderer::DrawElement(vk::CommandBuffer cmd, const UIElement& e)
     }
 }
 
-void UIRenderer::Draw(vk::CommandBuffer cmd)
+void UIRenderer::Draw(vk::CommandBuffer cmd, uint32_t overrideW, uint32_t overrideH)
 {
     auto& swapchain = VulkanSwapchain::Get();
-    m_screenW = (float)swapchain.GetExtent().width;
-    m_screenH = (float)swapchain.GetExtent().height;
+    if (overrideW > 0 && overrideH > 0)
+    {
+        m_screenW = (float)overrideW;
+        m_screenH = (float)overrideH;
+    }
+    else
+    {
+        m_screenW = (float)swapchain.GetExtent().width;
+        m_screenH = (float)swapchain.GetExtent().height;
+    }
 
     UISystem::Get().SetScreenSize(m_screenW, m_screenH);
     m_scale   = UISystem::Get().GetScale();
@@ -657,7 +665,8 @@ void UIRenderer::Draw(vk::CommandBuffer cmd)
     vp.minDepth = 0.f;
     vp.maxDepth = 1.f;
     cmd.setViewport(0, vp);
-    cmd.setScissor(0, vk::Rect2D{ {0,0}, swapchain.GetExtent() });
+    vk::Extent2D ext{ (uint32_t)m_screenW, (uint32_t)m_screenH };
+    cmd.setScissor(0, vk::Rect2D{ {0,0}, ext });
 
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *m_pipeline);
 

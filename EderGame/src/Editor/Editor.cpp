@@ -321,18 +321,21 @@ void Editor::HandleSceneShortcuts()
     }
     if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_S, false))
     {
-        if (m_onSaveScene) m_onSaveScene();
+        m_saveSceneAsOpen = true;
+        std::strncpy(m_saveSceneAsName, m_currentSceneName.c_str(), sizeof(m_saveSceneAsName) - 1);
+    }
+    if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_D, false))
+    {
+        hierarchy.DuplicateSelected();
     }
     if (ctrl && shift && ImGui::IsKeyPressed(ImGuiKey_S, false))
     {
         m_saveSceneAsOpen = true;
         std::strncpy(m_saveSceneAsName, m_currentSceneName.c_str(), sizeof(m_saveSceneAsName) - 1);
-        ImGui::OpenPopup("Save Scene As##dlg");
     }
     if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_O, false))
     {
         m_openScenePickerOpen = true;
-        ImGui::OpenPopup("##openScene");
     }
 
     // Build
@@ -367,6 +370,9 @@ void Editor::HandleSceneShortcuts()
 // ──────────────────────────────────────────────────────────────────────────────
 void Editor::DrawSaveSceneAsModal()
 {
+    if (m_saveSceneAsOpen)
+        ImGui::OpenPopup("Save Scene As##dlg");
+
     ImGui::SetNextWindowSize(ImVec2(360, 110), ImGuiCond_Always);
     if (!ImGui::BeginPopupModal("Save Scene As##dlg",
                                 &m_saveSceneAsOpen,
@@ -402,6 +408,9 @@ void Editor::DrawSaveSceneAsModal()
 // ──────────────────────────────────────────────────────────────────────────────
 void Editor::DrawOpenScenePicker()
 {
+    if (m_openScenePickerOpen)
+        ImGui::OpenPopup("##openScene");
+
     ImGui::SetNextWindowSize(ImVec2(440, 340), ImGuiCond_Always);
     if (!ImGui::BeginPopupModal("##openScene",
                                 &m_openScenePickerOpen,
@@ -477,13 +486,13 @@ void Editor::DrawMenuBar()
         ImGui::Separator();
         if (ImGui::MenuItem("Save",        "Ctrl+S"))
         {
-            if (m_onSaveScene) m_onSaveScene();
+            m_saveSceneAsOpen = true;
+            std::strncpy(m_saveSceneAsName, m_currentSceneName.c_str(), sizeof(m_saveSceneAsName) - 1);
         }
         if (ImGui::MenuItem("Save As...",  "Ctrl+Shift+S"))
         {
             m_saveSceneAsOpen = true;
             std::strncpy(m_saveSceneAsName, m_currentSceneName.c_str(), sizeof(m_saveSceneAsName) - 1);
-            ImGui::OpenPopup("Save Scene As##dlg");
         }
         ImGui::Separator();
         if (ImGui::MenuItem("Exit",        "Alt+F4")) {}

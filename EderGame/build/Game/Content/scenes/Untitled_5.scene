@@ -1,0 +1,256 @@
+version=1
+name=Untitled_5
+
+[entity]
+id=1
+tag.name=Entity
+transform.pos=-5.859200 5.455259 0.000031
+transform.rot=-49.000000 0.000000 -0.000000
+transform.scale=1.000000 1.000000 1.000000
+mesh.guid=264d75c6f89d75ce
+mesh.path=meshes/cube.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.3
+collider.dynFric=0.3
+collider.restitution=0.3
+collider.isTrigger=0
+[/entity]
+
+[entity]
+id=2
+tag.name=Entity (copy)
+transform.pos=-3.006157 5.455259 0.000031
+transform.rot=-49.000000 0.000000 -0.000000
+transform.scale=1.000000 1.000000 1.000000
+mesh.guid=264d75c6f89d75ce
+mesh.path=meshes/cube.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.3
+collider.dynFric=0.3
+collider.restitution=0.3
+collider.isTrigger=0
+[/entity]
+
+[entity]
+id=3
+tag.name=Entity (copy) (copy)
+transform.pos=-0.618611 5.455259 0.000031
+transform.rot=-49.000000 0.000000 -0.000000
+transform.scale=1.000000 1.000000 1.000000
+mesh.guid=264d75c6f89d75ce
+mesh.path=meshes/cube.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.3
+collider.dynFric=0.3
+collider.restitution=0.3
+collider.isTrigger=0
+[/entity]
+
+[entity]
+id=4
+tag.name=Entity (copy) (copy) (copy)
+transform.pos=2.169326 5.455259 0.000031
+transform.rot=-49.000000 0.000000 -0.000000
+transform.scale=1.000000 1.000000 1.000000
+mesh.guid=264d75c6f89d75ce
+mesh.path=meshes/cube.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.3
+collider.dynFric=0.3
+collider.restitution=0.3
+collider.isTrigger=0
+[/entity]
+
+[entity]
+id=5
+tag.name=Entity (copy) (copy) (copy) (copy)
+transform.pos=3.913612 5.455259 0.000031
+transform.rot=-49.000000 0.000000 -0.000000
+transform.scale=1.000000 1.000000 1.000000
+mesh.guid=264d75c6f89d75ce
+mesh.path=meshes/cube.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.3
+collider.dynFric=0.3
+collider.restitution=0.3
+collider.isTrigger=0
+[/entity]
+
+[entity]
+id=6
+tag.name=Entity (copy) (copy) (copy) (copy) (copy)
+transform.pos=5.705909 5.455259 0.000031
+transform.rot=-49.000000 0.000000 -0.000000
+transform.scale=1.000000 1.000000 1.000000
+mesh.guid=264d75c6f89d75ce
+mesh.path=meshes/cube.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.3
+collider.dynFric=0.3
+collider.restitution=0.3
+collider.isTrigger=0
+[/entity]
+
+[entity]
+id=7
+tag.name=Entity (copy) (copy) (copy) (copy) (copy) (copy)
+transform.pos=6.925819 5.455259 0.000031
+transform.rot=-49.000000 0.000000 -0.000000
+transform.scale=1.000000 1.000000 1.000000
+mesh.guid=264d75c6f89d75ce
+mesh.path=meshes/cube.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.3
+collider.dynFric=0.3
+collider.restitution=0.3
+collider.isTrigger=0
+[/entity]
+
+[entity]
+id=8
+tag.name=Entity (copy) (copy) (copy) (copy) (copy) (copy) (copy)
+transform.pos=0.412834 5.455259 0.000031
+transform.rot=-49.000000 0.000000 -0.000000
+transform.scale=1.000000 1.000000 1.000000
+mesh.guid=264d75c6f89d75ce
+mesh.path=meshes/cube.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.3
+collider.dynFric=0.3
+collider.restitution=0.3
+collider.isTrigger=0
+[/entity]
+
+[entity]
+id=9
+tag.name=Entity (copy) (copy) (copy) (copy) (copy) (copy) (copy) (copy)
+transform.pos=1.412834 5.455259 0.000031
+transform.rot=-49.000000 0.000000 -0.000000
+transform.scale=1.000000 1.000000 1.000000
+mesh.guid=264d75c6f89d75ce
+mesh.path=meshes/cube.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.3
+collider.dynFric=0.3
+collider.restitution=0.3
+collider.isTrigger=0
+[/entity]
+
+[entity]
+id=10
+tag.name=Entity (copy) (copy) (copy) (copy) (copy) (copy) (copy) (copy) (copy)
+transform.pos=-1.587166 5.455259 0.000031
+transform.rot=-49.000000 0.000000 -0.000000
+transform.scale=1.000000 1.000000 1.000000
+mesh.guid=264d75c6f89d75ce
+mesh.path=meshes/cube.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.3
+collider.dynFric=0.3
+collider.restitution=0.3
+collider.isTrigger=0
+[/entity]
+
+[entity]
+id=11
+tag.name=Entity (copy) (copy) (copy) (copy) (copy) (copy) (copy) (copy) (copy) (copy)
+transform.pos=-2.587166 5.455259 0.000031
+transform.rot=-49.000000 0.000000 -0.000000
+transform.scale=1.000000 1.000000 1.000000
+mesh.guid=264d75c6f89d75ce
+mesh.path=meshes/cube.fbx
+mesh.matGuid=0
+mesh.matName=default
+mesh.castShadow=1
+mesh.visible=1
+collider.shape=0
+collider.boxHalfExtents=0.500000 0.500000 0.500000
+collider.radius=0.5
+collider.capsuleHalfH=0.5
+collider.center=0.000000 0.000000 0.000000
+collider.staticFric=0.3
+collider.dynFric=0.3
+collider.restitution=0.3
+collider.isTrigger=0
+[/entity]
+

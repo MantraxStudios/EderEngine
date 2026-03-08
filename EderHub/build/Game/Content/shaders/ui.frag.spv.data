@@ -1,0 +1,4 @@
+guid=3c5c9bacd57577ef
+type=Shader
+name=ui.frag
+path=shaders/ui.frag.spv

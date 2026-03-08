@@ -607,9 +607,10 @@ void PlayerApp::SyncECSToScene()
         [&](const SceneObject& o) {
             bool remove = o.entityId != 0 && !m_registry.Has<MeshRendererComponent>(o.entityId);
             if (remove) {
-                m_lastMeshGuid    .erase(o.entityId);
-                m_lastAnimMeshGuid.erase(o.entityId);
-                m_lastMaterialName.erase(o.entityId);
+                m_lastMeshGuid        .erase(o.entityId);
+                m_lastAnimMeshGuid    .erase(o.entityId);
+                m_lastMaterialName    .erase(o.entityId);
+                m_lastSubMeshMaterials.erase(o.entityId);
             }
             return remove;
         }), objs.end());
@@ -641,7 +642,8 @@ void PlayerApp::SyncECSToScene()
             {
                 if (!matAsset.name.empty())
                 {
-                    if (!MaterialManager::Get().Has(matAsset.name))
+                    const std::string matKey = "__mat_" + std::to_string(mr.materialGuid);
+                    if (!MaterialManager::Get().Has(matKey))
                     {
                         MaterialLayout matLayout;
                         matLayout.AddVec4 ("albedo")
@@ -649,9 +651,9 @@ void PlayerApp::SyncECSToScene()
                                  .AddFloat("metallic")
                                  .AddFloat("emissiveIntensity")
                                  .AddFloat("alphaThreshold");
-                        MaterialManager::Get().Add(matAsset.name, matLayout, m_pipeline);
+                        MaterialManager::Get().Add(matKey, matLayout, m_pipeline);
                     }
-                    Material& rMat = MaterialManager::Get().Get(matAsset.name);
+                    Material& rMat = MaterialManager::Get().Get(matKey);
                     rMat.SetVec4 ("albedo",
                         glm::vec4(matAsset.albedo[0], matAsset.albedo[1],
                                   matAsset.albedo[2], matAsset.albedo[3]));
@@ -665,21 +667,114 @@ void PlayerApp::SyncECSToScene()
 
                     if (matAsset.albedoTexGuid != 0)
                     {
-                        auto& lastTex = m_lastMatTexGuid[matAsset.name];
+                        auto& lastTex = m_lastMatTexGuid[matKey];
                         if (lastTex != matAsset.albedoTexGuid)
                         {
                             const Krayon::AssetMeta* texMeta =
                                 Krayon::AssetManager::Get().FindByGuid(matAsset.albedoTexGuid);
                             if (texMeta)
                             {
-                                VulkanTexture& tex = TextureManager::Get().Load(texMeta->path);
-                                rMat.BindTexture(0, tex);
-                                lastTex = matAsset.albedoTexGuid;
+                                try
+                                {
+                                    VulkanTexture& tex = TextureManager::Get().Load(texMeta->path);
+                                    rMat.BindTexture(0, tex);
+                                    lastTex = matAsset.albedoTexGuid;
+                                }
+                                catch (const std::exception&) {}
                             }
                         }
                     }
-                    mr.materialName = matAsset.name;
+                    mr.materialName = matKey;
                 }
+            }
+        }
+
+        // ── Per-submesh materials ─────────────────────────────────
+        for (size_t si = 0; si < mr.subMeshMaterialGuids.size(); si++)
+        {
+            uint64_t smGuid = mr.subMeshMaterialGuids[si];
+            if (smGuid == 0) continue;
+
+            const auto* smMeta = Krayon::AssetManager::Get().FindByGuid(smGuid);
+            if (!smMeta) continue;
+
+            std::string resolvedName;
+
+            Krayon::MaterialAsset smAsset;
+            if (Krayon::AssetManager::Get().ReadMaterialAsset(smGuid, smAsset) && !smAsset.name.empty())
+            {
+                resolvedName = "__mat_" + std::to_string(smGuid);
+                if (!MaterialManager::Get().Has(resolvedName))
+                {
+                    MaterialLayout smLayout;
+                    smLayout.AddVec4 ("albedo")
+                            .AddFloat("roughness")
+                            .AddFloat("metallic")
+                            .AddFloat("emissiveIntensity")
+                            .AddFloat("alphaThreshold");
+                    MaterialManager::Get().Add(resolvedName, smLayout, m_pipeline);
+                }
+                Material& smMat = MaterialManager::Get().Get(resolvedName);
+                smMat.SetVec4 ("albedo", glm::vec4(smAsset.albedo[0], smAsset.albedo[1],
+                                                   smAsset.albedo[2], smAsset.albedo[3]));
+                smMat.SetFloat("roughness",        smAsset.roughness);
+                smMat.SetFloat("metallic",         smAsset.metallic);
+                smMat.SetFloat("emissiveIntensity",
+                    std::max({ smAsset.emissive[0], smAsset.emissive[1], smAsset.emissive[2] }));
+                smMat.SetFloat("alphaThreshold", 0.0f);
+                if (smAsset.albedoTexGuid != 0)
+                {
+                    auto& lastTex = m_lastMatTexGuid[resolvedName];
+                    if (lastTex != smAsset.albedoTexGuid)
+                    {
+                        const Krayon::AssetMeta* tm =
+                            Krayon::AssetManager::Get().FindByGuid(smAsset.albedoTexGuid);
+                        if (tm) try {
+                            VulkanTexture& tex = TextureManager::Get().Load(tm->path);
+                            smMat.BindTexture(0, tex);
+                            lastTex = smAsset.albedoTexGuid;
+                        } catch (const std::exception&) {}
+                    }
+                }
+            }
+            else if (smMeta->type == Krayon::AssetType::Texture)
+            {
+                resolvedName = "auto_" + smMeta->name;
+                if (!MaterialManager::Get().Has(resolvedName))
+                {
+                    MaterialLayout smLayout;
+                    smLayout.AddVec4 ("albedo")
+                            .AddFloat("roughness")
+                            .AddFloat("metallic")
+                            .AddFloat("emissiveIntensity")
+                            .AddFloat("alphaThreshold");
+                    MaterialManager::Get().Add(resolvedName, smLayout, m_pipeline);
+                    Material& smMat = MaterialManager::Get().Get(resolvedName);
+                    smMat.SetVec4 ("albedo", glm::vec4(1.0f));
+                    smMat.SetFloat("roughness",         0.5f);
+                    smMat.SetFloat("metallic",          0.0f);
+                    smMat.SetFloat("emissiveIntensity", 0.0f);
+                    smMat.SetFloat("alphaThreshold",    0.0f);
+                }
+                Material& smMat = MaterialManager::Get().Get(resolvedName);
+                auto& lastTex = m_lastMatTexGuid[resolvedName];
+                if (lastTex != smGuid)
+                {
+                    try {
+                        VulkanTexture& tex = TextureManager::Get().Load(smMeta->path);
+                        smMat.BindTexture(0, tex);
+                        lastTex = smGuid;
+                    } catch (const std::exception&) {}
+                }
+            }
+            else { continue; }
+
+            if (si < mr.subMeshMaterialNames.size())
+                mr.subMeshMaterialNames[si] = resolvedName;
+            else
+            {
+                mr.subMeshMaterialNames.resize(si + 1);
+                mr.subMeshMaterialNames[si] = resolvedName;
             }
         }
 
@@ -695,15 +790,20 @@ void PlayerApp::SyncECSToScene()
 
         if (existingObj && !meshChanged) return;
 
-        Material&   mat  = MaterialManager::Get().Get(mr.materialName);
-        VulkanMesh& mesh = MeshManager::Get().Load(loadPath);
+        Material& mat = MaterialManager::Get().Get(mr.materialName);
+        VulkanMesh* meshPtr = nullptr;
+        try { meshPtr = &MeshManager::Get().Load(loadPath); }
+        catch (const std::exception&) { return; }
+        VulkanMesh& mesh = *meshPtr;
         m_lastMeshGuid[e]     = trackGuid;
         m_lastMaterialName[e] = mr.materialName;
 
         if (existingObj)
         {
-            existingObj->mesh     = &mesh;
-            existingObj->material = &mat;
+            existingObj->mesh            = &mesh;
+            existingObj->material        = &mat;
+            existingObj->subMeshMaterials.clear();
+            m_lastSubMeshMaterials.erase(e);
             return;
         }
 
@@ -711,12 +811,32 @@ void PlayerApp::SyncECSToScene()
         obj.entityId = e;
         m_lastMaterialName[e] = mr.materialName;
 
-        if (m_registry.Has<TransformComponent>(e))
+    });
+
+    // ── Sync subMeshMaterials to SceneObjects ─────────────────────────────────
+    m_registry.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
+    {
+        if (mr.subMeshMaterialNames.empty()) return;
+
+        SceneObject* obj = nullptr;
+        for (auto& o : m_scene.GetObjects())
+            if (o.entityId == e) { obj = &o; break; }
+        if (!obj || !obj->mesh) return;
+
+        const auto& names = mr.subMeshMaterialNames;
+        auto& last = m_lastSubMeshMaterials[e];
+        if (last == names) return;
+        last = names;
+
+        uint32_t smCount = obj->mesh->GetSubmeshCount();
+        obj->subMeshMaterials.resize(smCount, nullptr);
+        for (uint32_t si = 0; si < smCount; si++)
         {
-            const auto& t    = m_registry.Get<TransformComponent>(e);
-            obj.transform.position = t.position;
-            obj.transform.rotation = t.rotation;
-            obj.transform.scale    = t.scale;
+            const std::string& name = (si < (uint32_t)names.size()) ? names[si] : "";
+            if (!name.empty() && MaterialManager::Get().Has(name))
+                obj->subMeshMaterials[si] = &MaterialManager::Get().Get(name);
+            else
+                obj->subMeshMaterials[si] = nullptr;
         }
     });
 
@@ -724,22 +844,8 @@ void PlayerApp::SyncECSToScene()
     {
         if (obj.entityId == 0 || !m_registry.Has<TransformComponent>(obj.entityId)) continue;
 
-        obj.isSkinned = m_registry.Has<AnimationComponent>(obj.entityId);
-
-        glm::mat4 world = TransformSystem::GetWorldMatrix(obj.entityId, m_registry);
-
-        obj.transform.position = glm::vec3(world[3]);
-        obj.transform.scale.x  = glm::length(glm::vec3(world[0]));
-        obj.transform.scale.y  = glm::length(glm::vec3(world[1]));
-        obj.transform.scale.z  = glm::length(glm::vec3(world[2]));
-        glm::mat4 rot = world;
-        rot[0] = glm::vec4(glm::vec3(world[0]) / obj.transform.scale.x, 0.0f);
-        rot[1] = glm::vec4(glm::vec3(world[1]) / obj.transform.scale.y, 0.0f);
-        rot[2] = glm::vec4(glm::vec3(world[2]) / obj.transform.scale.z, 0.0f);
-        rot[3] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        float yRad, xRad, zRad;
-        glm::extractEulerAngleYXZ(rot, yRad, xRad, zRad);
-        obj.transform.rotation = glm::degrees(glm::vec3(xRad, yRad, zRad));
+        obj.isSkinned   = m_registry.Has<AnimationComponent>(obj.entityId);
+        obj.worldMatrix = TransformSystem::GetWorldMatrix(obj.entityId, m_registry);
     }
 
     for (auto& obj : m_scene.GetObjects())
@@ -770,10 +876,29 @@ void PlayerApp::SyncECSToScene()
 
 void PlayerApp::UpdateAnimations(float dt)
 {
-    std::vector<glm::mat4> boneMatrices(MAX_BONES, glm::mat4(1.0f));
+    // Remove SSBOs for entities that no longer have an AnimationComponent.
+    // waitIdle ensures the GPU is done with the buffer before freeing it.
+    {
+        std::vector<uint32_t> toErase;
+        for (auto& [eid, _] : m_entityBoneSSBO)
+            if (!m_registry.Has<AnimationComponent>(eid))
+                toErase.push_back(eid);
+        if (!toErase.empty())
+        {
+            VulkanInstance::Get().GetDevice().waitIdle();
+            for (auto eid : toErase)
+            {
+                m_entityBoneSSBO[eid]->Destroy();
+                m_entityBoneSSBO.erase(eid);
+            }
+        }
+    }
+
+    static const std::vector<glm::mat4> s_identity(MAX_BONES, glm::mat4(1.0f));
 
     m_registry.Each<AnimationComponent>([&](Entity e, AnimationComponent& anim)
     {
+        std::vector<glm::mat4> boneMatrices(s_identity);
         if (!m_registry.Has<MeshRendererComponent>(e)) return;
         const auto& mr = m_registry.Get<MeshRendererComponent>(e);
 
@@ -863,10 +988,15 @@ void PlayerApp::UpdateAnimations(float dt)
             boneMatrices[i] = boneMats[i];
 
         m_entityBoneMatrices[e] = boneMatrices;
-    });
 
-    static const std::vector<glm::mat4> s_identity(MAX_BONES, glm::mat4(1.0f));
-    m_boneSSBO.Upload(s_identity);
+        auto& ssbo = m_entityBoneSSBO[e];
+        if (!ssbo)
+        {
+            ssbo = std::make_unique<BoneSSBO>();
+            ssbo->Create(m_pipeline);
+        }
+        ssbo->Upload(boneMatrices);
+    });
 }
 
 void PlayerApp::RenderShadowPasses(vk::CommandBuffer cmd)
@@ -924,10 +1054,11 @@ void PlayerApp::RenderMainPass(vk::CommandBuffer cmd)
     m_scene.DrawSkinned(cmd, m_pipeline, m_camera, aspect, m_lights,
         [this, &cmd](uint32_t entityId)
         {
-            auto it = m_entityBoneMatrices.find(entityId);
-            if (it != m_entityBoneMatrices.end())
-                m_boneSSBO.Upload(it->second);
-            m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
+            auto it = m_entityBoneSSBO.find(entityId);
+            if (it != m_entityBoneSSBO.end() && it->second)
+                it->second->Bind(cmd, *m_pipeline.GetLayout());
+            else
+                m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
         });
 
     m_skybox.Draw(cmd, m_camera.GetView(), m_camera.GetProjection(aspect), -m_activeDirDir);

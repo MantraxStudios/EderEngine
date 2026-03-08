@@ -12,6 +12,7 @@ public:
     void   SetRegistry(Registry* r) { registry = r; }
     Entity GetSelected()  const     { return selected; }
     void   SetSelected(Entity e)    { selected = e; }
+    void   DuplicateSelected();
 
 private:
     void DrawEntityNode(Entity e);
@@ -20,7 +21,6 @@ private:
     Entity    selected       = NULL_ENTITY;
     Entity    pendingDestroy = NULL_ENTITY;
 
-    // Deferred hierarchy ops — executed after the draw loop finishes
     struct PendingAttach { Entity child = NULL_ENTITY; Entity parent = NULL_ENTITY; };
     PendingAttach pendingAttach;
     Entity        pendingDetach = NULL_ENTITY;

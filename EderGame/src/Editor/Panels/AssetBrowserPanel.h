@@ -5,6 +5,8 @@
 #include <vector>
 #include <functional>
 #include <filesystem>
+#include <thread>
+#include <atomic>
 
 // ─────────────────────────────────────────────────────────────────────────────
 //  AssetBrowserPanel
@@ -23,9 +25,15 @@
 class AssetBrowserPanel : public Panel
 {
 public:
+    ~AssetBrowserPanel() { StopFileWatcher(); }
+
     // ── Panel interface ───────────────────────────────────────────
     const char* Title() const override { return "Asset Browser"; }
     void        OnDraw()      override;
+
+    // ── External file drop (from OS drag-and-drop) ────────────────
+    void HandleExternalDrop(const std::string& absSourcePath, const std::string& targetRelDir);
+    void QueueImport(const std::vector<std::string>& paths);
 
     // ── Optional callback: user double-clicked an asset ───────────
     // Signature: void(uint64_t guid, const Krayon::AssetMeta&)
@@ -85,6 +93,22 @@ private:
     std::string m_deleteFolderPath;
 
     SelectCallback m_onSelect;
+
+    // ── Import progress ──────────────────────────────────────────
+    struct ImportEntry { std::string srcPath; std::string targetDir; };
+    std::vector<ImportEntry> m_importQueue;
+    int  m_importTotal = 0;
+    int  m_importDone  = 0;
+    void DrawImportProgress();
+
+    // ── File watcher ─────────────────────────────────────────────
+    void StartFileWatcher();
+    void StopFileWatcher();
+    void FileWatcherThread();
+
+    std::thread       m_watchThread;
+    std::atomic<bool> m_watchStop{false};
+    std::atomic<bool> m_watchDirty{false};
 
     // ── Helpers ───────────────────────────────────────────────────
     static const char* IconForType(Krayon::AssetType t);

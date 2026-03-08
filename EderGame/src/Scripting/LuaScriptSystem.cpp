@@ -586,6 +586,32 @@ void LuaScriptSystem::BindAPI()
         if (s_reg && s_reg->Has<MeshRendererComponent>((Entity)e))
             s_reg->Get<MeshRendererComponent>((Entity)e).materialName = name;
     };
+    // idx=0 sets the base material; idx>=1 sets sub-mesh material overrides
+    MR["getSubMeshCount"] = [](int e) -> int {
+        if (!s_reg || !s_reg->Has<MeshRendererComponent>((Entity)e)) return 0;
+        return (int)s_reg->Get<MeshRendererComponent>((Entity)e).subMeshMaterialNames.size();
+    };
+    MR["getMaterialByIndex"] = [](int e, int idx) -> std::string {
+        if (!s_reg || !s_reg->Has<MeshRendererComponent>((Entity)e)) return "";
+        auto& mr = s_reg->Get<MeshRendererComponent>((Entity)e);
+        if (idx <= 0) return mr.materialName;
+        int si = idx - 1;
+        if (si < (int)mr.subMeshMaterialNames.size()) return mr.subMeshMaterialNames[si];
+        return "";
+    };
+    MR["setMaterialByIndex"] = [](int e, int idx, const std::string& name) {
+        if (!s_reg || !s_reg->Has<MeshRendererComponent>((Entity)e)) return;
+        auto& mr = s_reg->Get<MeshRendererComponent>((Entity)e);
+        if (idx <= 0) { mr.materialName = name; return; }
+        int si = idx - 1;
+        if (si >= (int)mr.subMeshMaterialNames.size())
+        {
+            mr.subMeshMaterialNames.resize(si + 1, "");
+            mr.subMeshMaterialGuids.resize(si + 1, 0);
+        }
+        mr.subMeshMaterialNames[si] = name;
+        mr.subMeshMaterialGuids[si] = 0; // clear GUID so name fallback is used
+    };
 
     // ─────────────────────────────────────────────────────────────────────────
     // Light table
@@ -720,6 +746,93 @@ void LuaScriptSystem::BindAPI()
         if (s_reg && s_reg->Has<LightComponent>((Entity)e))
             s_reg->Get<LightComponent>((Entity)e).shaftsExposure = v;
     };
+    Light["getShaftsTint"] = [](int e) -> sol::table {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return sol::nil;
+        auto& l = s_reg->Get<LightComponent>((Entity)e);
+        sol::table r = LuaScriptSystem::Get().GetState().create_table();
+        r["r"] = l.shaftsTint.r; r["g"] = l.shaftsTint.g; r["b"] = l.shaftsTint.b;
+        return r;
+    };
+    Light["getShaftsBloomScale"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<LightComponent>((Entity)e).shaftsBloomScale;
+    };
+    Light["setShaftsBloomScale"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).shaftsBloomScale = v;
+    };
+    Light["getShaftsDecay"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<LightComponent>((Entity)e).shaftsDecay;
+    };
+    Light["setShaftsDecay"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).shaftsDecay = v;
+    };
+    Light["getShaftsWeight"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<LightComponent>((Entity)e).shaftsWeight;
+    };
+    Light["setShaftsWeight"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).shaftsWeight = v;
+    };
+    Light["getShaftsSunRadius"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<LightComponent>((Entity)e).shaftsSunRadius;
+    };
+    Light["setShaftsSunRadius"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).shaftsSunRadius = v;
+    };
+    // Volumetric — missing params
+    Light["getVolTint"] = [](int e) -> sol::table {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return sol::nil;
+        auto& l = s_reg->Get<LightComponent>((Entity)e);
+        sol::table r = LuaScriptSystem::Get().GetState().create_table();
+        r["r"] = l.volTint.r; r["g"] = l.volTint.g; r["b"] = l.volTint.b;
+        return r;
+    };
+    Light["getVolNumSteps"] = [](int e) -> int {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 64;
+        return s_reg->Get<LightComponent>((Entity)e).volNumSteps;
+    };
+    Light["setVolNumSteps"] = [](int e, int v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).volNumSteps = v;
+    };
+    Light["getVolAbsorption"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<LightComponent>((Entity)e).volAbsorption;
+    };
+    Light["setVolAbsorption"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).volAbsorption = v;
+    };
+    Light["getVolG"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<LightComponent>((Entity)e).volG;
+    };
+    Light["setVolG"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).volG = v;
+    };
+    Light["getVolMaxDistance"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<LightComponent>((Entity)e).volMaxDistance;
+    };
+    Light["setVolMaxDistance"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).volMaxDistance = v;
+    };
+    Light["getVolJitter"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<LightComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<LightComponent>((Entity)e).volJitter;
+    };
+    Light["setVolJitter"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<LightComponent>((Entity)e))
+            s_reg->Get<LightComponent>((Entity)e).volJitter = v;
+    };
 
     // ─────────────────────────────────────────────────────────────────────────
     // Animation table
@@ -812,13 +925,56 @@ void LuaScriptSystem::BindAPI()
         if (s_reg && s_reg->Has<VolumetricFogComponent>((Entity)e))
             s_reg->Get<VolumetricFogComponent>((Entity)e).fogEnd = v;
     };
+    Fog["getColor"] = [](int e) -> sol::table {
+        if (!s_reg || !s_reg->Has<VolumetricFogComponent>((Entity)e)) return sol::nil;
+        auto& f = s_reg->Get<VolumetricFogComponent>((Entity)e);
+        sol::table r = LuaScriptSystem::Get().GetState().create_table();
+        r["r"] = f.fogColor.r; r["g"] = f.fogColor.g; r["b"] = f.fogColor.b;
+        return r;
+    };
     Fog["setColor"] = [](int e, float r, float g, float b) {
         if (s_reg && s_reg->Has<VolumetricFogComponent>((Entity)e))
             s_reg->Get<VolumetricFogComponent>((Entity)e).fogColor = {r, g, b};
     };
+    Fog["setHorizonColor"] = [](int e, float r, float g, float b) {
+        if (s_reg && s_reg->Has<VolumetricFogComponent>((Entity)e))
+            s_reg->Get<VolumetricFogComponent>((Entity)e).horizonColor = {r, g, b};
+    };
+    Fog["setSunScatterColor"] = [](int e, float r, float g, float b) {
+        if (s_reg && s_reg->Has<VolumetricFogComponent>((Entity)e))
+            s_reg->Get<VolumetricFogComponent>((Entity)e).sunScatterColor = {r, g, b};
+    };
+    Fog["getHeightFalloff"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<VolumetricFogComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<VolumetricFogComponent>((Entity)e).heightFalloff;
+    };
+    Fog["setHeightFalloff"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<VolumetricFogComponent>((Entity)e))
+            s_reg->Get<VolumetricFogComponent>((Entity)e).heightFalloff = v;
+    };
+    Fog["getHeightOffset"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<VolumetricFogComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<VolumetricFogComponent>((Entity)e).heightOffset;
+    };
+    Fog["setHeightOffset"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<VolumetricFogComponent>((Entity)e))
+            s_reg->Get<VolumetricFogComponent>((Entity)e).heightOffset = v;
+    };
+    Fog["getScatterStrength"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<VolumetricFogComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<VolumetricFogComponent>((Entity)e).scatterStrength;
+    };
     Fog["setScatterStrength"] = [](int e, float v) {
         if (s_reg && s_reg->Has<VolumetricFogComponent>((Entity)e))
             s_reg->Get<VolumetricFogComponent>((Entity)e).scatterStrength = v;
+    };
+    Fog["getMaxFogAmount"] = [](int e) -> float {
+        if (!s_reg || !s_reg->Has<VolumetricFogComponent>((Entity)e)) return 0.f;
+        return s_reg->Get<VolumetricFogComponent>((Entity)e).maxFogAmount;
+    };
+    Fog["setMaxFogAmount"] = [](int e, float v) {
+        if (s_reg && s_reg->Has<VolumetricFogComponent>((Entity)e))
+            s_reg->Get<VolumetricFogComponent>((Entity)e).maxFogAmount = v;
     };
 
     // ─────────────────────────────────────────────────────────────────────────

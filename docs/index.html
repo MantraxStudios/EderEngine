@@ -824,6 +824,9 @@ code {
           <tr><td><code>MeshRenderer.setCastShadow(e, bool)</code></td><td></td><td></td></tr>
           <tr><td><code>MeshRenderer.getMaterialName(e)</code></td><td><span class="ret-badge">string</span></td><td></td></tr>
           <tr><td><code>MeshRenderer.setMaterialName(e, name)</code></td><td></td><td>Switch material at runtime</td></tr>
+          <tr><td><code>MeshRenderer.getSubMeshCount(e)</code></td><td><span class="ret-badge">int</span></td><td>Number of sub-mesh material slots</td></tr>
+          <tr><td><code>MeshRenderer.getMaterialByIndex(e, idx)</code></td><td><span class="ret-badge">string</span></td><td>idx=0 → base material; idx≥1 → sub-mesh slot</td></tr>
+          <tr><td><code>MeshRenderer.setMaterialByIndex(e, idx, name)</code></td><td></td><td>Override material at slot (idx=0 = base)</td></tr>
         </tbody>
       </table>
     </section>
@@ -867,11 +870,22 @@ code {
         <tbody>
           <tr><td><code>Light.isVolumetricEnabled(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
           <tr><td><code>Light.setVolumetricEnabled(e, bool)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getVolNumSteps(e)</code></td><td><span class="ret-badge">int</span></td><td>Ray-march step count (perf vs quality)</td></tr>
+          <tr><td><code>Light.setVolNumSteps(e, n)</code></td><td></td><td></td></tr>
           <tr><td><code>Light.getVolDensity(e)</code></td><td><span class="ret-badge">float</span></td><td>σ_s scatter coefficient (0.005–0.05)</td></tr>
           <tr><td><code>Light.setVolDensity(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getVolAbsorption(e)</code></td><td><span class="ret-badge">float</span></td><td>σ_a absorption coefficient</td></tr>
+          <tr><td><code>Light.setVolAbsorption(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getVolG(e)</code></td><td><span class="ret-badge">float</span></td><td>Henyey-Greenstein anisotropy (−1..1)</td></tr>
+          <tr><td><code>Light.setVolG(e, v)</code></td><td></td><td></td></tr>
           <tr><td><code>Light.getVolIntensity(e)</code></td><td><span class="ret-badge">float</span></td><td>Output multiplier</td></tr>
           <tr><td><code>Light.setVolIntensity(e, v)</code></td><td></td><td></td></tr>
-          <tr><td><code>Light.setVolTint(e, r, g, b)</code></td><td></td><td>Color tint on scattered light</td></tr>
+          <tr><td><code>Light.getVolMaxDistance(e)</code></td><td><span class="ret-badge">float</span></td><td>Max ray-march distance (world units)</td></tr>
+          <tr><td><code>Light.setVolMaxDistance(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getVolJitter(e)</code></td><td><span class="ret-badge">float</span></td><td>Noise jitter to break banding (0 = off)</td></tr>
+          <tr><td><code>Light.setVolJitter(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getVolTint(e)</code></td><td><span class="ret-badge">{r,g,b}</span></td><td>Color tint on scattered light</td></tr>
+          <tr><td><code>Light.setVolTint(e, r, g, b)</code></td><td></td><td></td></tr>
         </tbody>
       </table>
 
@@ -881,10 +895,19 @@ code {
         <tbody>
           <tr><td><code>Light.isSunShaftsEnabled(e)</code></td><td><span class="ret-badge">bool</span></td><td></td></tr>
           <tr><td><code>Light.setSunShaftsEnabled(e, bool)</code></td><td></td><td></td></tr>
-          <tr><td><code>Light.getShaftsDensity(e)</code></td><td><span class="ret-badge">float</span></td><td></td></tr>
+          <tr><td><code>Light.getShaftsDensity(e)</code></td><td><span class="ret-badge">float</span></td><td>Ray step density / reach</td></tr>
           <tr><td><code>Light.setShaftsDensity(e, v)</code></td><td></td><td></td></tr>
-          <tr><td><code>Light.getShaftsExposure(e)</code></td><td><span class="ret-badge">float</span></td><td></td></tr>
+          <tr><td><code>Light.getShaftsBloomScale(e)</code></td><td><span class="ret-badge">float</span></td><td>Glare / bloom brightness (independent)</td></tr>
+          <tr><td><code>Light.setShaftsBloomScale(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getShaftsDecay(e)</code></td><td><span class="ret-badge">float</span></td><td>Per-step ray falloff (0.9–0.99)</td></tr>
+          <tr><td><code>Light.setShaftsDecay(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getShaftsWeight(e)</code></td><td><span class="ret-badge">float</span></td><td>Ray brightness accumulation weight</td></tr>
+          <tr><td><code>Light.setShaftsWeight(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getShaftsExposure(e)</code></td><td><span class="ret-badge">float</span></td><td>Overall exposure multiplier</td></tr>
           <tr><td><code>Light.setShaftsExposure(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getShaftsSunRadius(e)</code></td><td><span class="ret-badge">float</span></td><td>Angular radius of sun disk (occlusion)</td></tr>
+          <tr><td><code>Light.setShaftsSunRadius(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>Light.getShaftsTint(e)</code></td><td><span class="ret-badge">{r,g,b}</span></td><td>Warm sun tint</td></tr>
           <tr><td><code>Light.setShaftsTint(e, r, g, b)</code></td><td></td><td></td></tr>
         </tbody>
       </table>
@@ -945,8 +968,18 @@ code {
           <tr><td><code>VolumetricFog.setFogStart(e, v)</code></td><td></td><td></td></tr>
           <tr><td><code>VolumetricFog.getFogEnd(e)</code></td><td><span class="ret-badge">float</span></td><td>End distance (metres)</td></tr>
           <tr><td><code>VolumetricFog.setFogEnd(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>VolumetricFog.getColor(e)</code></td><td><span class="ret-badge">{r,g,b}</span></td><td>Base fog/haze colour</td></tr>
           <tr><td><code>VolumetricFog.setColor(e, r, g, b)</code></td><td></td><td></td></tr>
+          <tr><td><code>VolumetricFog.setHorizonColor(e, r, g, b)</code></td><td></td><td>Warmer tint near horizon</td></tr>
+          <tr><td><code>VolumetricFog.setSunScatterColor(e, r, g, b)</code></td><td></td><td>Sun forward-scatter glow colour</td></tr>
+          <tr><td><code>VolumetricFog.getHeightFalloff(e)</code></td><td><span class="ret-badge">float</span></td><td>How fast fog fades with height</td></tr>
+          <tr><td><code>VolumetricFog.setHeightFalloff(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>VolumetricFog.getHeightOffset(e)</code></td><td><span class="ret-badge">float</span></td><td>World-Y below which fog is at full density</td></tr>
+          <tr><td><code>VolumetricFog.setHeightOffset(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>VolumetricFog.getScatterStrength(e)</code></td><td><span class="ret-badge">float</span></td><td>Mie forward-scatter toward the sun (0–1)</td></tr>
           <tr><td><code>VolumetricFog.setScatterStrength(e, v)</code></td><td></td><td></td></tr>
+          <tr><td><code>VolumetricFog.getMaxFogAmount(e)</code></td><td><span class="ret-badge">float</span></td><td>Global opacity ceiling (prevents whiteout)</td></tr>
+          <tr><td><code>VolumetricFog.setMaxFogAmount(e, v)</code></td><td></td><td></td></tr>
         </tbody>
       </table>
     </section>
@@ -2206,10 +2239,10 @@ const searchIndex = [
   { page:'rigidbody',    tag:'Component', title:'Rigidbody',           sub:'getMass setVelocity getVelocity isKinematic setGravity linearDrag angularDrag mass physics' },
   { page:'collider',     tag:'Component', title:'Collider',            sub:'isTrigger getShape Box Sphere Capsule radius friction restitution center' },
   { page:'hierarchy',    tag:'Component', title:'Hierarchy',           sub:'getParent getChildCount getChild parent children' },
-  { page:'meshrenderer', tag:'Component', title:'MeshRenderer',        sub:'isVisible setVisible castsShadow getMaterialName setMaterialName mesh render' },
-  { page:'light',        tag:'Component', title:'Light',               sub:'getType setColor getIntensity setRange getRange Point Spot Directional volumetric sunshafts castShadow' },
+  { page:'meshrenderer', tag:'Component', title:'MeshRenderer',        sub:'isVisible setVisible castsShadow getMaterialName setMaterialName getSubMeshCount getMaterialByIndex setMaterialByIndex submesh material index mesh render' },
+  { page:'light',        tag:'Component', title:'Light',               sub:'getType setColor getIntensity setRange getRange Point Spot Directional volumetric sunshafts castShadow volNumSteps volAbsorption volG volMaxDistance volJitter volTint shaftsBloomScale shaftsDecay shaftsWeight shaftsSunRadius shaftsTint' },
   { page:'animation',    tag:'Component', title:'Animation',           sub:'play stop isPlaying setClip getClip setSpeed setLoop getTime setBlendDuration' },
-  { page:'volumetricfog',tag:'Component', title:'VolumetricFog',       sub:'isEnabled setDensity getFogStart getFogEnd setColor setScatterStrength fog' },
+  { page:'volumetricfog',tag:'Component', title:'VolumetricFog',       sub:'isEnabled setDensity getFogStart getFogEnd getColor setColor setHorizonColor setSunScatterColor getHeightFalloff setHeightFalloff getHeightOffset setHeightOffset getScatterStrength setScatterStrength getMaxFogAmount setMaxFogAmount fog' },
   { page:'entity',       tag:'Utility',   title:'Entity',              sub:'create destroy isValid spawn' },
   { page:'vec3',         tag:'Utility',   title:'Vec3',                sub:'new length dot normalize vector math' },
   { page:'script',       tag:'Utility',   title:'Script',              sub:'call get set has cross entity communication' },

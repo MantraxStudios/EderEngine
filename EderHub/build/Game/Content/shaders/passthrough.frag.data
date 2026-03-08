@@ -1,0 +1,4 @@
+guid=9de5576e39f0a9e2
+type=Shader
+name=passthrough
+path=shaders/passthrough.frag

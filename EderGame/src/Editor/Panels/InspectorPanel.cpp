@@ -205,7 +205,7 @@ void InspectorPanel::DrawHierarchyComponent()
     bool hasHier   = registry->Has<HierarchyComponent>(selected);
     bool hasParent = hasHier && registry->Get<HierarchyComponent>(selected).parent != NULL_ENTITY;
 
-    if (!hasParent) return;   // Only show section when actually parented
+    if (!hasParent) return;  
 
     ImGui::PushID("Hierarchy");
     if (ImGui::CollapsingHeader("Hierarchy", ImGuiTreeNodeFlags_DefaultOpen))

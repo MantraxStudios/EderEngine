@@ -1,0 +1,4 @@
+guid=a948d50d259658c0
+type=Shader
+name=ui.vert
+path=shaders/ui.vert.spv

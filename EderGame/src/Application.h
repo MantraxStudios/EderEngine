@@ -25,6 +25,7 @@
 #include "Renderer/Vulkan/VulkanVolumetricFog.h"
 #include "Renderer/Vulkan/VulkanPostProcessPass.h"
 #include "Renderer/Vulkan/BoneSSBO.h"
+#include "UI/UIRenderer.h"
 #include "EderCore.h"
 #include "Physics/PhysicsSystem.h"
 #include <unordered_map>
@@ -125,8 +126,10 @@ private:
     VulkanPipeline     m_pipeline;
     VulkanDebugOverlay m_debugOverlay;
     VulkanSkybox       m_skybox;
-    BoneSSBO           m_boneSSBO;
+    BoneSSBO           m_boneSSBO;          // identity fallback / initial bind
+    std::unordered_map<uint32_t, std::unique_ptr<BoneSSBO>> m_entityBoneSSBO; // one per skinned entity
     VulkanFramebuffer  m_debugFb;          // primary scene-view framebuffer
+    UIRenderer         m_uiRenderer;
 
     // ── Shadow system ────────────────────────────────────────────────────────
     VulkanShadowMap           m_shadowMap;
@@ -192,6 +195,9 @@ private:
 
     // ── Background build thread ──────────────────────────────────────────────
     std::thread m_buildThread;
+
+    // ── Pending OS drag-drop files (batched between DROP_BEGIN/COMPLETE) ─────
+    std::vector<std::string> m_pendingDropFiles;
 
     // ── Play mode state ──────────────────────────────────────────────────────
     // Embedded (inline):  physics+scripting tick in this process; no child window.

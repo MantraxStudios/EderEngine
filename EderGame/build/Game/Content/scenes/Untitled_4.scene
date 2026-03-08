@@ -5,7 +5,7 @@ name=Untitled_4
 id=1
 tag.name=Entity
 transform.pos=0.000000 0.000000 0.000000
-transform.rot=0.000000 0.000000 0.000000
+transform.rot=-56.000000 0.000000 0.000000
 transform.scale=1.000000 1.000000 1.000000
 mesh.guid=de552ce0c26b4539
 mesh.path=dragonsketchfab.fbx
@@ -14,15 +14,15 @@ mesh.matName=default
 mesh.castShadow=1
 mesh.visible=1
 mesh.submesh.count=3
-mesh.submesh.guids=7ed15506a02fbc6f d92bc70d8ca4ff7e 2a279c93a8a85c51
-mesh.submesh.names=M_BlackDragonBody_Base_color|M_BlackDragonFur_Normal_OpenGL|BKGND_Base_color
+mesh.submesh.guids=1447360180afedb2 728ba24dbf9993b bdec5ec536a780c8
+mesh.submesh.names=M_BlackDragonBody|M_BlackDragonFur|BKGND
 [/entity]
 
 [entity]
 id=2
 tag.name=Entity
 transform.pos=0.000000 0.000000 0.000000
-transform.rot=-67.500000 0.000000 0.000000
+transform.rot=-57.000000 0.000000 0.000000
 transform.scale=1.000000 1.000000 1.000000
 light.type=0
 light.color=1.000000 1.000000 1.000000
@@ -49,4 +49,13 @@ light.shafts.exposure=0.85
 light.shafts.sunRadius=0.012
 light.shafts.tint=1.000000 0.950000 0.850000
 [/entity]
+
+[postprocess]
+effect.count=1
+effect.0.name=Vignette
+effect.0.shader=shaders/vignette.frag.spv
+effect.0.enabled=1
+effect.0.paramcount=2
+effect.0.params=0.67 0.23 0 0 0 1.58 0 0 0 0 0 0 0 0 0 0
+[/postprocess]
 

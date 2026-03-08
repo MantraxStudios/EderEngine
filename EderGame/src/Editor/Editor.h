@@ -27,6 +27,7 @@ public:
     void Shutdown();
 
     void ProcessEvent(const SDL_Event& event);
+    void HandleFileDropBatch(const std::vector<std::string>& paths) { assetBrowser.QueueImport(paths); }
     void BeginFrame();
     void EndFrame();                          // frame Vulkan saltado
     void Draw    (Camera& camera, Registry& registry, float dt);

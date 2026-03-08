@@ -11,7 +11,7 @@
 
 SceneObject& Scene::Add(VulkanMesh& mesh, Material& material)
 {
-    objects.push_back({ &mesh, &material, Transform{}, 0 });
+    objects.push_back({ &mesh, &material, glm::mat4(1.0f), 0 });
     return objects.back();
 }
 
@@ -35,7 +35,7 @@ void Scene::Draw(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& 
         if (obj.material->IsTransparent()) continue;  // skip transparents
         if (obj.isSkinned) continue;                  // skip skinned — drawn separately
         if (!obj.subMeshMaterials.empty()) continue;  // skip multi-material — drawn per-submesh below
-        groups[{ obj.mesh, obj.material }].push_back(obj.transform.GetMatrix());
+        groups[{ obj.mesh, obj.material }].push_back(obj.worldMatrix);
     }
 
     std::vector<glm::mat4> allMatrices;
@@ -58,26 +58,39 @@ void Scene::Draw(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& 
     }
 
     // ── Per-submesh multi-material objects ──────────────────────────────────────
-    for (auto& obj : objects)
+    // Collect all multi-mat objects and upload their matrices at once before drawing.
     {
-        if (!obj.mesh || obj.subMeshMaterials.empty()) continue;
-        if (obj.isSkinned) continue;
-
-        const glm::mat4 model = obj.transform.GetMatrix();
-        subMeshInstanceBuffer.Upload({ model });
-        subMeshInstanceBuffer.Bind(cmd);
-
-        uint32_t smCount = obj.mesh->GetSubmeshCount();
-        uint32_t matCount = static_cast<uint32_t>(obj.subMeshMaterials.size());
-        for (uint32_t si = 0; si < smCount; si++)
+        std::vector<SceneObject*> mmObjs;
+        for (auto& obj : objects)
         {
-            Material* mat = (si < matCount && obj.subMeshMaterials[si])
-                          ? obj.subMeshMaterials[si]
-                          : obj.material;
-            if (!mat || mat->IsTransparent()) continue;
-            mat->Bind(cmd, layout);
-            cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &viewProj);
-            obj.mesh->DrawSubMesh(cmd, si, 0, 1);
+            if (!obj.mesh || obj.subMeshMaterials.empty()) continue;
+            if (obj.isSkinned) continue;
+            mmObjs.push_back(&obj);
+        }
+        if (!mmObjs.empty())
+        {
+            std::vector<glm::mat4> mmMats;
+            mmMats.reserve(mmObjs.size());
+            for (auto* obj : mmObjs) mmMats.push_back(obj->worldMatrix);
+            subMeshInstanceBuffer.Upload(mmMats);
+            subMeshInstanceBuffer.Bind(cmd);
+
+            for (uint32_t oi = 0; oi < static_cast<uint32_t>(mmObjs.size()); oi++)
+            {
+                auto* obj = mmObjs[oi];
+                uint32_t smCount  = obj->mesh->GetSubmeshCount();
+                uint32_t matCount = static_cast<uint32_t>(obj->subMeshMaterials.size());
+                for (uint32_t si = 0; si < smCount; si++)
+                {
+                    Material* mat = (si < matCount && obj->subMeshMaterials[si])
+                                  ? obj->subMeshMaterials[si]
+                                  : obj->material;
+                    if (!mat || mat->IsTransparent()) continue;
+                    mat->Bind(cmd, layout);
+                    cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &viewProj);
+                    obj->mesh->DrawSubMesh(cmd, si, oi, 1);
+                }
+            }
         }
     }
 }
@@ -88,24 +101,32 @@ void Scene::DrawSkinned(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const C
     glm::mat4 viewProj        = camera.GetProjection(aspect) * camera.GetView();
     vk::PipelineLayout layout = *pipeline.GetLayout();
 
-    lights.Bind(cmd, layout);
-
+    // Collect skinned objects and upload all transforms at once so each draw
+    // uses a stable slot in the buffer (avoids GPU aliasing when drawing sequentially).
+    std::vector<SceneObject*> skinnedObjs;
     for (auto& obj : objects)
     {
         if (!obj.mesh || !obj.material || !obj.isSkinned) continue;
         if (obj.material->IsTransparent()) continue;
+        skinnedObjs.push_back(&obj);
+    }
+    if (skinnedObjs.empty()) return;
 
-        // Upload this object's single transform into the per-skinned instance buffer
-        const glm::mat4 model = obj.transform.GetMatrix();
-        skinnedInstanceBuffer.Upload({ model });
-        skinnedInstanceBuffer.Bind(cmd);
+    std::vector<glm::mat4> transforms;
+    transforms.reserve(skinnedObjs.size());
+    for (auto* obj : skinnedObjs) transforms.push_back(obj->worldMatrix);
+    skinnedInstanceBuffer.Upload(transforms);
+    skinnedInstanceBuffer.Bind(cmd);
 
-        // Let the caller bind the correct BoneSSBO for this entity
-        bindBonesFn(obj.entityId);
+    lights.Bind(cmd, layout);
 
-        obj.material->Bind(cmd, layout);
+    for (uint32_t i = 0; i < static_cast<uint32_t>(skinnedObjs.size()); ++i)
+    {
+        auto* obj = skinnedObjs[i];
+        bindBonesFn(obj->entityId);
+        obj->material->Bind(cmd, layout);
         cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &viewProj);
-        obj.mesh->DrawInstanced(cmd, 0, 1);
+        obj->mesh->DrawInstanced(cmd, i, 1);  // i = first instance index in the batch
     }
 }
 
@@ -121,7 +142,7 @@ void Scene::DrawTransparent(vk::CommandBuffer cmd, VulkanPipeline& pipeline, con
     for (auto& obj : objects)
     {
         if (!obj.mesh) continue;
-        glm::mat4 m = obj.transform.GetMatrix();
+        glm::mat4 m = obj.worldMatrix;
         float     d = glm::length(glm::vec3(m[3]) - camPos);
 
         if (!obj.subMeshMaterials.empty())
@@ -177,7 +198,7 @@ void Scene::DrawShadow(vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeli
     for (auto& obj : objects)
     {
         if (!obj.mesh || !obj.material) continue;
-        groups[{ obj.mesh, obj.material }].push_back(obj.transform.GetMatrix());
+        groups[{ obj.mesh, obj.material }].push_back(obj.worldMatrix);
     }
 
     std::vector<glm::mat4> allMatrices;
@@ -211,7 +232,7 @@ void Scene::DrawShadowPoint(vk::CommandBuffer cmd, VulkanPointShadowPipeline& pi
     for (auto& obj : objects)
     {
         if (!obj.mesh || !obj.material) continue;
-        groups[{ obj.mesh, obj.material }].push_back(obj.transform.GetMatrix());
+        groups[{ obj.mesh, obj.material }].push_back(obj.worldMatrix);
     }
 
     std::vector<glm::mat4> allMatrices;

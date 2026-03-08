@@ -22,7 +22,12 @@
       "Bash(cmake --build . --target EderPlayer)",
       "Bash(xxd \"c:/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/build/Game/Content/shaders/ui.frag.spv.data\")",
       "Bash(glslc --target-env=vulkan1.0 ui.frag -o ui.frag.spv)",
-      "Bash(glslc --target-env=vulkan1.0 ui.vert -o ui.vert.spv)"
+      "Bash(glslc --target-env=vulkan1.0 ui.vert -o ui.vert.spv)",
+      "Bash(cmake --build . --target EderGraphics)",
+      "Bash(ninja -t targets)",
+      "Bash(cmake --build . --target EderGame --config Debug)",
+      "Bash(grep \"\\\\.\\(h\\\\|cpp\\)$\")",
+      "Bash(xargs grep -l \"AnimationComponent\\\\|BoneSSBO\\\\|boneMatrices\\\\|animIndex\")"
     ]
   }
 }

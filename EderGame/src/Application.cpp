@@ -15,6 +15,7 @@
 #  define WIN32_LEAN_AND_MEAN
 #  define NOMINMAX
 #  include <windows.h>
+#  include <shellapi.h>
 #endif
 
 #include "Core/MaterialLayout.h"
@@ -32,6 +33,7 @@
 #include "Physics/PhysicsSystem.h"
 #include "Scripting/LuaScriptSystem.h"
 #include "Audio/AudioSystem.h"
+#include "UI/UISystem.h"
 #include <IO/AssetManager.h>
 #include <IO/SceneSerializer.h>
 #include <IO/DebugDraw.h>
@@ -147,6 +149,12 @@ int Application::Run()
         SyncECSToScene();
         UpdateAnimations(dt);
 
+        {
+            ImVec2 svPos = m_editor.GetSceneViewContentPos();
+            UISystem::Get().SetViewportOffset(svPos.x, svPos.y);
+        }
+        UISystem::Get().Update(dt);
+
         if (m_playerProcess)
             UpdatePlayerWindowPos();
 
@@ -174,6 +182,16 @@ void Application::Init()
         SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE);
     if (!m_window)
         throw std::runtime_error("SDL_CreateWindow failed");
+
+#ifdef _WIN32
+    // Enable OS-level drag-and-drop onto the window
+    {
+        HWND hwnd = (HWND)SDL_GetPointerProperty(
+            SDL_GetWindowProperties(m_window),
+            SDL_PROP_WINDOW_WIN32_HWND_POINTER, nullptr);
+        if (hwnd) DragAcceptFiles(hwnd, TRUE);
+    }
+#endif
 
     m_camera.fpsMode = true;
     m_camera.fpsPos  = { 0.0f, 2.0f, 12.0f };
@@ -209,6 +227,11 @@ void Application::Init()
 
     m_boneSSBO.Create(m_pipeline);
     m_editor.SetSceneViewFramebuffer(&m_debugFb);
+
+    UISystem::Get().Init();
+    UISystem::Get().SetWindow(m_window);
+    m_uiRenderer.Create(vk::Format::eB8G8R8A8Unorm, VulkanRenderer::Get().GetDepthFormat());
+
     PhysicsSystem::Get().Init();
     LuaScriptSystem::Get().Init();
     AudioSystem::Get().Init();
@@ -313,7 +336,7 @@ void Application::RebuildPostProcessPasses()
         catch (const std::exception& e) {
             m_editor.AppendBuildLog(std::string("[PostProcess] Failed to create '")
                 + fx.name + "': " + e.what());
-            m_ppPasses.push_back(nullptr);  // keep slot so indices match graph
+            m_ppPasses.push_back(nullptr);  
         }
     }
 
@@ -808,6 +831,8 @@ void Application::Shutdown()
     PhysicsSystem::Get().Shutdown();
     LuaScriptSystem::Get().Shutdown();
     AudioSystem::Get().Shutdown();
+    UISystem::Get().Shutdown();
+    m_uiRenderer.Destroy();
     SDL_DestroyWindow(m_window);
     SDL_Quit();
 }
@@ -818,6 +843,7 @@ void Application::PollEvents()
     while (SDL_PollEvent(&event))
     {
         m_editor.ProcessEvent(event);
+        UISystem::Get().HandleEvent(event);
 
         switch (event.type)
         {
@@ -837,6 +863,23 @@ void Application::PollEvents()
             {
                 m_mouseDX += event.motion.xrel;
                 m_mouseDY += event.motion.yrel;
+            }
+            break;
+        case SDL_EVENT_DROP_BEGIN:
+            std::cout << "[Drop] BEGIN\n";
+            m_pendingDropFiles.clear();
+            break;
+        case SDL_EVENT_DROP_FILE:
+            std::cout << "[Drop] FILE: " << (event.drop.data ? event.drop.data : "<null>") << "\n";
+            if (event.drop.data)
+                m_pendingDropFiles.push_back(event.drop.data);
+            break;
+        case SDL_EVENT_DROP_COMPLETE:
+            std::cout << "[Drop] COMPLETE, files=" << m_pendingDropFiles.size() << "\n";
+            if (!m_pendingDropFiles.empty())
+            {
+                m_editor.HandleFileDropBatch(m_pendingDropFiles);
+                m_pendingDropFiles.clear();
             }
             break;
         default:
@@ -1054,7 +1097,8 @@ void Application::SyncECSToScene()
             {
                 if (!matAsset.name.empty())
                 {
-                    if (!MaterialManager::Get().Has(matAsset.name))
+                    const std::string matKey = "__mat_" + std::to_string(mr.materialGuid);
+                    if (!MaterialManager::Get().Has(matKey))
                     {
                         MaterialLayout matLayout;
                         matLayout.AddVec4 ("albedo")
@@ -1062,9 +1106,9 @@ void Application::SyncECSToScene()
                                  .AddFloat("metallic")
                                  .AddFloat("emissiveIntensity")
                                  .AddFloat("alphaThreshold");
-                        MaterialManager::Get().Add(matAsset.name, matLayout, m_pipeline);
+                        MaterialManager::Get().Add(matKey, matLayout, m_pipeline);
                     }
-                    Material& rMat = MaterialManager::Get().Get(matAsset.name);
+                    Material& rMat = MaterialManager::Get().Get(matKey);
                     rMat.SetVec4 ("albedo",
                         glm::vec4(matAsset.albedo[0], matAsset.albedo[1],
                                   matAsset.albedo[2], matAsset.albedo[3]));
@@ -1078,7 +1122,7 @@ void Application::SyncECSToScene()
 
                     if (matAsset.albedoTexGuid != 0)
                     {
-                        auto& lastTex = m_lastMatTexGuid[matAsset.name];
+                        auto& lastTex = m_lastMatTexGuid[matKey];
                         if (lastTex != matAsset.albedoTexGuid)
                         {
                             const Krayon::AssetMeta* texMeta =
@@ -1096,12 +1140,12 @@ void Application::SyncECSToScene()
                         }
                     }
 
-                    mr.materialName = matAsset.name;
+                    mr.materialName = matKey;
                 }
             }
         }
 
-        // ── Load per-submesh materials ──────────────────────────────────────
+        
         for (size_t si = 0; si < mr.subMeshMaterialGuids.size(); si++)
         {
             uint64_t smGuid = mr.subMeshMaterialGuids[si];
@@ -1115,8 +1159,8 @@ void Application::SyncECSToScene()
             Krayon::MaterialAsset smAsset;
             if (Krayon::AssetManager::Get().ReadMaterialAsset(smGuid, smAsset) && !smAsset.name.empty())
             {
-                // ── Path A: proper .mat file ────────────────────────────────
-                resolvedName = smAsset.name;
+                
+                resolvedName = "__mat_" + std::to_string(smGuid);
                 if (!MaterialManager::Get().Has(resolvedName))
                 {
                     MaterialLayout smLayout;
@@ -1155,9 +1199,9 @@ void Application::SyncECSToScene()
             }
             else if (smMeta->type == Krayon::AssetType::Texture)
             {
-                // ── Path B: raw texture GUID (from auto-detect) ─────────────
-                // Create a temporary material named "auto_<texName>" that uses
-                // this texture as albedo. No .mat file required.
+                
+                
+                
                 resolvedName = "auto_" + smMeta->name;
                 if (!MaterialManager::Get().Has(resolvedName))
                 {
@@ -1186,9 +1230,9 @@ void Application::SyncECSToScene()
                     } catch (const std::exception&) {}
                 }
             }
-            else { continue; }  // unknown asset type — skip
+            else { continue; }  
 
-            // Write the resolved name back so the sync loop picks it up
+            
             if (si < mr.subMeshMaterialNames.size())
                 mr.subMeshMaterialNames[si] = resolvedName;
             else
@@ -1222,25 +1266,22 @@ void Application::SyncECSToScene()
         {
             existingObj->mesh            = &mesh;
             existingObj->material        = &mat;
-            existingObj->subMeshMaterials.clear();  // will be re-synced this frame
-            m_lastSubMeshMaterials.erase(e);        // force sync loop to re-fire
+            existingObj->subMeshMaterials.clear();  
+            m_lastSubMeshMaterials.erase(e);        
+            // ...existing code...
             return;
         }
 
         SceneObject& obj = m_scene.Add(mesh, mat);
         obj.entityId = e;
         m_lastMaterialName[e] = mr.materialName;
+        // ...existing code...
 
         if (m_registry.Has<TransformComponent>(e))
-        {
-            const auto& t    = m_registry.Get<TransformComponent>(e);
-            obj.transform.position = t.position;
-            obj.transform.rotation = t.rotation;
-            obj.transform.scale    = t.scale;
-        }
+            obj.worldMatrix = TransformSystem::GetWorldMatrix(e, m_registry);
     });
 
-    // ── Sync per-submesh materials ────────────────────────────────────────────
+    
     m_registry.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
     {
         if (mr.subMeshMaterialNames.empty()) return;
@@ -1271,22 +1312,8 @@ void Application::SyncECSToScene()
     {
         if (obj.entityId == 0 || !m_registry.Has<TransformComponent>(obj.entityId)) continue;
 
-        obj.isSkinned = m_registry.Has<AnimationComponent>(obj.entityId);
-
-        glm::mat4 world = TransformSystem::GetWorldMatrix(obj.entityId, m_registry);
-
-        obj.transform.position = glm::vec3(world[3]);
-        obj.transform.scale.x  = glm::length(glm::vec3(world[0]));
-        obj.transform.scale.y  = glm::length(glm::vec3(world[1]));
-        obj.transform.scale.z  = glm::length(glm::vec3(world[2]));
-        glm::mat4 rot = world;
-        rot[0] = glm::vec4(glm::vec3(world[0]) / obj.transform.scale.x, 0.0f);
-        rot[1] = glm::vec4(glm::vec3(world[1]) / obj.transform.scale.y, 0.0f);
-        rot[2] = glm::vec4(glm::vec3(world[2]) / obj.transform.scale.z, 0.0f);
-        rot[3] = glm::vec4(0.0f, 0.0f, 0.0f, 1.0f);
-        float yRad, xRad, zRad;
-        glm::extractEulerAngleYXZ(rot, yRad, xRad, zRad);
-        obj.transform.rotation = glm::degrees(glm::vec3(xRad, yRad, zRad));
+        obj.isSkinned   = m_registry.Has<AnimationComponent>(obj.entityId);
+        obj.worldMatrix = TransformSystem::GetWorldMatrix(obj.entityId, m_registry);
     }
 
     for (auto& obj : m_scene.GetObjects())
@@ -1320,10 +1347,30 @@ void Application::SyncECSToScene()
 
 void Application::UpdateAnimations(float dt)
 {
-    std::vector<glm::mat4> boneMatrices(MAX_BONES, glm::mat4(1.0f));
+    // Remove SSBOs for entities that no longer have an AnimationComponent.
+    // waitIdle ensures the GPU is done with the buffer before freeing it.
+    {
+        std::vector<uint32_t> toErase;
+        for (auto& [eid, _] : m_entityBoneSSBO)
+            if (!m_registry.Has<AnimationComponent>(eid))
+                toErase.push_back(eid);
+        if (!toErase.empty())
+        {
+            VulkanInstance::Get().GetDevice().waitIdle();
+            for (auto eid : toErase)
+            {
+                m_entityBoneSSBO[eid]->Destroy();
+                m_entityBoneSSBO.erase(eid);
+            }
+        }
+    }
+
+    static const std::vector<glm::mat4> s_identity(MAX_BONES, glm::mat4(1.0f));
 
     m_registry.Each<AnimationComponent>([&](Entity e, AnimationComponent& anim)
     {
+        // Reset per-entity bone buffer to identity before writing this entity's bones
+        std::vector<glm::mat4> boneMatrices(s_identity);
         if (!m_registry.Has<MeshRendererComponent>(e)) return;
         const auto& mr = m_registry.Get<MeshRendererComponent>(e);
 
@@ -1414,10 +1461,16 @@ void Application::UpdateAnimations(float dt)
             boneMatrices[i] = boneMats[i];
 
         m_entityBoneMatrices[e] = boneMatrices;
-    });
 
-    static const std::vector<glm::mat4> s_identity(MAX_BONES, glm::mat4(1.0f));
-    m_boneSSBO.Upload(s_identity);
+        // Create a per-entity BoneSSBO on first use and upload this frame's matrices
+        auto& ssbo = m_entityBoneSSBO[e];
+        if (!ssbo)
+        {
+            ssbo = std::make_unique<BoneSSBO>();
+            ssbo->Create(m_pipeline);
+        }
+        ssbo->Upload(boneMatrices);
+    });
 }
 
 void Application::RenderShadowPasses(vk::CommandBuffer cmd)
@@ -1474,10 +1527,11 @@ void Application::RenderSceneView(vk::CommandBuffer cmd)
     m_scene.DrawSkinned(cmd, m_pipeline, m_camera, aspect, m_lights,
         [this, &cmd](uint32_t entityId)
         {
-            auto it = m_entityBoneMatrices.find(entityId);
-            if (it != m_entityBoneMatrices.end())
-                m_boneSSBO.Upload(it->second);
-            m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
+            auto it = m_entityBoneSSBO.find(entityId);
+            if (it != m_entityBoneSSBO.end() && it->second)
+                it->second->Bind(cmd, *m_pipeline.GetLayout());
+            else
+                m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout()); // fallback: identity
         });
 
     m_skybox.Draw(cmd, m_camera.GetView(), m_camera.GetProjection(aspect), -m_activeDirDir);
@@ -1490,6 +1544,8 @@ void Application::RenderSceneView(vk::CommandBuffer cmd)
     Entity selected = m_editor.GetSelected();
 
     m_gizmo.Draw(cmd, m_registry, vp, selected);
+
+    m_uiRenderer.Draw(cmd, m_debugFb.GetExtent().width, m_debugFb.GetExtent().height);
 
     m_debugFb.EndRendering(cmd);
     m_debugFb.TransitionToShaderRead(cmd);
@@ -1619,7 +1675,7 @@ void Application::RenderPostProcess(vk::CommandBuffer cmd)
         }
     }
 
-    // ── Custom post-process graph ─────────────────────────────────────────────
+    
     if (m_ppDirty) RebuildPostProcessPasses();
 
     for (size_t i = 0; i < m_ppPasses.size(); ++i)

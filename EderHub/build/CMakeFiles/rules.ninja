@@ -56,7 +56,7 @@ rule CXX_COMPILER__EderHub_unscanned_Debug
 
 rule CXX_EXECUTABLE_LINKER__EderHub_Debug
   command = C:\WINDOWS\system32\cmd.exe /C "$PRE_LINK && C:\PROGRA~1\LLVM\bin\CLANG_~1.EXE -nostartfiles -nostdlib $FLAGS $LINK_FLAGS $in -o $TARGET_FILE -Xlinker /MANIFEST:EMBED -Xlinker /implib:$TARGET_IMPLIB -Xlinker /pdb:$TARGET_PDB -Xlinker /version:0.0  $LINK_PATH $LINK_LIBRARIES $MANIFESTS && $POST_BUILD"
-  description = Linking CXX executable $TARGET_FILE; Copiando SDL3.dll; Copiando EderGame.exe; Copiando EderPlayer.exe; Copiando EderGraphics.dll; Copiando lua54.dll; Copiando PhysX_64.dll; Copiando PhysXCommon_64.dll; Copiando PhysXFoundation_64.dll; Copiando PhysXCooking_64.dll; Copiando shaders; Creando estructura Game/Content
+  description = Linking CXX executable $TARGET_FILE; Copiando SDL3.dll; Copiando EderGame.exe; Copiando EderPlayer.exe; Copiando EderGraphics.dll; Copiando lua54.dll; Copiando fmod.dll; Copiando shaders; Copiando fonts; Creando estructura Game/Content
   restat = $RESTAT
 
 

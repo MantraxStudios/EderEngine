@@ -1,0 +1,4 @@
+guid=ba486c7b657b72d2
+type=Shader
+name=vignette
+path=shaders/vignette.frag
