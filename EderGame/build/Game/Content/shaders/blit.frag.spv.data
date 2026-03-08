@@ -1,0 +1,4 @@
+guid=4e54a3851bb212f4
+type=Shader
+name=blit.frag
+path=shaders/blit.frag.spv

@@ -58,7 +58,7 @@ void Scene::Draw(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& 
     }
 
     // ── Per-submesh multi-material objects ──────────────────────────────────────
-    // Collect all multi-mat objects and upload their matrices at once before drawing.
+    // One matrix per submesh (not per object) so each submesh can have a local transform.
     {
         std::vector<SceneObject*> mmObjs;
         for (auto& obj : objects)
@@ -69,27 +69,36 @@ void Scene::Draw(vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& 
         }
         if (!mmObjs.empty())
         {
-            std::vector<glm::mat4> mmMats;
-            mmMats.reserve(mmObjs.size());
-            for (auto* obj : mmObjs) mmMats.push_back(obj->worldMatrix);
-            subMeshInstanceBuffer.Upload(mmMats);
-            subMeshInstanceBuffer.Bind(cmd);
+            struct DrawEntry { SceneObject* obj; uint32_t si; Material* mat; };
+            std::vector<glm::mat4> smMats;
+            std::vector<DrawEntry> drawList;
 
-            for (uint32_t oi = 0; oi < static_cast<uint32_t>(mmObjs.size()); oi++)
+            for (auto* obj : mmObjs)
             {
-                auto* obj = mmObjs[oi];
                 uint32_t smCount  = obj->mesh->GetSubmeshCount();
                 uint32_t matCount = static_cast<uint32_t>(obj->subMeshMaterials.size());
+                uint32_t tCount   = static_cast<uint32_t>(obj->subMeshLocalTransforms.size());
                 for (uint32_t si = 0; si < smCount; si++)
                 {
                     Material* mat = (si < matCount && obj->subMeshMaterials[si])
                                   ? obj->subMeshMaterials[si]
                                   : obj->material;
-                    if (!mat || mat->IsTransparent()) continue;
-                    mat->Bind(cmd, layout);
-                    cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &viewProj);
-                    obj->mesh->DrawSubMesh(cmd, si, oi, 1);
+                    glm::mat4 local = (si < tCount) ? obj->subMeshLocalTransforms[si] : glm::mat4(1.0f);
+                    smMats.push_back(obj->worldMatrix * local);
+                    drawList.push_back({obj, si, mat});
                 }
+            }
+
+            subMeshInstanceBuffer.Upload(smMats);
+            subMeshInstanceBuffer.Bind(cmd);
+
+            for (uint32_t i = 0; i < static_cast<uint32_t>(drawList.size()); i++)
+            {
+                auto& e = drawList[i];
+                if (!e.mat || e.mat->IsTransparent()) continue;
+                e.mat->Bind(cmd, layout);
+                cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &viewProj);
+                e.obj->mesh->DrawSubMesh(cmd, e.si, i, 1);
             }
         }
     }
@@ -150,13 +159,15 @@ void Scene::DrawTransparent(vk::CommandBuffer cmd, VulkanPipeline& pipeline, con
             // Multi-material: add one entry per transparent submesh
             uint32_t smCount  = obj.mesh->GetSubmeshCount();
             uint32_t matCount = static_cast<uint32_t>(obj.subMeshMaterials.size());
+            uint32_t tCount   = static_cast<uint32_t>(obj.subMeshLocalTransforms.size());
             for (uint32_t si = 0; si < smCount; si++)
             {
                 Material* mat = (si < matCount && obj.subMeshMaterials[si])
                               ? obj.subMeshMaterials[si]
                               : obj.material;
                 if (!mat || !mat->IsTransparent()) continue;
-                entries.push_back({ obj.mesh, mat, m, d, si });
+                glm::mat4 local = (si < tCount) ? obj.subMeshLocalTransforms[si] : glm::mat4(1.0f);
+                entries.push_back({ obj.mesh, mat, obj.worldMatrix * local, d, si });
             }
         }
         else
@@ -193,29 +204,76 @@ void Scene::DrawTransparent(vk::CommandBuffer cmd, VulkanPipeline& pipeline, con
 void Scene::DrawShadow(vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeline, const glm::mat4& lightViewProj)
 {
     vk::PipelineLayout layout = *shadowPipeline.GetLayout();
+    cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &lightViewProj);
 
-    std::map<std::pair<VulkanMesh*, Material*>, std::vector<glm::mat4>> groups;
+    // --- Opaque single-material objects (instanced) ---
+    std::map<VulkanMesh*, std::vector<glm::mat4>> groups;
     for (auto& obj : objects)
     {
         if (!obj.mesh || !obj.material) continue;
-        groups[{ obj.mesh, obj.material }].push_back(obj.worldMatrix);
+        if (obj.material->IsTransparent()) continue;        // alpha-blend casts no shadow
+        if (!obj.subMeshMaterials.empty()) continue;        // handled below per-submesh
+        groups[obj.mesh].push_back(obj.worldMatrix);
     }
 
-    std::vector<glm::mat4> allMatrices;
-    for (auto& [key, matrices] : groups)
-        for (auto& m : matrices)
-            allMatrices.push_back(m);
-
-    shadowInstanceBuffer.Upload(allMatrices);
-    shadowInstanceBuffer.Bind(cmd);
-    cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &lightViewProj);
-
-    uint32_t first = 0;
-    for (auto& [key, matrices] : groups)
+    if (!groups.empty())
     {
-        auto [mesh, mat] = key;
-        mesh->DrawInstanced(cmd, first, static_cast<uint32_t>(matrices.size()));
-        first += static_cast<uint32_t>(matrices.size());
+        std::vector<glm::mat4> allMatrices;
+        for (auto& [mesh, matrices] : groups)
+            for (auto& m : matrices)
+                allMatrices.push_back(m);
+
+        shadowInstanceBuffer.Upload(allMatrices);
+        shadowInstanceBuffer.Bind(cmd);
+
+        uint32_t first = 0;
+        for (auto& [mesh, matrices] : groups)
+        {
+            mesh->DrawInstanced(cmd, first, static_cast<uint32_t>(matrices.size()));
+            first += static_cast<uint32_t>(matrices.size());
+        }
+    }
+
+    // --- Multi-material objects: draw only opaque submeshes (separate buffer from main pass) ---
+    {
+        std::vector<SceneObject*> mmObjs;
+        for (auto& obj : objects)
+        {
+            if (!obj.mesh || obj.subMeshMaterials.empty()) continue;
+            mmObjs.push_back(&obj);
+        }
+
+        if (!mmObjs.empty())
+        {
+            struct ShadowEntry { SceneObject* obj; uint32_t si; bool opaque; };
+            std::vector<glm::mat4> smMats;
+            std::vector<ShadowEntry> drawList;
+
+            for (auto* obj : mmObjs)
+            {
+                uint32_t smCount  = obj->mesh->GetSubmeshCount();
+                uint32_t matCount = static_cast<uint32_t>(obj->subMeshMaterials.size());
+                uint32_t tCount   = static_cast<uint32_t>(obj->subMeshLocalTransforms.size());
+                for (uint32_t si = 0; si < smCount; si++)
+                {
+                    Material* mat = (si < matCount && obj->subMeshMaterials[si])
+                                  ? obj->subMeshMaterials[si]
+                                  : obj->material;
+                    glm::mat4 local = (si < tCount) ? obj->subMeshLocalTransforms[si] : glm::mat4(1.0f);
+                    smMats.push_back(obj->worldMatrix * local);
+                    drawList.push_back({obj, si, mat && !mat->IsTransparent()});
+                }
+            }
+
+            shadowSubMeshInstanceBuffer.Upload(smMats);
+            shadowSubMeshInstanceBuffer.Bind(cmd);
+
+            for (uint32_t i = 0; i < static_cast<uint32_t>(drawList.size()); i++)
+            {
+                if (!drawList[i].opaque) continue;
+                drawList[i].obj->mesh->DrawSubMesh(cmd, drawList[i].si, i, 1);
+            }
+        }
     }
 }
 
@@ -228,30 +286,78 @@ void Scene::DrawShadowPoint(vk::CommandBuffer cmd, VulkanPointShadowPipeline& pi
     push.viewProj       = lightViewProj;
     push.lightPosAndFar = glm::vec4(lightPos, farPlane);
 
-    std::map<std::pair<VulkanMesh*, Material*>, std::vector<glm::mat4>> groups;
-    for (auto& obj : objects)
-    {
-        if (!obj.mesh || !obj.material) continue;
-        groups[{ obj.mesh, obj.material }].push_back(obj.worldMatrix);
-    }
-
-    std::vector<glm::mat4> allMatrices;
-    for (auto& [key, matrices] : groups)
-        for (auto& m : matrices)
-            allMatrices.push_back(m);
-
-    shadowInstanceBuffer.Upload(allMatrices);
-    shadowInstanceBuffer.Bind(cmd);
     cmd.pushConstants(layout,
         vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
         0, static_cast<uint32_t>(sizeof(PushData)), &push);
 
-    uint32_t first = 0;
-    for (auto& [key, matrices] : groups)
+    // --- Opaque single-material objects (instanced) ---
+    std::map<VulkanMesh*, std::vector<glm::mat4>> groups;
+    for (auto& obj : objects)
     {
-        auto [mesh, mat] = key;
-        mesh->DrawInstanced(cmd, first, static_cast<uint32_t>(matrices.size()));
-        first += static_cast<uint32_t>(matrices.size());
+        if (!obj.mesh || !obj.material) continue;
+        if (obj.material->IsTransparent()) continue;
+        if (!obj.subMeshMaterials.empty()) continue;
+        groups[obj.mesh].push_back(obj.worldMatrix);
+    }
+
+    if (!groups.empty())
+    {
+        std::vector<glm::mat4> allMatrices;
+        for (auto& [mesh, matrices] : groups)
+            for (auto& m : matrices)
+                allMatrices.push_back(m);
+
+        shadowInstanceBuffer.Upload(allMatrices);
+        shadowInstanceBuffer.Bind(cmd);
+
+        uint32_t first = 0;
+        for (auto& [mesh, matrices] : groups)
+        {
+            mesh->DrawInstanced(cmd, first, static_cast<uint32_t>(matrices.size()));
+            first += static_cast<uint32_t>(matrices.size());
+        }
+    }
+
+    // --- Multi-material objects (point/spot shadow — dedicated buffer) ---
+    {
+        std::vector<SceneObject*> mmObjs;
+        for (auto& obj : objects)
+        {
+            if (!obj.mesh || obj.subMeshMaterials.empty()) continue;
+            mmObjs.push_back(&obj);
+        }
+
+        if (!mmObjs.empty())
+        {
+            struct ShadowEntry { SceneObject* obj; uint32_t si; bool opaque; };
+            std::vector<glm::mat4> smMats;
+            std::vector<ShadowEntry> drawList;
+
+            for (auto* obj : mmObjs)
+            {
+                uint32_t smCount  = obj->mesh->GetSubmeshCount();
+                uint32_t matCount = static_cast<uint32_t>(obj->subMeshMaterials.size());
+                uint32_t tCount   = static_cast<uint32_t>(obj->subMeshLocalTransforms.size());
+                for (uint32_t si = 0; si < smCount; si++)
+                {
+                    Material* mat = (si < matCount && obj->subMeshMaterials[si])
+                                  ? obj->subMeshMaterials[si]
+                                  : obj->material;
+                    glm::mat4 local = (si < tCount) ? obj->subMeshLocalTransforms[si] : glm::mat4(1.0f);
+                    smMats.push_back(obj->worldMatrix * local);
+                    drawList.push_back({obj, si, mat && !mat->IsTransparent()});
+                }
+            }
+
+            pointShadowSubMeshInstanceBuffer.Upload(smMats);
+            pointShadowSubMeshInstanceBuffer.Bind(cmd);
+
+            for (uint32_t i = 0; i < static_cast<uint32_t>(drawList.size()); i++)
+            {
+                if (!drawList[i].opaque) continue;
+                drawList[i].obj->mesh->DrawSubMesh(cmd, drawList[i].si, i, 1);
+            }
+        }
     }
 }
 
@@ -265,6 +371,9 @@ void Scene::Destroy()
     instanceBuffer.Destroy();
     shadowInstanceBuffer.Destroy();
     transparentInstanceBuffer.Destroy();
+    skinnedInstanceBuffer.Destroy();
     subMeshInstanceBuffer.Destroy();
+    shadowSubMeshInstanceBuffer.Destroy();
+    pointShadowSubMeshInstanceBuffer.Destroy();
     objects.clear();
 }

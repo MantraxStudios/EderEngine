@@ -17,4 +17,8 @@ struct SceneObject
     // Per-submesh material overrides. If non-empty, size must match mesh->GetSubmeshCount().
     // Object is drawn non-instanced, one DrawSubMesh per slot.
     std::vector<Material*> subMeshMaterials;
+
+    // Per-submesh local transform offsets (in object space, applied on top of worldMatrix).
+    // Empty = no offset. Set via scripting.
+    std::vector<glm::mat4> subMeshLocalTransforms;
 };

@@ -2,6 +2,15 @@
 #include <string>
 #include <cstdint>
 #include <vector>
+#include <glm/glm.hpp>
+
+// Local-space transform offset for a single submesh (set at runtime via scripting).
+struct SubMeshTransform
+{
+    glm::vec3 position    = {0.f, 0.f, 0.f};
+    glm::vec3 rotEulerDeg = {0.f, 0.f, 0.f};  // XYZ euler degrees
+    glm::vec3 scale       = {1.f, 1.f, 1.f};
+};
 
 struct MeshRendererComponent
 {
@@ -16,4 +25,8 @@ struct MeshRendererComponent
     // If populated, size should match the mesh's GetSubmeshCount().
     std::vector<uint64_t>    subMeshMaterialGuids;   // GUID per slot (0 = inherit base material)
     std::vector<std::string> subMeshMaterialNames;   // name per slot (fallback when GUID is 0)
+
+    // Per-submesh local transform offsets (runtime only, set via scripting).
+    // Empty = no local offsets (all submeshes follow the parent worldMatrix).
+    std::vector<SubMeshTransform> subMeshTransforms;
 };

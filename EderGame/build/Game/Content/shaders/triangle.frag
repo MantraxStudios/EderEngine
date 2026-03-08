@@ -35,7 +35,7 @@ layout(set = 1, binding = 0) uniform LightUBO {
     int              numDirLights;
     int              numPointLights;
     int              numSpotLights;
-    float            _pad;
+    float            nearPlane;
     vec3             cameraPos;    float _pad2;
     vec3             cameraForward; float _pad3;
     vec4             cascadeSplits;
@@ -72,19 +72,32 @@ vec2 VogelDisk(int i, int n, float phi)
     return vec2(r * cos(theta), r * sin(theta));
 }
 
-float IGN(vec2 p)
+// World-space stable hash — same phi for the same world point regardless of camera orientation.
+// Prevents shadow shimmer when the camera moves (screen-space phi changes, world-space doesn't).
+float WorldPhi(vec3 p)
 {
-    return fract(52.9829189 * fract(0.06711056 * p.x + 0.00583715 * p.y));
+    return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453) * 6.28318530;
 }
 
-#define FILTER_TEXELS 1.0
-#define PCF_N         32
+#define DIR_FILTER_TEXELS  3.0
+#define FILTER_TEXELS      1.0
+#define PCF_N              32
 
-const float cascadeBiasScale[4] = float[4](1.0, 2.0, 4.0, 8.0);
+const float cascadeBiasScale[4] = float[4](1.0, 1.5, 2.0, 3.0);
 
 float SampleCascade(vec3 worldPos, vec3 N, vec3 L, int cascade)
 {
-    vec4 lsPos = lights.cascadeMatrices[cascade] * vec4(worldPos, 1.0);
+    // Normal-offset bias scaled to cascade coverage so it stays at ~2-4 shadow texels
+    // regardless of cascade level. A fixed world-space bias causes massive peter-panning
+    // in near cascades and under-biasing in far ones, creating a visible "sweep" artifact
+    // as objects cross cascade boundaries while the camera moves.
+    float NdotL      = clamp(dot(N, L), 0.0, 1.0);
+    // Normal-offset bias: scale by cascade texel size (cascadeSplits ≈ world units covered).
+    // sqrt(1-NdotL²) is tan(angle) — bias grows on grazing surfaces, shrinks on face-on ones.
+    // Clamp avoids huge offsets at 90° (back-faces already handled via gl_FrontFacing).
+    float sinAngle   = sqrt(max(0.0, 1.0 - NdotL * NdotL));
+    float normalBias = clamp(sinAngle * 0.002, 0.0001, 0.004) * lights.cascadeSplits[cascade];
+    vec4 lsPos = lights.cascadeMatrices[cascade] * vec4(worldPos + N * normalBias, 1.0);
     vec3 proj  = lsPos.xyz / lsPos.w;
     vec2 uv    = proj.xy * 0.5 + 0.5;
 
@@ -93,13 +106,14 @@ float SampleCascade(vec3 worldPos, vec3 N, vec3 L, int cascade)
         uv.y  < 0.0 || uv.y  > 1.0)
         return 1.0;
 
-    float NdotL  = max(dot(N, L), 0.0);
-    float bias   = max(0.0005 * (1.0 - NdotL), 0.00005) * cascadeBiasScale[cascade];
-    float recvZ  = proj.z - bias;
+    // Slope-scaled depth bias: texel-aligned, uses same NdotL as normal-offset above.
+    float slopeBias  = 0.0001 * cascadeBiasScale[cascade];
+    float slopeScale = clamp(sinAngle, 0.0, 1.0);
+    float recvZ      = proj.z - slopeBias * (1.0 + slopeScale * 3.0);
 
     vec2  ts     = 1.0 / vec2(textureSize(shadowMap, 0).xy);
-    float fR     = FILTER_TEXELS * ts.x;
-    float phi    = IGN(gl_FragCoord.xy) * 6.28318530;
+    float fR     = DIR_FILTER_TEXELS * ts.x;
+    float phi    = WorldPhi(worldPos);   // world-space stable — no shimmer on camera move
     float shadow = 0.0;
     for (int i = 0; i < PCF_N; i++)
     {
@@ -112,6 +126,13 @@ float SampleCascade(vec3 worldPos, vec3 N, vec3 L, int cascade)
 float ShadowFactor(vec3 worldPos, vec3 N, vec3 L)
 {
     float depth   = dot(worldPos - lights.cameraPos, lights.cameraForward);
+    // Objects at depth < nearPlane have no valid cascade coverage.
+    // Cascade 0 is built for the frustum slice starting at nearPlane; objects
+    // closer than that project into cascade 0 at Z values that compare falsely
+    // against shadow map data from a completely different world region
+    // (e.g. sky when the camera looks up) → false self-shadowing.
+    if (depth < lights.nearPlane) return 1.0;
+
     int   cascade = 3;
     for (int i = 0; i < 4; i++)
         if (depth < lights.cascadeSplits[i]) { cascade = i; break; }
@@ -130,7 +151,10 @@ float ShadowFactor(vec3 worldPos, vec3 N, vec3 L)
 
 float ShadowSpot(int slot, vec3 worldPos, vec3 N, vec3 L)
 {
-    vec4 lsPos = lights.spotMatrices[slot] * vec4(worldPos, 1.0);
+    float NdotL      = clamp(dot(N, L), 0.0, 1.0);
+    float sinAngle   = sqrt(max(0.0, 1.0 - NdotL * NdotL));
+    float normalBias = clamp(sinAngle * 0.015, 0.001, 0.02);
+    vec4 lsPos = lights.spotMatrices[slot] * vec4(worldPos + N * normalBias, 1.0);
     if (lsPos.w <= 0.0) return 1.0;
     vec3 proj  = lsPos.xyz / lsPos.w;
     vec2 uv    = proj.xy * 0.5 + 0.5;
@@ -139,12 +163,12 @@ float ShadowSpot(int slot, vec3 worldPos, vec3 N, vec3 L)
         uv.y  < 0.0 || uv.y  > 1.0)
         return 1.0;
 
-    float NdotL  = max(dot(N, L), 0.0);
-    float bias   = max(0.0005 * (1.0 - NdotL), 0.0001);
-    float recvZ  = proj.z - bias;
+    // Slope-scaled depth bias using sinAngle (more geometrically correct than 1-NdotL)
+    float spotSlope = clamp(sinAngle, 0.0, 1.0);
+    float recvZ  = proj.z - 0.0002 * (1.0 + spotSlope * 4.0);
     vec2  ts     = 1.0 / vec2(textureSize(spotShadowMap, 0).xy);
     float fR     = 3.0 * ts.x;
-    float phi    = IGN(gl_FragCoord.xy) * 6.28318530;
+    float phi    = WorldPhi(worldPos);
     float shadow = 0.0;
     for (int i = 0; i < PCF_N; i++)
     {
@@ -162,23 +186,29 @@ float ShadowPoint(int slot, vec3 worldPos, vec3 lightPos, vec3 N)
     float curDist = dist / farP;
     if (curDist >= 1.0) return 1.0;
 
-    vec3  dirN  = dir / dist;
-    float NdotL = max(dot(N, -dirN), 0.0);
-    float bias  = max(0.003 * (1.0 - NdotL), 0.0005);
-    float fR    = FILTER_TEXELS * dist * 2.0 / 512.0;
+    vec3  dirN   = dir / dist;
+    float NdotL  = clamp(dot(N, -dirN), 0.0, 1.0);
+    float sinAngle = sqrt(max(0.0, 1.0 - NdotL * NdotL));
+    // Normal-offset scales with surface angle — correct direction guaranteed by
+    // gl_FrontFacing N-flip in main(), so bias always pushes away from geometry.
+    float normalBias = clamp(sinAngle * 0.04, 0.005, 0.05);
+    vec3  biasedDir  = (worldPos + N * normalBias) - lightPos;
+    // Filter radius normalized by far plane — avoids over-blur on close lights
+    // and under-blur on distant ones when all share the same 512px cubemap.
+    float fR    = FILTER_TEXELS * (dist / farP) * 2.0 / 512.0;
 
     // Gram-Schmidt tangent frame — continuous everywhere, no 0.99 threshold flip
     vec3 tang = abs(dirN.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
     tang = normalize(tang - dot(tang, dirN) * dirN);
     vec3 btan = cross(dirN, tang);
 
-    float phi    = IGN(gl_FragCoord.xy) * 6.28318530;
+    float phi    = WorldPhi(worldPos);
     float shadow = 0.0;
     for (int i = 0; i < PCF_N; i++)
     {
         vec2 o    = VogelDisk(i, PCF_N, phi) * fR;
-        vec3 sdir = dir + o.x * tang + o.y * btan;
-        shadow   += (curDist - bias <= texture(pointShadowMap, vec4(sdir, float(slot))).r) ? 1.0 : 0.0;
+        vec3 sdir = biasedDir + o.x * tang + o.y * btan;
+        shadow   += (curDist <= texture(pointShadowMap, vec4(sdir, float(slot))).r) ? 1.0 : 0.0;
     }
     return shadow / float(PCF_N);
 }
@@ -191,7 +221,10 @@ void main()
         discard;
 
     vec3 baseColor = fragColor.rgb * albedoSample.rgb;
-    vec3 N         = normalize(fragNormal);
+    // Flip normal for back-faces (inverted-winding meshes).
+    // Without this, N points inward → normal-offset bias pushes the sample point
+    // INTO the geometry → false self-shadowing / phantom shadows on every back-face.
+    vec3 N         = normalize(fragNormal) * (gl_FrontFacing ? 1.0 : -1.0);
     vec3 V         = normalize(lights.cameraPos - fragWorldPos);
 
     float hemi   = N.y * 0.5 + 0.5;

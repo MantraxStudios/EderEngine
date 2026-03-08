@@ -82,8 +82,8 @@ void VulkanShadowMap::Create(uint32_t size)
     }
 
     vk::SamplerCreateInfo si{};
-    si.magFilter    = vk::Filter::eLinear;
-    si.minFilter    = vk::Filter::eLinear;
+    si.magFilter    = vk::Filter::eNearest;
+    si.minFilter    = vk::Filter::eNearest;
     si.addressModeU = vk::SamplerAddressMode::eClampToBorder;
     si.addressModeV = vk::SamplerAddressMode::eClampToBorder;
     si.addressModeW = vk::SamplerAddressMode::eClampToBorder;
@@ -182,28 +182,15 @@ void VulkanShadowMap::ComputeCascades(
     }
     outSplits = glm::vec4(splits[1], splits[2], splits[3], splits[4]);
 
-    // Full frustum corners in world space via inverse(proj * view)
-    glm::mat4 invVP = glm::inverse(camProj * camView);
-    glm::vec3 frustumCorners[8];
-    {
-        int idx = 0;
-        // z=0: near plane corners [0..3], z=1: far plane corners [4..7]
-        for (int z = 0; z < 2; z++)
-        for (int x = 0; x < 2; x++)
-        for (int y = 0; y < 2; y++)
-        {
-            glm::vec4 pt = invVP * glm::vec4(
-                x * 2.0f - 1.0f,
-                y * 2.0f - 1.0f,
-                static_cast<float>(z),
-                1.0f);
-            frustumCorners[idx++] = glm::vec3(pt) / pt.w;
-        }
-    }
+    // Extract camera world-space basis from the view matrix inverse.
+    // Used to build cascade corners analytically — no dependency on camera.farPlane.
+    glm::mat4 invView  = glm::inverse(camView);
+    glm::vec3 camPos   = glm::vec3(invView[3]);
+    glm::vec3 camFwd   = -glm::normalize(glm::vec3(invView[2]));  // -Z = forward
+    glm::vec3 camRight =  glm::normalize(glm::vec3(invView[0]));
+    glm::vec3 camUp    =  glm::normalize(glm::vec3(invView[1]));
 
-    // Extract half-FOV tangents from the projection matrix (GLM perspective, Vulkan Y-flip).
-    // camProj[1][1] = -1/tan(fovY/2) and camProj[0][0] = -camProj[1][1]/aspect.
-    // These are constant per camera setup, so radii computed from them are stable.
+    // Half-FOV tangents — constant per camera setup.
     float tanHalfFovY = 1.0f / std::abs(camProj[1][1]);
     float tanHalfFovX = 1.0f / std::abs(camProj[0][0]);
 
@@ -213,31 +200,37 @@ void VulkanShadowMap::ComputeCascades(
 
     for (int c = 0; c < (int)NUM_CASCADES; c++)
     {
-        float tNear = (splits[c]     - nearPlane) / (farPlane - nearPlane);
-        float tFar  = (splits[c + 1] - nearPlane) / (farPlane - nearPlane);
+        float nearC = splits[c];
+        float farC  = splits[c + 1];
 
-        // Lerp between near/far frustum corners to get sub-frustum for this cascade
-        glm::vec3 corners[8];
-        for (int i = 0; i < 4; i++)
-        {
-            glm::vec3 ray   = frustumCorners[i + 4] - frustumCorners[i];
-            corners[i]     = frustumCorners[i] + ray * tNear;
-            corners[i + 4] = frustumCorners[i] + ray * tFar;
-        }
+        // Build the 8 corners of this cascade slice analytically from the splits.
+        // This avoids the tNear/tFar interpolation bug that occurred when
+        // farPlane(shadowDist) != camera.farPlane, which caused tFar=1 and the
+        // cascade corners landing at the actual camera far plane instead of shadowDist.
+        float nH = nearC * tanHalfFovY,  nW = nearC * tanHalfFovX;
+        float fH = farC  * tanHalfFovY,  fW = farC  * tanHalfFovX;
+        glm::vec3 nc = camPos + camFwd * nearC;
+        glm::vec3 fc = camPos + camFwd * farC;
+        glm::vec3 corners[8] = {
+            nc + camUp * nH - camRight * nW,
+            nc + camUp * nH + camRight * nW,
+            nc - camUp * nH - camRight * nW,
+            nc - camUp * nH + camRight * nW,
+            fc + camUp * fH - camRight * fW,
+            fc + camUp * fH + camRight * fW,
+            fc - camUp * fH - camRight * fW,
+            fc - camUp * fH + camRight * fW,
+        };
 
-        // Sphere center: average of sub-frustum corners (follows camera, correct)
+        // Center = centroid of 8 corners = camPos + camFwd * midDist (symmetric cancel).
         glm::vec3 center(0.0f);
         for (int i = 0; i < 8; i++) center += corners[i];
         center /= 8.0f;
 
-        // Stable radius: derived purely from cascade depth range and camera FOV.
-        // Does NOT depend on camera orientation, so it is constant between frames
-        // and the texel grid never shifts when the camera rotates — eliminates shadow swimming.
-        float farC     = splits[c + 1];
-        float halfDepth = (splits[c + 1] - splits[c]) * 0.5f;
-        float farHalfH  = farC * tanHalfFovY;
-        float farHalfW  = farC * tanHalfFovX;
-        float radius    = std::sqrt(farHalfW * farHalfW + farHalfH * farHalfH + halfDepth * halfDepth);
+        // Stable radius: bounding sphere of the cascade slice from its center to the
+        // far corners. Depends only on FOV and split depths — constant with rotation.
+        float halfDepth = (farC - nearC) * 0.5f;
+        float radius    = std::sqrt(fW*fW + fH*fH + halfDepth*halfDepth);
         radius = std::ceil(radius * 16.0f) / 16.0f;
 
         // Texel snapping: snap center to shadow texel grid to eliminate edge crawling

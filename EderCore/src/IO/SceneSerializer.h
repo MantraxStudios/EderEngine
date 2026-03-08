@@ -160,7 +160,8 @@ public:
                 f << "light.range="     << l.range << "\n";
                 f << "light.innerCone=" << l.innerConeAngle << "\n";
                 f << "light.outerCone=" << l.outerConeAngle << "\n";
-                f << "light.castShadow=" << (l.castShadow ? 1 : 0) << "\n";
+                f << "light.castShadow="    << (l.castShadow ? 1 : 0) << "\n";
+                f << "light.shadowDist="   << l.shadowDistance << "\n";
 
                 // Volumetric
                 f << "light.vol.enabled="    << (l.volumetricEnabled ? 1 : 0) << "\n";
@@ -523,6 +524,7 @@ private:
                 if (kv.count("light.innerCone"))  l.innerConeAngle  = std::stof(kv.at("light.innerCone"));
                 if (kv.count("light.outerCone"))  l.outerConeAngle  = std::stof(kv.at("light.outerCone"));
                 if (kv.count("light.castShadow")) l.castShadow      = kv.at("light.castShadow") == "1";
+                if (kv.count("light.shadowDist")) l.shadowDistance  = std::stof(kv.at("light.shadowDist"));
                 // Volumetric
                 if (kv.count("light.vol.enabled"))    l.volumetricEnabled = kv.at("light.vol.enabled") == "1";
                 if (kv.count("light.vol.steps"))      l.volNumSteps       = std::stoi(kv.at("light.vol.steps"));

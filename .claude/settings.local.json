@@ -28,7 +28,10 @@
       "Bash(cmake --build . --target EderGame --config Debug)",
       "Bash(grep \"\\\\.\\(h\\\\|cpp\\)$\")",
       "Bash(xargs grep -l \"AnimationComponent\\\\|BoneSSBO\\\\|boneMatrices\\\\|animIndex\")",
-      "Bash(cmake --build . --config Release)"
+      "Bash(cmake --build . --config Release)",
+      "Bash(cmake --build . --config Debug)",
+      "Bash(glslc \"shaders/triangle.frag\" -o \"shaders/triangle.frag.spv\")",
+      "WebSearch"
     ]
   }
 }

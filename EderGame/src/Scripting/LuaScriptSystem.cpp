@@ -19,6 +19,7 @@ namespace fs = std::filesystem;
 #include "ECS/Components/ScriptComponent.h"
 #include "ECS/Components/CollisionCallbackComponent.h"
 #include "ECS/Components/MeshRendererComponent.h"
+#include "Core/MeshManager.h"
 #include "ECS/Components/LightComponent.h"
 #include "ECS/Components/AnimationComponent.h"
 #include "ECS/Components/VolumetricFogComponent.h"
@@ -586,10 +587,38 @@ void LuaScriptSystem::BindAPI()
         if (s_reg && s_reg->Has<MeshRendererComponent>((Entity)e))
             s_reg->Get<MeshRendererComponent>((Entity)e).materialName = name;
     };
-    // idx=0 sets the base material; idx>=1 sets sub-mesh material overrides
-    MR["getSubMeshCount"] = [](int e) -> int {
-        if (!s_reg || !s_reg->Has<MeshRendererComponent>((Entity)e)) return 0;
-        return (int)s_reg->Get<MeshRendererComponent>((Entity)e).subMeshMaterialNames.size();
+    // Helper: get the VulkanMesh* for an entity (nullptr if not loaded)
+    auto getMesh = [](int e) -> VulkanMesh* {
+        if (!s_reg || !s_reg->Has<MeshRendererComponent>((Entity)e)) return nullptr;
+        auto& mr = s_reg->Get<MeshRendererComponent>((Entity)e);
+        std::string path;
+        if (mr.meshGuid != 0) {
+            const auto* meta = Krayon::AssetManager::Get().FindByGuid(mr.meshGuid);
+            if (meta) path = meta->path;
+        }
+        if (path.empty()) path = mr.meshPath;
+        if (path.empty() || !MeshManager::Get().Has(path)) return nullptr;
+        try { return &MeshManager::Get().Load(path); } catch (...) { return nullptr; }
+    };
+
+    // Returns the real submesh count from the mesh asset (0-based indices).
+    MR["getSubMeshCount"] = [getMesh](int e) -> int {
+        auto* m = getMesh(e);
+        return m ? (int)m->GetSubmeshCount() : 0;
+    };
+    // Returns the name of a submesh as it appears in the FBX/model file.
+    MR["getSubmeshName"] = [getMesh](int e, int si) -> std::string {
+        auto* m = getMesh(e);
+        if (!m || si < 0 || si >= (int)m->GetSubmeshCount()) return "";
+        return m->GetSubmeshInfo((uint32_t)si).name;
+    };
+    // Returns the 0-based index of the submesh with the given name, or -1 if not found.
+    MR["getSubmeshIndexByName"] = [getMesh](int e, const std::string& name) -> int {
+        auto* m = getMesh(e);
+        if (!m) return -1;
+        for (uint32_t i = 0; i < m->GetSubmeshCount(); i++)
+            if (m->GetSubmeshInfo(i).name == name) return (int)i;
+        return -1;
     };
     MR["getMaterialByIndex"] = [](int e, int idx) -> std::string {
         if (!s_reg || !s_reg->Has<MeshRendererComponent>((Entity)e)) return "";
@@ -611,6 +640,63 @@ void LuaScriptSystem::BindAPI()
         }
         mr.subMeshMaterialNames[si] = name;
         mr.subMeshMaterialGuids[si] = 0; // clear GUID so name fallback is used
+    };
+
+    // ── Per-submesh transform API ─────────────────────────────────────────────
+    // Submesh indices are 0-based. Transforms are in local (object) space.
+    auto ensureSubMeshTransform = [](MeshRendererComponent& mr, int si) -> SubMeshTransform& {
+        if (si >= (int)mr.subMeshTransforms.size())
+            mr.subMeshTransforms.resize(si + 1);
+        return mr.subMeshTransforms[si];
+    };
+
+    MR["setSubmeshPosition"] = [ensureSubMeshTransform](int e, int si, float x, float y, float z) {
+        if (!s_reg || !s_reg->Has<MeshRendererComponent>((Entity)e)) return;
+        ensureSubMeshTransform(s_reg->Get<MeshRendererComponent>((Entity)e), si).position = {x, y, z};
+    };
+    MR["setSubmeshRotation"] = [ensureSubMeshTransform](int e, int si, float x, float y, float z) {
+        if (!s_reg || !s_reg->Has<MeshRendererComponent>((Entity)e)) return;
+        ensureSubMeshTransform(s_reg->Get<MeshRendererComponent>((Entity)e), si).rotEulerDeg = {x, y, z};
+    };
+    MR["setSubmeshScale"] = [ensureSubMeshTransform](int e, int si, float x, float y, float z) {
+        if (!s_reg || !s_reg->Has<MeshRendererComponent>((Entity)e)) return;
+        ensureSubMeshTransform(s_reg->Get<MeshRendererComponent>((Entity)e), si).scale = {x, y, z};
+    };
+    MR["getSubmeshPosition"] = [](sol::this_state ts, int e, int si) -> sol::object {
+        sol::state_view lua(ts);
+        if (!s_reg || !s_reg->Has<MeshRendererComponent>((Entity)e)) return sol::nil;
+        auto& mr = s_reg->Get<MeshRendererComponent>((Entity)e);
+        if (si >= (int)mr.subMeshTransforms.size()) return sol::nil;
+        auto& p = mr.subMeshTransforms[si].position;
+        sol::table t = lua.create_table();
+        t[1] = p.x; t[2] = p.y; t[3] = p.z;
+        return t;
+    };
+    MR["getSubmeshRotation"] = [](sol::this_state ts, int e, int si) -> sol::object {
+        sol::state_view lua(ts);
+        if (!s_reg || !s_reg->Has<MeshRendererComponent>((Entity)e)) return sol::nil;
+        auto& mr = s_reg->Get<MeshRendererComponent>((Entity)e);
+        if (si >= (int)mr.subMeshTransforms.size()) return sol::nil;
+        auto& r = mr.subMeshTransforms[si].rotEulerDeg;
+        sol::table t = lua.create_table();
+        t[1] = r.x; t[2] = r.y; t[3] = r.z;
+        return t;
+    };
+    MR["getSubmeshScale"] = [](sol::this_state ts, int e, int si) -> sol::object {
+        sol::state_view lua(ts);
+        if (!s_reg || !s_reg->Has<MeshRendererComponent>((Entity)e)) return sol::nil;
+        auto& mr = s_reg->Get<MeshRendererComponent>((Entity)e);
+        if (si >= (int)mr.subMeshTransforms.size()) return sol::nil;
+        auto& s = mr.subMeshTransforms[si].scale;
+        sol::table t = lua.create_table();
+        t[1] = s.x; t[2] = s.y; t[3] = s.z;
+        return t;
+    };
+    MR["resetSubmeshTransform"] = [](int e, int si) {
+        if (!s_reg || !s_reg->Has<MeshRendererComponent>((Entity)e)) return;
+        auto& mr = s_reg->Get<MeshRendererComponent>((Entity)e);
+        if (si < (int)mr.subMeshTransforms.size())
+            mr.subMeshTransforms[si] = SubMeshTransform{};
     };
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1542,6 +1628,8 @@ void LuaScriptSystem::BindAPI()
     static float    s_mouseX    = 0.f, s_mouseY  = 0.f;
     static float    s_mouseDX   = 0.f, s_mouseDY = 0.f;
 
+    static float s_prevMouseX = 0.f, s_prevMouseY = 0.f;
+
     m_lua["__update_input"] = []() {
         std::memcpy(s_keysPrev, s_keysCurr, sizeof(s_keysCurr));
         s_mousePrev = s_mouseCurr;
@@ -1549,11 +1637,23 @@ void LuaScriptSystem::BindAPI()
         const bool* keys = SDL_GetKeyboardState(&numKeys);
         int n = (numKeys < SDL_SCANCODE_COUNT) ? numKeys : SDL_SCANCODE_COUNT;
         std::memcpy(s_keysCurr, keys, static_cast<std::size_t>(n) * sizeof(bool));
-        s_mouseCurr = SDL_GetMouseState(&s_mouseX, &s_mouseY);
-        s_mouseDX = 0.f; s_mouseDY = 0.f;
+        s_mouseCurr = SDL_GetRelativeMouseState(&s_mouseDX, &s_mouseDY);
     };
 
+
+
     sol::table Inp = m_lua.create_named_table("Input");
+
+    Inp["MB_RIGHT"]  = 3;
+
+    Inp["setMouseLocked"] = [](bool locked) {
+        SDL_SetWindowRelativeMouseMode(SDL_GetMouseFocus(), locked);
+    };
+
+    Inp["setMouseVisible"] = [](bool visible) {
+        if (visible) SDL_ShowCursor();
+        else SDL_HideCursor();
+    };
 
     // ── Keyboard ──────────────────────────────────────────────────────────────
     // getKey(scancode)     — true while key is held
@@ -1567,6 +1667,14 @@ void LuaScriptSystem::BindAPI()
     // getKeyUp(scancode)   — true only on the first frame the key is released
     Inp["getKeyUp"] = [](int sc) -> bool {
         return (sc >= 0 && sc < SDL_SCANCODE_COUNT) && !s_keysCurr[sc] && s_keysPrev[sc];
+    };
+
+    Inp["centerMouse"] = []() {
+        SDL_Window* win = SDL_GetMouseFocus();
+        if (!win) return;
+        int w = 0, h = 0;
+        SDL_GetWindowSize(win, &w, &h);
+        SDL_WarpMouseInWindow(win, w / 2.0f, h / 2.0f);
     };
 
     // ── Mouse ─────────────────────────────────────────────────────────────────

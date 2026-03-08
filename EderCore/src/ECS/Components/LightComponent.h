@@ -21,7 +21,8 @@ struct LightComponent
     float innerConeAngle = 15.0f; // degrees
     float outerConeAngle = 30.0f; // degrees
 
-    bool  castShadow     = false;
+    bool  castShadow       = false;
+    float shadowDistance   = 100.0f;  // Directional: max shadow range (world units), independent of camera far
 
     // -- Volumetric Light (Directional only) --
     bool      volumetricEnabled = false;

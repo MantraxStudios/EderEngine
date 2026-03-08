@@ -147,10 +147,11 @@ private:
     VulkanSunShafts       m_sunShafts;
 
     // ── Per-frame directional-light state (rebuilt from ECS) ─────────────────
-    glm::vec3 m_activeDirDir       = glm::normalize(glm::vec3(-1.0f, -1.0f, -0.4f));
-    glm::vec3 m_activeDirColor     = glm::vec3(1.0f, 0.9f, 0.7f);
-    float     m_activeDirIntensity = 1.0f;
-    bool      m_hasDir             = false;
+    glm::vec3 m_activeDirDir          = glm::normalize(glm::vec3(-1.0f, -1.0f, -0.4f));
+    glm::vec3 m_activeDirColor        = glm::vec3(1.0f, 0.9f, 0.7f);
+    float     m_activeDirIntensity    = 1.0f;
+    float     m_activeDirShadowDist   = 100.0f;
+    bool      m_hasDir                = false;
 
     // ── Per-frame spot-shadow state ───────────────────────────────────────────
     bool      m_hasSpotShadow      = false;

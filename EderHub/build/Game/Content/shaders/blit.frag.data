@@ -1,0 +1,4 @@
+guid=18a131f614da10d
+type=Shader
+name=blit
+path=shaders/blit.frag

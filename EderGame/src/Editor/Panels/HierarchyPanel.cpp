@@ -26,7 +26,6 @@ void HierarchyPanel::DuplicateSelected()
     if (registry->Has<TagComponent>(e))
     {
         auto tag  = registry->Get<TagComponent>(e);
-        tag.name += " (copy)";
         registry->Add<TagComponent>(copy) = tag;
     }
     if (registry->Has<TransformComponent>(e))

@@ -485,6 +485,7 @@ void Application::StopPlayMode()
 {
     if (m_playingInline)
     {
+        UISystem::Get().DestroyAll();
         PhysicsSystem::Get().Shutdown();
         LuaScriptSystem::Get().Shutdown();
         AudioSystem::Get().Shutdown();
@@ -499,6 +500,7 @@ void Application::StopPlayMode()
             m_lastAnimMeshGuid.clear();
             m_lastMaterialName.clear();
             m_lastMatTexGuid.clear();
+            m_lastSubMeshMaterials.clear();
 
             std::string name;
             Krayon::SceneSerializer::Load(m_tempScenePath, m_registry, &name);
@@ -556,6 +558,7 @@ void Application::NewScene()
     m_lastAnimMeshGuid.clear();
     m_lastMaterialName.clear();
     m_lastMatTexGuid.clear();
+    m_lastSubMeshMaterials.clear();
 
     m_currentScenePath = "";
     m_currentSceneName = "Untitled";
@@ -609,6 +612,7 @@ void Application::LoadScene(const std::string& absPath)
     m_lastAnimMeshGuid.clear();
     m_lastMaterialName.clear();
     m_lastMatTexGuid.clear();
+    m_lastSubMeshMaterials.clear();
 
     std::string loadedName;
     m_ppGraph = {};
@@ -977,10 +981,11 @@ void Application::UpdateLightBuffer()
 
             if (!m_hasDir)
             {
-                m_activeDirDir       = dir;
-                m_activeDirColor     = l.color;
-                m_activeDirIntensity = l.intensity;
-                m_hasDir             = true;
+                m_activeDirDir          = dir;
+                m_activeDirColor        = l.color;
+                m_activeDirIntensity    = l.intensity;
+                m_activeDirShadowDist   = l.shadowDistance;
+                m_hasDir                = true;
             }
 
             float sunHorizon = glm::clamp(-dir.y * 5.0f + 1.0f, 0.0f, 1.0f);
@@ -1046,11 +1051,12 @@ void Application::UpdateLightBuffer()
 
     m_shadowMap.ComputeCascades(
         m_camera.GetView(), m_camera.GetProjection(aspect),
-        m_activeDirDir, m_camera.nearPlane, m_camera.farPlane,
+        m_activeDirDir, m_camera.nearPlane, m_activeDirShadowDist,
         m_cascadeMatrices, m_cascadeSplits);
 
     m_lights.SetCascadeData(m_cascadeMatrices, m_cascadeSplits);
     m_lights.SetCameraForward(m_camera.GetForward());
+    m_lights.SetNearPlane(m_camera.nearPlane);
     m_lights.SetSkyAmbient(glm::vec3(0.15f, 0.18f, 0.22f), glm::vec3(0.05f, 0.04f, 0.03f));
     m_lights.Update(m_camera.GetPosition());
 }
@@ -1305,6 +1311,30 @@ void Application::SyncECSToScene()
                 obj->subMeshMaterials[si] = &MaterialManager::Get().Get(name);
             else
                 obj->subMeshMaterials[si] = nullptr;
+        }
+    });
+
+    // ── Sync per-submesh local transforms ────────────────────────────────────
+    m_registry.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
+    {
+        if (mr.subMeshTransforms.empty()) return;
+        SceneObject* obj = nullptr;
+        for (auto& o : m_scene.GetObjects())
+            if (o.entityId == e) { obj = &o; break; }
+        if (!obj || !obj->mesh) return;
+
+        uint32_t smCount = obj->mesh->GetSubmeshCount();
+        obj->subMeshLocalTransforms.resize(smCount, glm::mat4(1.0f));
+        for (uint32_t si = 0; si < smCount && si < (uint32_t)mr.subMeshTransforms.size(); si++)
+        {
+            const auto& t = mr.subMeshTransforms[si];
+            glm::mat4 T = glm::translate(glm::mat4(1.0f), t.position);
+            glm::mat4 R = glm::eulerAngleYXZ(
+                glm::radians(t.rotEulerDeg.y),
+                glm::radians(t.rotEulerDeg.x),
+                glm::radians(t.rotEulerDeg.z));
+            glm::mat4 S = glm::scale(glm::mat4(1.0f), t.scale);
+            obj->subMeshLocalTransforms[si] = T * R * S;
         }
     });
 

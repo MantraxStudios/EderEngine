@@ -520,6 +520,8 @@ void InspectorPanel::DrawLightComponent()
         }
         ImGui::Spacing();
         ImGui::Checkbox("Cast Shadow", &l.castShadow);
+        if (l.castShadow && l.type == LightType::Directional)
+            ImGui::DragFloat("Shadow Distance", &l.shadowDistance, 1.0f, 10.0f, 2000.0f);
 
         // -- Volumetric Light (all light types) --
         ImGui::Spacing();

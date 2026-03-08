@@ -23,6 +23,13 @@
 #include "Renderer/Vulkan/VulkanSpotShadowMap.h"
 #include "Renderer/Vulkan/VulkanPointShadowMap.h"
 #include "Renderer/Vulkan/VulkanPointShadowPipeline.h"
+#include "Renderer/Vulkan/VulkanFramebuffer.h"
+#include "Renderer/Vulkan/VulkanVolumetricLight.h"
+#include "Renderer/Vulkan/VulkanVolumetricFog.h"
+#include "Renderer/Vulkan/VulkanOcclusionPass.h"
+#include "Renderer/Vulkan/VulkanSunShafts.h"
+#include "Renderer/Vulkan/VulkanPostProcessPass.h"
+#include "Renderer/Vulkan/VulkanBlit.h"
 #include "Renderer/Vulkan/BoneSSBO.h"
 #include "EderCore.h"
 #include "UI/UIRenderer.h"
@@ -57,11 +64,15 @@ private:
     void UpdateAnimations(float dt);
 
     // ── Render passes ────────────────────────────────────────────────────────
-    void RenderShadowPasses(vk::CommandBuffer cmd);
-    void RenderMainPass    (vk::CommandBuffer cmd);
+    void RenderShadowPasses (vk::CommandBuffer cmd);
+    void RenderSceneView    (vk::CommandBuffer cmd);
+    void RenderPostProcess  (vk::CommandBuffer cmd);
+    void RenderMainPass     (vk::CommandBuffer cmd);
 
     // ── Init helpers ─────────────────────────────────────────────────────────
     void InitMaterials();
+    void InitPostProcess();
+    void RebuildPostProcessPasses();
 
     // ═══════════════════════  Members  ══════════════════════════════════════
 
@@ -69,9 +80,6 @@ private:
     bool        m_running     = true;
     bool        m_previewMode = false;   // true when launched from editor play mode
     bool        m_borderless  = false;   // true → embed in editor; false → own window
-    bool        m_lookActive  = false;
-    float       m_mouseDX    = 0.0f;
-    float       m_mouseDY    = 0.0f;
 
     Camera   m_camera;
     Scene    m_scene;
@@ -95,11 +103,32 @@ private:
     VulkanPointShadowPipeline m_pointShadowPipeline;
     LightBuffer               m_lights;
 
+    // ── Offscreen scene framebuffer (scene rendered here; post-process reads it) ──
+    VulkanFramebuffer m_sceneFb;
+
+    // ── Post-process chain ───────────────────────────────────────────────────
+    VulkanVolumetricLight m_volumetricLight;
+    VulkanVolumetricFog   m_volumetricFog;
+    VulkanOcclusionPass   m_occlusionPass;
+    VulkanSunShafts       m_sunShafts;
+
+    // Custom post-process graph (same as Application)
+    Krayon::PostProcessGraph                            m_ppGraph;
+    std::vector<std::unique_ptr<VulkanPostProcessPass>> m_ppPasses;
+    bool                                                m_ppDirty = false;
+
+    // Pointer to the last written post-process framebuffer (advances through the chain)
+    VulkanFramebuffer* m_postFb = nullptr;
+
+    // Final blit: composites m_postFb to the swapchain
+    VulkanBlit m_blit;
+
     // ── Light frame state ────────────────────────────────────────────────────
-    glm::vec3 m_activeDirDir       = glm::normalize(glm::vec3(-1.0f, -1.0f, -0.4f));
-    glm::vec3 m_activeDirColor     = glm::vec3(1.0f, 0.9f, 0.7f);
-    float     m_activeDirIntensity = 1.0f;
-    bool      m_hasDir             = false;
+    glm::vec3 m_activeDirDir          = glm::normalize(glm::vec3(-1.0f, -1.0f, -0.4f));
+    glm::vec3 m_activeDirColor        = glm::vec3(1.0f, 0.9f, 0.7f);
+    float     m_activeDirIntensity    = 1.0f;
+    float     m_activeDirShadowDist   = 100.0f;
+    bool      m_hasDir                = false;
 
     bool      m_hasSpotShadow      = false;
     glm::vec3 m_activeSpotPos      = glm::vec3(0.0f);

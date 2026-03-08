@@ -46,10 +46,10 @@ struct LightUBO
     DirectionalLight dirLights[MAX_DIR_LIGHTS];             // 4 × 32 = 128
     PointLight       pointLights[MAX_POINT_LIGHTS];         // 16 × 48 = 768
     SpotLight        spotLights[MAX_SPOT_LIGHTS];           // 8 × 64 = 512
-    int32_t          numDirLights   = 0;
-    int32_t          numPointLights = 0;
-    int32_t          numSpotLights  = 0;
-    float            _pad           = 0.0f;
+    int32_t          numDirLights    = 0;
+    int32_t          numPointLights  = 0;
+    int32_t          numSpotLights   = 0;
+    float            cameraNearPlane = 0.1f;
     glm::vec3        cameraPos      = {};
     float            _pad2          = 0.0f;
     glm::vec3        cameraForward  = { 0.0f, 0.0f, -1.0f };

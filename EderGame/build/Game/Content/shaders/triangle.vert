@@ -43,8 +43,10 @@ void main()
 {
     mat4 model = mat4(instanceModelCol0, instanceModelCol1, instanceModelCol2, instanceModelCol3);
 
-    
-    
+    // Precalcular la normal matrix del modelo una sola vez
+    // evita recalcularla dos veces (una por skinning, otra al final)
+    mat3 modelNormalMat = mat3(transpose(inverse(model)));
+
     float totalWeight = inBoneWeights.x + inBoneWeights.y + inBoneWeights.z + inBoneWeights.w;
 
     vec4 localPos;
@@ -58,8 +60,11 @@ void main()
             inBoneWeights.z * bones.boneMatrices[inBoneIndices.z] +
             inBoneWeights.w * bones.boneMatrices[inBoneIndices.w];
 
-        localPos    = skinMat * vec4(inPosition, 1.0);
-        localNormal = mat3(transpose(inverse(skinMat))) * inNormal;
+        localPos = skinMat * vec4(inPosition, 1.0);
+
+        // Usar solo mat3(skinMat) para rotar la normal por los huesos
+        // sin inverse(): skinMat ya es ortonormal si los bones estan bien normalizados
+        localNormal = mat3(skinMat) * inNormal;
     }
     else
     {
@@ -69,7 +74,9 @@ void main()
 
     vec4 worldPos = model * localPos;
     gl_Position   = push.viewProj * worldPos;
-    fragNormal    = normalize(mat3(transpose(inverse(model))) * localNormal);
+
+    // Aplicar la normal matrix del modelo (calculada una sola vez arriba)
+    fragNormal    = normalize(modelNormalMat * localNormal);
     fragUV        = inUV;
     fragColor     = inColor * material.albedo;
     fragRoughness = material.roughness;

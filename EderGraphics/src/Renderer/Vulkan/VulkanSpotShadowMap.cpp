@@ -71,8 +71,8 @@ void VulkanSpotShadowMap::Create(uint32_t size)
     arrayView = vk::raii::ImageView(device, vi);
 
     vk::SamplerCreateInfo si{};
-    si.magFilter    = vk::Filter::eLinear;
-    si.minFilter    = vk::Filter::eLinear;
+    si.magFilter    = vk::Filter::eNearest;
+    si.minFilter    = vk::Filter::eNearest;
     si.addressModeU = vk::SamplerAddressMode::eClampToBorder;
     si.addressModeV = vk::SamplerAddressMode::eClampToBorder;
     si.addressModeW = vk::SamplerAddressMode::eClampToBorder;

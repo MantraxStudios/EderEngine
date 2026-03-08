@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <IO/AssetManager.h>
 
-// ── Helper: convert aiMatrix4x4 (row-major) to glm::mat4 (column-major) ──────
 static glm::mat4 AiToGlm(const aiMatrix4x4& m)
 {
     return glm::transpose(glm::mat4(
@@ -16,7 +15,6 @@ static glm::mat4 AiToGlm(const aiMatrix4x4& m)
         m.d1, m.d2, m.d3, m.d4));
 }
 
-// ── Keyframe search helpers ───────────────────────────────────────────────────
 static uint32_t FindKeyV(float t, const std::vector<AnimKeyVec3>& k)
 {
     for (uint32_t i = 0; i + 1 < (uint32_t)k.size(); i++)
@@ -30,34 +28,30 @@ static uint32_t FindKeyQ(float t, const std::vector<AnimKeyQuat>& k)
     return (uint32_t)k.size() > 0 ? (uint32_t)k.size() - 1 : 0;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Load
-// ─────────────────────────────────────────────────────────────────────────────
+static constexpr uint32_t kAssimpFlags =
+    aiProcess_Triangulate           |
+    aiProcess_GenNormals            |
+    aiProcess_CalcTangentSpace      |
+    aiProcess_JoinIdenticalVertices |
+    aiProcess_LimitBoneWeights;
+
 void VulkanMesh::Load(const std::string& path)
 {
-    // If AssetManager is initialised, route through it so both loose-file and
-    // PAK modes are handled transparently.
     auto& am = Krayon::AssetManager::Get();
     if (!am.GetWorkDir().empty() || am.IsCompiled())
     {
         std::vector<uint8_t> bytes = am.GetBytes(path);
         if (!bytes.empty())
         {
-            // Use the original path as the Assimp file hint (preserves extension).
             LoadFromMemory(bytes.data(), bytes.size(), path);
             return;
         }
-        // Fall through to direct disk read if AssetManager returned nothing
-        // (e.g. path is absolute and outside the workDir).
     }
-
-    // Direct disk fallback (original behaviour)
     _LoadFromPath(path);
 }
 
 void VulkanMesh::LoadFromMemory(const uint8_t* data, size_t size, const std::string& hint)
 {
-    // Clear any previous load
     vertices.clear(); indices.clear(); m_submeshes.clear();
     boneNameToIndex.clear(); boneInfos.clear();
     animations.clear(); nodes.clear(); nodeNameToIndex.clear();
@@ -68,13 +62,7 @@ void VulkanMesh::LoadFromMemory(const uint8_t* data, size_t size, const std::str
     Assimp::Importer importer;
 
     const aiScene* scene = importer.ReadFileFromMemory(
-        data, size,
-        aiProcess_Triangulate           |
-        aiProcess_GenSmoothNormals      |
-        aiProcess_CalcTangentSpace      |
-        aiProcess_FlipUVs               |
-        aiProcess_JoinIdenticalVertices |
-        aiProcess_LimitBoneWeights,
+        data, size, kAssimpFlags,
         hint.empty() ? nullptr : hint.c_str());
 
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
@@ -84,25 +72,9 @@ void VulkanMesh::LoadFromMemory(const uint8_t* data, size_t size, const std::str
     gi.Inverse();
     globalInverseTransform = AiToGlm(gi);
 
-    ProcessNode(scene->mRootNode, scene, aiMatrix4x4()); // identity — nodeTransform is accumulated top-down
+    ProcessNode(scene->mRootNode, scene, aiMatrix4x4());
     BuildNodeTree(scene->mRootNode, UINT32_MAX);
     LoadAnimations(scene);
-
-    // ── Normalize static mesh to unit cube so scale=1 ≅ 1 unit ──────────────────
-    if (boneInfos.empty() && m_boundsMin.x < m_boundsMax.x)
-    {
-        glm::vec3 center = (m_boundsMin + m_boundsMax) * 0.5f;
-        glm::vec3 sz     = m_boundsMax - m_boundsMin;
-        float     maxDim = std::max({sz.x, sz.y, sz.z});
-        if (maxDim > 1e-6f)
-        {
-            float s = 1.0f / maxDim;
-            for (auto& v : vertices)
-                v.position = (v.position - center) * s;
-            m_boundsMin = (m_boundsMin - center) * s;
-            m_boundsMax = (m_boundsMax - center) * s;
-        }
-    }
 
     vertexCount = static_cast<uint32_t>(vertices.size());
     indexCount  = static_cast<uint32_t>(indices.size());
@@ -127,12 +99,8 @@ void VulkanMesh::LoadFromMemory(const uint8_t* data, size_t size, const std::str
               << std::endl;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// _LoadFromPath — direct disk load (original behaviour, used as fallback)
-// ─────────────────────────────────────────────────────────────────────────────
 void VulkanMesh::_LoadFromPath(const std::string& path)
 {
-    // Clear any previous load
     vertices.clear(); indices.clear(); m_submeshes.clear();
     boneNameToIndex.clear(); boneInfos.clear();
     animations.clear(); nodes.clear(); nodeNameToIndex.clear();
@@ -142,13 +110,7 @@ void VulkanMesh::_LoadFromPath(const std::string& path)
 
     Assimp::Importer importer;
 
-    const aiScene* scene = importer.ReadFile(path,
-        aiProcess_Triangulate           |
-        aiProcess_GenSmoothNormals      |
-        aiProcess_CalcTangentSpace      |
-        aiProcess_FlipUVs               |
-        aiProcess_JoinIdenticalVertices |
-        aiProcess_LimitBoneWeights);
+    const aiScene* scene = importer.ReadFile(path, kAssimpFlags);
 
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
         throw std::runtime_error("Assimp: " + std::string(importer.GetErrorString()));
@@ -157,25 +119,9 @@ void VulkanMesh::_LoadFromPath(const std::string& path)
     gi.Inverse();
     globalInverseTransform = AiToGlm(gi);
 
-    ProcessNode(scene->mRootNode, scene, aiMatrix4x4()); // identity — nodeTransform is accumulated top-down
+    ProcessNode(scene->mRootNode, scene, aiMatrix4x4());
     BuildNodeTree(scene->mRootNode, UINT32_MAX);
     LoadAnimations(scene);
-
-    // ── Normalize static mesh to unit cube so scale=1 ≅ 1 unit ──────────────────
-    if (boneInfos.empty() && m_boundsMin.x < m_boundsMax.x)
-    {
-        glm::vec3 center = (m_boundsMin + m_boundsMax) * 0.5f;
-        glm::vec3 sz     = m_boundsMax - m_boundsMin;
-        float     maxDim = std::max({sz.x, sz.y, sz.z});
-        if (maxDim > 1e-6f)
-        {
-            float s = 1.0f / maxDim;
-            for (auto& v : vertices)
-                v.position = (v.position - center) * s;
-            m_boundsMin = (m_boundsMin - center) * s;
-            m_boundsMax = (m_boundsMax - center) * s;
-        }
-    }
 
     vertexCount = static_cast<uint32_t>(vertices.size());
     indexCount  = static_cast<uint32_t>(indices.size());
@@ -200,9 +146,6 @@ void VulkanMesh::_LoadFromPath(const std::string& path)
               << std::endl;
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ProcessNode / ProcessMesh
-// ─────────────────────────────────────────────────────────────────────────────
 void VulkanMesh::ProcessNode(aiNode* node, const aiScene* scene, const aiMatrix4x4& parentTransform)
 {
     aiMatrix4x4 nodeTransform = parentTransform * node->mTransformation;
@@ -217,15 +160,8 @@ void VulkanMesh::ProcessMesh(aiMesh* mesh, const aiScene* scene, const aiMatrix4
     uint32_t baseIndex      = static_cast<uint32_t>(vertices.size());
     uint32_t firstIndexSlot = static_cast<uint32_t>(indices.size());
 
-    // For skinned meshes the bone/animation pipeline already accumulates the
-    // full node-transform chain via ProcessNodeHierarchy, so we must NOT bake
-    // the transform into raw vertex positions here (it would fight the skinning).
-    // For static meshes we DO apply it so that FBX unit-scale (stored in the
-    // root node's mTransformation) is correctly converted to engine units.
     const bool isStaticMesh = (mesh->mNumBones == 0);
 
-    // Pre-compute the 3×3 normal matrix (inverse-transpose of the upper-left 3×3)
-    // only when we're actually going to use it.
     aiMatrix3x3 normalMatrix;
     if (isStaticMesh)
     {
@@ -266,15 +202,19 @@ void VulkanMesh::ProcessMesh(aiMesh* mesh, const aiScene* scene, const aiMatrix4
             v.tangent   = mesh->mTangents   ? glm::vec3(mesh->mTangents[i].x,   mesh->mTangents[i].y,   mesh->mTangents[i].z)   : glm::vec3(0);
             v.bitangent = mesh->mBitangents ? glm::vec3(mesh->mBitangents[i].x, mesh->mBitangents[i].y, mesh->mBitangents[i].z) : glm::vec3(0);
         }
-        v.uv        = mesh->mTextureCoords[0] ? glm::vec2(mesh->mTextureCoords[0][i].x, mesh->mTextureCoords[0][i].y) : glm::vec2(0);
-        v.color     = { 1.0f, 1.0f, 1.0f, 1.0f };
-        // boneIndices / boneWeights are zero-initialised by default — filled below
+
+        if (mesh->mTextureCoords[0])
+            v.uv = glm::vec2(mesh->mTextureCoords[0][i].x, 1.0f - mesh->mTextureCoords[0][i].y);
+        else
+            v.uv = glm::vec2(0.0f);
+
+        v.color = { 1.0f, 1.0f, 1.0f, 1.0f };
+
         m_boundsMin = glm::min(m_boundsMin, v.position);
         m_boundsMax = glm::max(m_boundsMax, v.position);
         vertices.push_back(v);
     }
 
-    // Load bone weights
     for (uint32_t b = 0; b < mesh->mNumBones; b++)
     {
         aiBone*     bone     = mesh->mBones[b];
@@ -302,7 +242,6 @@ void VulkanMesh::ProcessMesh(aiMesh* mesh, const aiScene* scene, const aiMatrix4
             if (weight < 0.0001f) continue;
 
             Vertex& v = vertices[vertIdx];
-            // Fill the first free slot (up to 4 influences per vertex)
             for (int slot = 0; slot < 4; slot++)
             {
                 if (v.boneWeights[slot] == 0.0f)
@@ -319,7 +258,6 @@ void VulkanMesh::ProcessMesh(aiMesh* mesh, const aiScene* scene, const aiMatrix4
         for (uint32_t j = 0; j < mesh->mFaces[i].mNumIndices; j++)
             indices.push_back(baseIndex + mesh->mFaces[i].mIndices[j]);
 
-    // Record sub-mesh range
     SubMeshInfo info;
     info.firstIndex  = firstIndexSlot;
     info.indexCount  = static_cast<uint32_t>(indices.size()) - firstIndexSlot;
@@ -330,9 +268,6 @@ void VulkanMesh::ProcessMesh(aiMesh* mesh, const aiScene* scene, const aiMatrix4
     m_submeshes.push_back(info);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// BuildNodeTree  — must be called AFTER ProcessNode so boneNameToIndex is populated
-// ─────────────────────────────────────────────────────────────────────────────
 void VulkanMesh::BuildNodeTree(aiNode* node, uint32_t parentIdx)
 {
     uint32_t myIdx = static_cast<uint32_t>(nodes.size());
@@ -355,9 +290,6 @@ void VulkanMesh::BuildNodeTree(aiNode* node, uint32_t parentIdx)
         BuildNodeTree(node->mChildren[i], myIdx);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// LoadAnimations
-// ─────────────────────────────────────────────────────────────────────────────
 void VulkanMesh::LoadAnimations(const aiScene* scene)
 {
     for (uint32_t a = 0; a < scene->mNumAnimations; a++)
@@ -400,9 +332,6 @@ void VulkanMesh::LoadAnimations(const aiScene* scene)
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Keyframe interpolation
-// ─────────────────────────────────────────────────────────────────────────────
 glm::vec3 VulkanMesh::InterpolatePosition(float t, const BoneChannel& ch)
 {
     if (ch.posKeys.empty()) return glm::vec3(0.0f);
@@ -437,9 +366,6 @@ glm::vec3 VulkanMesh::InterpolateScale(float t, const BoneChannel& ch)
     return glm::mix(ch.scaleKeys[i].value, ch.scaleKeys[j].value, glm::clamp(fac, 0.0f, 1.0f));
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Hierarchy traversal — fills out[] with world-space bone matrices
-// ─────────────────────────────────────────────────────────────────────────────
 void VulkanMesh::ProcessNodeHierarchy(uint32_t nodeIdx, const glm::mat4& parentTransform,
                                        const AnimationClip* clip, float timeTicks,
                                        std::vector<glm::mat4>& out)
@@ -476,9 +402,6 @@ void VulkanMesh::ProcessNodeHierarchy(uint32_t nodeIdx, const glm::mat4& parentT
         ProcessNodeHierarchy(child, globalTransform, clip, timeTicks, out);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// ComputeBoneTransforms  — public entry point called each frame
-// ─────────────────────────────────────────────────────────────────────────────
 void VulkanMesh::ComputeBoneTransforms(uint32_t clipIndex, float timeSecs,
                                         std::vector<glm::mat4>& out)
 {
@@ -499,9 +422,6 @@ void VulkanMesh::ComputeBoneTransforms(uint32_t clipIndex, float timeSecs,
     ProcessNodeHierarchy(rootNodeIndex, glm::mat4(1.0f), clip, timeTicks, out);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Draw / Destroy
-// ─────────────────────────────────────────────────────────────────────────────
 void VulkanMesh::DrawInstanced(vk::CommandBuffer cmd, uint32_t firstInstance, uint32_t instanceCount)
 {
     vk::Buffer     vb     = vertexBuffer.GetBuffer();

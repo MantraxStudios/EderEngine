@@ -104,6 +104,11 @@ void LightBuffer::SetCameraForward(const glm::vec3& forward)
     ubo.cameraForward = forward;
 }
 
+void LightBuffer::SetNearPlane(float nearP)
+{
+    ubo.cameraNearPlane = nearP;
+}
+
 void LightBuffer::BindShadowMap(vk::ImageView arrayView, vk::Sampler sampler)
 {
     vk::DescriptorImageInfo imgInfo{};

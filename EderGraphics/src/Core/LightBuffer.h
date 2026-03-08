@@ -15,6 +15,7 @@ public:
     void Destroy();
     void SetCascadeData   (const glm::mat4 matrices[4], const glm::vec4& splits);
     void SetCameraForward (const glm::vec3& forward);
+    void SetNearPlane     (float nearP);
     void BindShadowMap    (vk::ImageView arrayView, vk::Sampler sampler);
     void BindSpotShadowMap (vk::ImageView arrayView,      vk::Sampler sampler);
     void BindPointShadowMap(vk::ImageView cubeArrayView,  vk::Sampler sampler);

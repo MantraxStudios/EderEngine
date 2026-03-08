@@ -110,6 +110,8 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
         AudioSystem::Get().Update(m_registry, dt);
 
         RenderShadowPasses(cmd);
+        RenderSceneView(cmd);
+        RenderPostProcess(cmd);
         RenderMainPass(cmd);
 
         VulkanRenderer::Get().EndFrame();
@@ -160,6 +162,7 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
     m_skybox.Create(VulkanSwapchain::Get().GetFormat(),
                     VulkanRenderer::Get().GetDepthFormat());
     m_boneSSBO.Create(m_pipeline);
+    InitPostProcess();
 
     if (!initialScene.empty())
     {
@@ -170,7 +173,8 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
         else
         {
             std::cout << "[EderPlayer] Loading scene: " << initialScene << "\n";
-            Krayon::SceneSerializer::LoadFromBytes(bytes, m_registry);
+            Krayon::SceneSerializer::LoadFromBytes(bytes, m_registry, nullptr, &m_ppGraph);
+            m_ppDirty = true;
         }
     }
 
@@ -265,6 +269,8 @@ int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
         AudioSystem::Get().Update(m_registry, dt);
 
         RenderShadowPasses(cmd);
+        RenderSceneView(cmd);
+        RenderPostProcess(cmd);
         RenderMainPass(cmd);
 
         VulkanRenderer::Get().EndFrame();
@@ -317,14 +323,18 @@ void PlayerApp::InitPreview(const std::string& scenePath)
     m_skybox.Create(VulkanSwapchain::Get().GetFormat(),
                     VulkanRenderer::Get().GetDepthFormat());
     m_boneSSBO.Create(m_pipeline);
+    InitPostProcess();
 
     if (!scenePath.empty())
     {
         std::string loadedName;
-        if (!Krayon::SceneSerializer::Load(scenePath, m_registry, &loadedName))
+        if (!Krayon::SceneSerializer::Load(scenePath, m_registry, &loadedName, &m_ppGraph))
             std::cerr << "[EderPlayer] Warning: failed to load preview scene: " << scenePath << "\n";
         else
+        {
             std::cout << "[EderPlayer] Preview scene loaded: " << loadedName << "\n";
+            m_ppDirty = true;
+        }
     }
 
     UISystem::Get().Init();
@@ -394,6 +404,14 @@ void PlayerApp::Shutdown()
 {
     VulkanInstance::Get().GetDevice().waitIdle();
 
+    m_blit.Destroy();
+    m_ppPasses.clear();
+    m_occlusionPass.Destroy();
+    m_sunShafts.Destroy();
+    m_volumetricLight.Destroy();
+    m_volumetricFog.Destroy();
+    m_sceneFb.Destroy();
+
     m_boneSSBO.Destroy();
     m_skybox.Destroy();
     m_pointShadowPipeline.Destroy();
@@ -448,53 +466,10 @@ void PlayerApp::PollEvents()
     }
 }
 
-void PlayerApp::ProcessInput(float dt)
+void PlayerApp::ProcessInput(float /*dt*/)
 {
-    if (UISystem::Get().HasFocusedInput()) return;
-
-    float mx, my;
-    const bool rmb = (SDL_GetMouseState(&mx, &my) & SDL_BUTTON_RMASK) != 0;
-
-    if (rmb && !m_lookActive)
-    {
-        m_lookActive = true;
-        SDL_SetWindowRelativeMouseMode(m_window, true);
-        SDL_RaiseWindow(m_window);
-        SDL_GetRelativeMouseState(&mx, &my);
-        m_mouseDX = m_mouseDY = 0.0f;
-    }
-    else if (!rmb && m_lookActive)
-    {
-        m_lookActive = false;
-        SDL_SetWindowRelativeMouseMode(m_window, false);
-        SDL_GetRelativeMouseState(&mx, &my);
-        m_mouseDX = m_mouseDY = 0.0f;
-    }
-    else if (m_lookActive)
-    {
-        SDL_GetRelativeMouseState(&m_mouseDX, &m_mouseDY);
-    }
-    else
-    {
-        m_mouseDX = m_mouseDY = 0.0f;
-    }
-
-    if (!m_lookActive) return;
-
-    m_camera.FPSLook(m_mouseDX, m_mouseDY);
-
-    const bool*     keys  = SDL_GetKeyboardState(nullptr);
-    constexpr float speed = 8.0f;
-    glm::vec3 fwd   = m_camera.GetForward();
-    glm::vec3 right = m_camera.GetRight();
-    glm::vec3 fwdXZ = glm::normalize(glm::vec3(fwd.x, 0.0f, fwd.z));
-
-    if (keys[SDL_SCANCODE_W])     m_camera.fpsPos += fwdXZ  * speed * dt;
-    if (keys[SDL_SCANCODE_S])     m_camera.fpsPos -= fwdXZ  * speed * dt;
-    if (keys[SDL_SCANCODE_A])     m_camera.fpsPos -= right   * speed * dt;
-    if (keys[SDL_SCANCODE_D])     m_camera.fpsPos += right   * speed * dt;
-    if (keys[SDL_SCANCODE_SPACE]) m_camera.fpsPos.y += speed * dt;
-    if (keys[SDL_SCANCODE_LCTRL]) m_camera.fpsPos.y -= speed * dt;
+    // Camera is controlled entirely through scripting (CameraComponent).
+    // No built-in FPS camera in the player runtime.
 }
 
 void PlayerApp::UpdateLightBuffer()
@@ -524,10 +499,11 @@ void PlayerApp::UpdateLightBuffer()
 
             if (!m_hasDir)
             {
-                m_activeDirDir       = dir;
-                m_activeDirColor     = l.color;
-                m_activeDirIntensity = l.intensity;
-                m_hasDir             = true;
+                m_activeDirDir          = dir;
+                m_activeDirColor        = l.color;
+                m_activeDirIntensity    = l.intensity;
+                m_activeDirShadowDist   = l.shadowDistance;
+                m_hasDir                = true;
             }
 
             float sunHorizon = glm::clamp(-dir.y * 5.0f + 1.0f, 0.0f, 1.0f);
@@ -591,11 +567,12 @@ void PlayerApp::UpdateLightBuffer()
 
     m_shadowMap.ComputeCascades(
         m_camera.GetView(), m_camera.GetProjection(aspect),
-        m_activeDirDir, m_camera.nearPlane, m_camera.farPlane,
+        m_activeDirDir, m_camera.nearPlane, m_activeDirShadowDist,
         m_cascadeMatrices, m_cascadeSplits);
 
     m_lights.SetCascadeData    (m_cascadeMatrices, m_cascadeSplits);
     m_lights.SetCameraForward  (m_camera.GetForward());
+    m_lights.SetNearPlane      (m_camera.nearPlane);
     m_lights.SetSkyAmbient     (glm::vec3(0.15f, 0.18f, 0.22f), glm::vec3(0.05f, 0.04f, 0.03f));
     m_lights.Update            (m_camera.GetPosition());
 }
@@ -840,6 +817,30 @@ void PlayerApp::SyncECSToScene()
         }
     });
 
+    // ── Sync per-submesh local transforms ────────────────────────────────────
+    m_registry.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
+    {
+        if (mr.subMeshTransforms.empty()) return;
+        SceneObject* obj = nullptr;
+        for (auto& o : m_scene.GetObjects())
+            if (o.entityId == e) { obj = &o; break; }
+        if (!obj || !obj->mesh) return;
+
+        uint32_t smCount = obj->mesh->GetSubmeshCount();
+        obj->subMeshLocalTransforms.resize(smCount, glm::mat4(1.0f));
+        for (uint32_t si = 0; si < smCount && si < (uint32_t)mr.subMeshTransforms.size(); si++)
+        {
+            const auto& t = mr.subMeshTransforms[si];
+            glm::mat4 T = glm::translate(glm::mat4(1.0f), t.position);
+            glm::mat4 R = glm::eulerAngleYXZ(
+                glm::radians(t.rotEulerDeg.y),
+                glm::radians(t.rotEulerDeg.x),
+                glm::radians(t.rotEulerDeg.z));
+            glm::mat4 S = glm::scale(glm::mat4(1.0f), t.scale);
+            obj->subMeshLocalTransforms[si] = T * R * S;
+        }
+    });
+
     for (auto& obj : m_scene.GetObjects())
     {
         if (obj.entityId == 0 || !m_registry.Has<TransformComponent>(obj.entityId)) continue;
@@ -1038,13 +1039,58 @@ void PlayerApp::RenderShadowPasses(vk::CommandBuffer cmd)
     m_pointShadowMap.TransitionToShaderRead(cmd, 0);
 }
 
-void PlayerApp::RenderMainPass(vk::CommandBuffer cmd)
+void PlayerApp::InitPostProcess()
+{
+    auto& sc      = VulkanSwapchain::Get();
+    auto& rd      = VulkanRenderer::Get();
+    uint32_t w    = sc.GetExtent().width;
+    uint32_t h    = sc.GetExtent().height;
+    auto depthFmt = rd.GetDepthFormat();
+    auto colorFmt = vk::Format::eB8G8R8A8Unorm;
+
+    m_sceneFb.Create(w, h, colorFmt, depthFmt);
+    m_occlusionPass.Create(w, h);
+    m_sunShafts.Create(colorFmt, w, h);
+    m_volumetricLight.Create(colorFmt, w, h,
+                             *m_pipeline.GetLightDescriptorSetLayout());
+    m_volumetricFog.Create(colorFmt, w, h,
+                           *m_pipeline.GetLightDescriptorSetLayout());
+    m_blit.Create(sc.GetFormat(), depthFmt);
+}
+
+void PlayerApp::RebuildPostProcessPasses()
+{
+    VulkanInstance::Get().GetDevice().waitIdle();
+
+    m_ppPasses.clear();
+    m_ppPasses.reserve(m_ppGraph.effects.size());
+
+    uint32_t w = m_sceneFb.GetExtent().width;
+    uint32_t h = m_sceneFb.GetExtent().height;
+
+    for (const auto& fx : m_ppGraph.effects)
+    {
+        auto pass = std::make_unique<VulkanPostProcessPass>();
+        try {
+            pass->Create(m_sceneFb.GetColorFormat(), w, h, fx.fragShaderPath);
+            m_ppPasses.push_back(std::move(pass));
+        }
+        catch (const std::exception& e) {
+            std::cerr << "[PostProcess] Failed to create '" << fx.name << "': " << e.what() << "\n";
+            m_ppPasses.push_back(nullptr);
+        }
+    }
+
+    m_ppDirty = false;
+}
+
+void PlayerApp::RenderSceneView(vk::CommandBuffer cmd)
 {
     auto& sc     = VulkanSwapchain::Get();
     float aspect = static_cast<float>(sc.GetExtent().width) /
                    static_cast<float>(sc.GetExtent().height);
 
-    VulkanRenderer::Get().BeginMainPass();
+    m_sceneFb.BeginRendering(cmd);
 
     m_pipeline.Bind(cmd);
     m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
@@ -1067,5 +1113,157 @@ void PlayerApp::RenderMainPass(vk::CommandBuffer cmd)
     m_boneSSBO.Bind(cmd, *m_pipeline.GetLayout());
     m_scene.DrawTransparent(cmd, m_pipeline, m_camera, aspect, m_lights);
 
-    m_uiRenderer.Draw(cmd);
+    m_uiRenderer.Draw(cmd, m_sceneFb.GetExtent().width, m_sceneFb.GetExtent().height);
+
+    m_sceneFb.EndRendering(cmd);
+    m_sceneFb.TransitionToShaderRead(cmd);
+}
+
+void PlayerApp::RenderPostProcess(vk::CommandBuffer cmd)
+{
+    auto& sc     = VulkanSwapchain::Get();
+    float aspect = static_cast<float>(sc.GetExtent().width) /
+                   static_cast<float>(sc.GetExtent().height);
+
+    m_postFb = &m_sceneFb;
+
+    {
+        LightComponent* volComp = nullptr;
+        m_registry.Each<LightComponent>([&](Entity e, LightComponent& l) {
+            if (l.volumetricEnabled && !volComp) volComp = &l;
+        });
+
+        if (volComp)
+        {
+            glm::vec3 sunWorldDir = m_hasDir
+                ? glm::normalize(-m_activeDirDir)
+                : glm::vec3(0.0f, 1.0f, 0.0f);
+
+            float sunAbove = m_hasDir
+                ? glm::clamp(sunWorldDir.y * 5.0f + 1.0f, 0.0f, 1.0f)
+                : 0.0f;
+
+            glm::mat4 view  = m_camera.GetView();
+            glm::mat4 proj  = m_camera.GetProjection(aspect);
+            glm::mat4 invVP = glm::inverse(proj * view);
+
+            m_volumetricLight.Draw(cmd,
+                m_sceneFb.GetColorView(),  m_sceneFb.GetSampler(),
+                m_sceneFb.GetDepthView(),  m_sceneFb.GetSampler(),
+                m_shadowMap.GetArrayView(), m_shadowMap.GetSampler(),
+                invVP, m_cascadeMatrices, m_cascadeSplits,
+                sunWorldDir,
+                m_hasDir ? m_activeDirColor     : glm::vec3(0.0f),
+                m_hasDir ? m_activeDirIntensity : 0.0f,
+                m_camera.GetPosition(),
+                m_lights.GetDescriptorSet(),
+                volComp->volNumSteps,
+                volComp->volDensity,
+                volComp->volAbsorption,
+                volComp->volG,
+                volComp->volIntensity * sunAbove,
+                volComp->volMaxDistance,
+                volComp->volJitter,
+                volComp->volTint);
+
+            m_volumetricLight.GetOutput().TransitionToShaderRead(cmd);
+            m_postFb = &m_volumetricLight.GetOutput();
+        }
+    }
+
+    {
+        VolumetricFogComponent* fogComp = nullptr;
+        m_registry.Each<VolumetricFogComponent>([&](Entity e, VolumetricFogComponent& f) {
+            if (f.enabled && !fogComp) fogComp = &f;
+        });
+
+        if (fogComp)
+        {
+            glm::mat4 view  = m_camera.GetView();
+            glm::mat4 proj  = m_camera.GetProjection(aspect);
+            glm::mat4 invVP = glm::inverse(proj * view);
+
+            glm::vec3 sunTowardDir = m_hasDir
+                ? glm::normalize(-m_activeDirDir)
+                : glm::vec3(0.0f, 1.0f, 0.0f);
+            float sunIntensity = m_hasDir ? m_activeDirIntensity : 0.0f;
+
+            m_volumetricFog.Draw(cmd,
+                m_postFb->GetColorView(), m_postFb->GetSampler(),
+                m_sceneFb.GetDepthView(), m_sceneFb.GetSampler(),
+                invVP, m_camera.GetPosition(),
+                fogComp->fogColor,        fogComp->density,
+                fogComp->horizonColor,    fogComp->heightFalloff,
+                fogComp->sunScatterColor, fogComp->scatterStrength,
+                sunTowardDir,             sunIntensity,
+                fogComp->heightOffset,
+                fogComp->maxFogAmount,
+                fogComp->fogStart,
+                fogComp->fogEnd,
+                m_lights.GetDescriptorSet());
+
+            m_volumetricFog.GetOutput().TransitionToShaderRead(cmd);
+            m_postFb = &m_volumetricFog.GetOutput();
+        }
+    }
+
+    {
+        LightComponent* shaftsComp = nullptr;
+        m_registry.Each<LightComponent>([&](Entity e, LightComponent& l) {
+            if (l.sunShaftsEnabled && l.type == LightType::Directional && !shaftsComp)
+                shaftsComp = &l;
+        });
+
+        if (shaftsComp && m_activeDirDir != glm::vec3(0.0f))
+        {
+            glm::mat4 vp          = m_camera.GetProjection(aspect) * m_camera.GetView();
+            glm::vec3 sunWorldDir = glm::normalize(-m_activeDirDir);
+            glm::vec4 sunClip     = vp * glm::vec4(sunWorldDir * 1000.0f, 1.0f);
+
+            bool sunInFront = (sunClip.w > 0.0f) &&
+                              (glm::dot(m_camera.GetForward(), sunWorldDir) > 0.0f);
+            glm::vec2 sunUV = sunInFront
+                ? glm::vec2(sunClip.x / sunClip.w, sunClip.y / sunClip.w) * 0.5f + 0.5f
+                : glm::vec2(-10.0f);
+
+            float sunHeight = glm::normalize(-m_activeDirDir).y;
+
+            m_occlusionPass.Draw(cmd,
+                m_sceneFb.GetDepthView(), m_sceneFb.GetSampler(),
+                sunUV, shaftsComp->shaftsSunRadius, aspect);
+
+            m_sunShafts.Draw(cmd,
+                m_postFb->GetColorView(),  m_postFb->GetSampler(),
+                m_occlusionPass.GetView(), m_sceneFb.GetDepthView(),
+                sunUV,
+                shaftsComp->shaftsDensity,    shaftsComp->shaftsBloomScale,
+                shaftsComp->shaftsDecay,      shaftsComp->shaftsWeight,
+                shaftsComp->shaftsExposure,   shaftsComp->shaftsTint,
+                sunHeight, aspect);
+
+            m_sunShafts.GetOutput().TransitionToShaderRead(cmd);
+            m_postFb = &m_sunShafts.GetOutput();
+        }
+    }
+
+    if (m_ppDirty) RebuildPostProcessPasses();
+
+    for (size_t i = 0; i < m_ppPasses.size(); ++i)
+    {
+        if (!m_ppGraph.effects[i].enabled) continue;
+        if (!m_ppPasses[i]) continue;
+
+        m_ppPasses[i]->Draw(cmd,
+            m_postFb->GetColorView(),    m_postFb->GetSampler(),
+            m_sceneFb.GetDepthView(),    m_sceneFb.GetSampler(),
+            m_ppGraph.effects[i].params);
+        m_ppPasses[i]->GetOutput().TransitionToShaderRead(cmd);
+        m_postFb = &m_ppPasses[i]->GetOutput();
+    }
+}
+
+void PlayerApp::RenderMainPass(vk::CommandBuffer cmd)
+{
+    VulkanRenderer::Get().BeginMainPass();
+    m_blit.Draw(cmd, m_postFb->GetColorView(), m_postFb->GetSampler());
 }
