@@ -1051,8 +1051,8 @@ void Application::UpdateLightBuffer()
 
     m_lights.SetCascadeData(m_cascadeMatrices, m_cascadeSplits);
     m_lights.SetCameraForward(m_camera.GetForward());
+    m_lights.SetSkyAmbient(glm::vec3(0.15f, 0.18f, 0.22f), glm::vec3(0.05f, 0.04f, 0.03f));
     m_lights.Update(m_camera.GetPosition());
-    m_lights.SetSkyAmbient(glm::vec3(0.04f), glm::vec3(0.04f));
 }
 
 void Application::SyncECSToScene()

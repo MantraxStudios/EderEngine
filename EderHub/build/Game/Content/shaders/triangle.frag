@@ -143,7 +143,7 @@ float ShadowSpot(int slot, vec3 worldPos, vec3 N, vec3 L)
     float bias   = max(0.0005 * (1.0 - NdotL), 0.0001);
     float recvZ  = proj.z - bias;
     vec2  ts     = 1.0 / vec2(textureSize(spotShadowMap, 0).xy);
-    float fR     = FILTER_TEXELS * ts.x;
+    float fR     = 3.0 * ts.x;
     float phi    = IGN(gl_FragCoord.xy) * 6.28318530;
     float shadow = 0.0;
     for (int i = 0; i < PCF_N; i++)
@@ -164,11 +164,12 @@ float ShadowPoint(int slot, vec3 worldPos, vec3 lightPos, vec3 N)
 
     vec3  dirN  = dir / dist;
     float NdotL = max(dot(N, -dirN), 0.0);
-    float bias  = max(0.005 * (1.0 - NdotL), 0.0005);
+    float bias  = max(0.003 * (1.0 - NdotL), 0.0005);
     float fR    = FILTER_TEXELS * dist * 2.0 / 512.0;
 
-    vec3 up   = abs(dirN.y) < 0.99 ? vec3(0,1,0) : vec3(1,0,0);
-    vec3 tang = normalize(cross(up, dirN));
+    // Gram-Schmidt tangent frame — continuous everywhere, no 0.99 threshold flip
+    vec3 tang = abs(dirN.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
+    tang = normalize(tang - dot(tang, dirN) * dirN);
     vec3 btan = cross(dirN, tang);
 
     float phi    = IGN(gl_FragCoord.xy) * 6.28318530;

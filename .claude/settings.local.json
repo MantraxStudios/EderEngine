@@ -27,7 +27,8 @@
       "Bash(ninja -t targets)",
       "Bash(cmake --build . --target EderGame --config Debug)",
       "Bash(grep \"\\\\.\\(h\\\\|cpp\\)$\")",
-      "Bash(xargs grep -l \"AnimationComponent\\\\|BoneSSBO\\\\|boneMatrices\\\\|animIndex\")"
+      "Bash(xargs grep -l \"AnimationComponent\\\\|BoneSSBO\\\\|boneMatrices\\\\|animIndex\")",
+      "Bash(cmake --build . --config Release)"
     ]
   }
 }

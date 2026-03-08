@@ -38,3 +38,6 @@
 40	5052	7946784671442206	CMakeFiles/EderGraphics.dir/src/Core/Scene.cpp.obj	34b01ea6c7563828
 5053	5480	7946784721573130	EderGraphics.dll	c87126baf6ae63ec
 5053	5480	7946784721573130	EderGraphics.lib	c87126baf6ae63ec
+8	4927	7946802325790288	CMakeFiles/EderGraphics.dir/src/Renderer/Vulkan/VulkanShadowMap.cpp.obj	b6235e7adb8fbc8c
+4929	5199	7946802375000271	EderGraphics.dll	c87126baf6ae63ec
+4929	5199	7946802375000271	EderGraphics.lib	c87126baf6ae63ec

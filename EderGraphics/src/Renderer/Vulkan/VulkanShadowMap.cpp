@@ -201,6 +201,12 @@ void VulkanShadowMap::ComputeCascades(
         }
     }
 
+    // Extract half-FOV tangents from the projection matrix (GLM perspective, Vulkan Y-flip).
+    // camProj[1][1] = -1/tan(fovY/2) and camProj[0][0] = -camProj[1][1]/aspect.
+    // These are constant per camera setup, so radii computed from them are stable.
+    float tanHalfFovY = 1.0f / std::abs(camProj[1][1]);
+    float tanHalfFovX = 1.0f / std::abs(camProj[0][0]);
+
     glm::vec3 up = (std::abs(lightDir.y) < 0.99f)
         ? glm::vec3(0.0f, 1.0f, 0.0f)
         : glm::vec3(1.0f, 0.0f, 0.0f);
@@ -219,15 +225,19 @@ void VulkanShadowMap::ComputeCascades(
             corners[i + 4] = frustumCorners[i] + ray * tFar;
         }
 
-        // Sphere center for rotation-stable shadows
+        // Sphere center: average of sub-frustum corners (follows camera, correct)
         glm::vec3 center(0.0f);
         for (int i = 0; i < 8; i++) center += corners[i];
         center /= 8.0f;
 
-        float radius = 0.0f;
-        for (int i = 0; i < 8; i++)
-            radius = std::max(radius, glm::length(corners[i] - center));
-        // Quantize radius to reduce shimmering when camera moves
+        // Stable radius: derived purely from cascade depth range and camera FOV.
+        // Does NOT depend on camera orientation, so it is constant between frames
+        // and the texel grid never shifts when the camera rotates — eliminates shadow swimming.
+        float farC     = splits[c + 1];
+        float halfDepth = (splits[c + 1] - splits[c]) * 0.5f;
+        float farHalfH  = farC * tanHalfFovY;
+        float farHalfW  = farC * tanHalfFovX;
+        float radius    = std::sqrt(farHalfW * farHalfW + farHalfH * farHalfH + halfDepth * halfDepth);
         radius = std::ceil(radius * 16.0f) / 16.0f;
 
         // Texel snapping: snap center to shadow texel grid to eliminate edge crawling
