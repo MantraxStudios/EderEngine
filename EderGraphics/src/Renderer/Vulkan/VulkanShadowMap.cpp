@@ -163,14 +163,15 @@ void VulkanShadowMap::TransitionToShaderRead(vk::CommandBuffer cmd)
 
 void VulkanShadowMap::ComputeCascades(
     const glm::mat4& camView,
-    const glm::mat4& camProj,
     const glm::vec3& lightDir,
     float nearPlane, float farPlane,
     glm::mat4 outMatrices[NUM_CASCADES],
     glm::vec4& outSplits) const
 {
-    // Practical split scheme (log + linear blend)
-    float lambda = 0.85f;
+    // Practical split scheme (log + linear blend).
+    // lambda=0.70 gives larger near cascades (~8 units) vs 0.85 (~4 units),
+    // reducing the visible circular seam when the camera moves or rotates.
+    float lambda = 0.70f;
     float splits[NUM_CASCADES + 1];
     splits[0] = nearPlane;
     for (int i = 1; i <= (int)NUM_CASCADES; i++)
@@ -182,17 +183,10 @@ void VulkanShadowMap::ComputeCascades(
     }
     outSplits = glm::vec4(splits[1], splits[2], splits[3], splits[4]);
 
-    // Extract camera world-space basis from the view matrix inverse.
-    // Used to build cascade corners analytically — no dependency on camera.farPlane.
-    glm::mat4 invView  = glm::inverse(camView);
-    glm::vec3 camPos   = glm::vec3(invView[3]);
-    glm::vec3 camFwd   = -glm::normalize(glm::vec3(invView[2]));  // -Z = forward
-    glm::vec3 camRight =  glm::normalize(glm::vec3(invView[0]));
-    glm::vec3 camUp    =  glm::normalize(glm::vec3(invView[1]));
-
-    // Half-FOV tangents — constant per camera setup.
-    float tanHalfFovY = 1.0f / std::abs(camProj[1][1]);
-    float tanHalfFovX = 1.0f / std::abs(camProj[0][0]);
+    // Camera world position — only position matters, not orientation.
+    // Each cascade is a sphere of radius splits[c+1] centered at camPos,
+    // so shadows are cast in all directions regardless of where the camera looks.
+    glm::vec3 camPos = glm::vec3(glm::inverse(camView)[3]);
 
     glm::vec3 up = (std::abs(lightDir.y) < 0.99f)
         ? glm::vec3(0.0f, 1.0f, 0.0f)
@@ -200,55 +194,33 @@ void VulkanShadowMap::ComputeCascades(
 
     for (int c = 0; c < (int)NUM_CASCADES; c++)
     {
-        float nearC = splits[c];
-        float farC  = splits[c + 1];
-
-        // Build the 8 corners of this cascade slice analytically from the splits.
-        // This avoids the tNear/tFar interpolation bug that occurred when
-        // farPlane(shadowDist) != camera.farPlane, which caused tFar=1 and the
-        // cascade corners landing at the actual camera far plane instead of shadowDist.
-        float nH = nearC * tanHalfFovY,  nW = nearC * tanHalfFovX;
-        float fH = farC  * tanHalfFovY,  fW = farC  * tanHalfFovX;
-        glm::vec3 nc = camPos + camFwd * nearC;
-        glm::vec3 fc = camPos + camFwd * farC;
-        glm::vec3 corners[8] = {
-            nc + camUp * nH - camRight * nW,
-            nc + camUp * nH + camRight * nW,
-            nc - camUp * nH - camRight * nW,
-            nc - camUp * nH + camRight * nW,
-            fc + camUp * fH - camRight * fW,
-            fc + camUp * fH + camRight * fW,
-            fc - camUp * fH - camRight * fW,
-            fc - camUp * fH + camRight * fW,
-        };
-
-        // Center = centroid of 8 corners = camPos + camFwd * midDist (symmetric cancel).
-        glm::vec3 center(0.0f);
-        for (int i = 0; i < 8; i++) center += corners[i];
-        center /= 8.0f;
-
-        // Stable radius: bounding sphere of the cascade slice from its center to the
-        // far corners. Depends only on FOV and split depths — constant with rotation.
-        float halfDepth = (farC - nearC) * 0.5f;
-        float radius    = std::sqrt(fW*fW + fH*fH + halfDepth*halfDepth);
+        // Radius = far edge of this cascade in world units (sphere around camera).
+        float radius = splits[c + 1];
         radius = std::ceil(radius * 16.0f) / 16.0f;
 
-        // Texel snapping: snap center to shadow texel grid to eliminate edge crawling
-        float texelSize = (radius * 2.0f) / float(mapSize);
+        // Extend shadow frustum XY to 1.5× the cascade sphere radius.
+        // Shadow casters outside the receiver sphere (e.g. a wall at 10 m when cascade-0
+        // only covers ±8 m) are missing from the shadow map, making the floor near the
+        // camera appear fully lit — the "circle of light" artifact.
+        // Extending to 1.5× captures those casters with a modest precision trade-off.
+        float extRadius = radius * 1.5f;
 
-        // Build a temporary view along light direction to snap in light space
+        // Texel snapping: snap camPos to the shadow texel grid to eliminate
+        // shadow edge crawling when the camera translates.
+        float texelSize = (extRadius * 2.0f) / float(mapSize);
+
         glm::mat4 tmpView = glm::lookAt(glm::vec3(0.0f), lightDir, up);
-        glm::vec4 cLS     = tmpView * glm::vec4(center, 1.0f);
+        glm::vec4 cLS     = tmpView * glm::vec4(camPos, 1.0f);
         cLS.x = std::floor(cLS.x / texelSize) * texelSize;
         cLS.y = std::floor(cLS.y / texelSize) * texelSize;
         glm::vec3 centerSnapped = glm::vec3(glm::inverse(tmpView) * cLS);
 
         glm::mat4 lightView = glm::lookAt(
-            centerSnapped - lightDir * (radius + 1.0f),
+            centerSnapped - lightDir * (extRadius + 1.0f),
             centerSnapped, up);
         glm::mat4 lightProj = glm::ortho(
-            -radius, radius, -radius, radius,
-            0.0f, radius * 2.0f + 1.0f);
+            -extRadius, extRadius, -extRadius, extRadius,
+            0.0f, extRadius * 2.0f + 1.0f);
         lightProj[1][1] *= -1.0f;  // Vulkan Y-flip
 
         outMatrices[c] = lightProj * lightView;

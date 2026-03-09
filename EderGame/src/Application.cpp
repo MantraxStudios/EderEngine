@@ -968,11 +968,16 @@ void Application::UpdateLightBuffer()
 
     m_lights.ClearLights();
 
-    int spotSlot = 0, pointSlot = 0;
+    // Collect all lights, then sort point/spot by distance to camera so the
+    // closest ones fill the GPU buffer first when the limit is exceeded.
+    glm::vec3 camPos = m_camera.GetPosition();
+
+    struct LightEntry { Entity e; float distSq; };
+    std::vector<LightEntry> pointEntries, spotEntries;
+
     m_registry.Each<LightComponent>([&](Entity e, LightComponent& l)
     {
         if (!m_registry.Has<TransformComponent>(e)) return;
-        const auto& tr = m_registry.Get<TransformComponent>(e);
 
         if (l.type == LightType::Directional)
         {
@@ -997,60 +1002,87 @@ void Application::UpdateLightBuffer()
         }
         else if (l.type == LightType::Point)
         {
-            PointLight pl{};
-            pl.position  = glm::vec3(TransformSystem::GetWorldMatrix(e, m_registry)[3]);
-            pl.color     = l.color;
-            pl.intensity = l.intensity;
-            pl.radius    = l.range;
-
-            if (l.castShadow && pointSlot < 1)
-            {
-                pl.shadowIdx     = 0;
-                m_hasPointShadow = true;
-                m_activePointPos = pl.position;
-                m_activePointFar = l.range;
-                m_lights.SetPointFarPlane(0, l.range);
-                ++pointSlot;
-            }
-            else { pl.shadowIdx = -1; }
-
-            m_lights.AddPoint(pl);
+            glm::vec3 pos = glm::vec3(TransformSystem::GetWorldMatrix(e, m_registry)[3]);
+            glm::vec3 d   = pos - camPos;
+            pointEntries.push_back({ e, glm::dot(d, d) });
         }
         else if (l.type == LightType::Spot)
         {
             glm::mat4 mat = TransformSystem::GetWorldMatrix(e, m_registry);
-            glm::vec3 dir = glm::normalize(glm::vec3(mat * glm::vec4(0, -1, 0, 0)));
-
-            SpotLight sl{};
-            sl.position  = glm::vec3(mat[3]);
-            sl.direction = dir;
-            sl.innerCos  = std::cos(glm::radians(l.innerConeAngle));
-            sl.outerCos  = std::cos(glm::radians(l.outerConeAngle));
-            sl.color     = l.color;
-            sl.intensity = l.intensity;
-            sl.radius    = l.range;
-
-            if (l.castShadow && spotSlot < 1)
-            {
-                sl.shadowIdx         = 0;
-                m_hasSpotShadow      = true;
-                m_activeSpotPos      = sl.position;
-                m_activeSpotDir      = dir;
-                m_activeSpotOuterCos = sl.outerCos;
-                m_activeSpotFar      = l.range;
-                m_activeSpotMatrix   = VulkanSpotShadowMap::ComputeMatrix(
-                    m_activeSpotPos, m_activeSpotDir, m_activeSpotOuterCos, 0.3f, m_activeSpotFar);
-                m_lights.SetSpotMatrix(0, m_activeSpotMatrix);
-                ++spotSlot;
-            }
-            else { sl.shadowIdx = -1; }
-
-            m_lights.AddSpot(sl);
+            glm::vec3 pos = glm::vec3(mat[3]);
+            glm::vec3 d   = pos - camPos;
+            spotEntries.push_back({ e, glm::dot(d, d) });
         }
     });
 
+    // Sort closest-first so nearby lights always occupy the limited GPU slots.
+    std::sort(pointEntries.begin(), pointEntries.end(),
+              [](const LightEntry& a, const LightEntry& b){ return a.distSq < b.distSq; });
+    std::sort(spotEntries.begin(), spotEntries.end(),
+              [](const LightEntry& a, const LightEntry& b){ return a.distSq < b.distSq; });
+
+    int pointSlot = 0;
+    for (auto& entry : pointEntries)
+    {
+        Entity e        = entry.e;
+        auto&  l        = m_registry.Get<LightComponent>(e);
+        PointLight pl{};
+        pl.position  = glm::vec3(TransformSystem::GetWorldMatrix(e, m_registry)[3]);
+        pl.color     = l.color;
+        pl.intensity = l.intensity;
+        pl.radius    = l.range;
+
+        if (l.castShadow && pointSlot < 1)
+        {
+            pl.shadowIdx     = 0;
+            m_hasPointShadow = true;
+            m_activePointPos = pl.position;
+            m_activePointFar = l.range;
+            m_lights.SetPointFarPlane(0, l.range);
+            ++pointSlot;
+        }
+        else { pl.shadowIdx = -1; }
+
+        m_lights.AddPoint(pl);
+    }
+
+    int spotSlot = 0;
+    for (auto& entry : spotEntries)
+    {
+        Entity e   = entry.e;
+        auto&  l   = m_registry.Get<LightComponent>(e);
+        glm::mat4 mat = TransformSystem::GetWorldMatrix(e, m_registry);
+        glm::vec3 dir = glm::normalize(glm::vec3(mat * glm::vec4(0, -1, 0, 0)));
+
+        SpotLight sl{};
+        sl.position  = glm::vec3(mat[3]);
+        sl.direction = dir;
+        sl.innerCos  = std::cos(glm::radians(l.innerConeAngle));
+        sl.outerCos  = std::cos(glm::radians(l.outerConeAngle));
+        sl.color     = l.color;
+        sl.intensity = l.intensity;
+        sl.radius    = l.range;
+
+        if (l.castShadow && spotSlot < 1)
+        {
+            sl.shadowIdx         = 0;
+            m_hasSpotShadow      = true;
+            m_activeSpotPos      = sl.position;
+            m_activeSpotDir      = dir;
+            m_activeSpotOuterCos = sl.outerCos;
+            m_activeSpotFar      = l.range;
+            m_activeSpotMatrix   = VulkanSpotShadowMap::ComputeMatrix(
+                m_activeSpotPos, m_activeSpotDir, m_activeSpotOuterCos, 0.3f, m_activeSpotFar);
+            m_lights.SetSpotMatrix(0, m_activeSpotMatrix);
+            ++spotSlot;
+        }
+        else { sl.shadowIdx = -1; }
+
+        m_lights.AddSpot(sl);
+    }
+
     m_shadowMap.ComputeCascades(
-        m_camera.GetView(), m_camera.GetProjection(aspect),
+        m_camera.GetView(),
         m_activeDirDir, m_camera.nearPlane, m_activeDirShadowDist,
         m_cascadeMatrices, m_cascadeSplits);
 
@@ -1314,10 +1346,13 @@ void Application::SyncECSToScene()
         }
     });
 
-    // ── Sync per-submesh local transforms ────────────────────────────────────
+    // ── Sync per-submesh local transforms (and entity-backed sub-meshes) ─────
     m_registry.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
     {
-        if (mr.subMeshTransforms.empty()) return;
+        bool hasEntityIds  = !mr.subMeshEntityIds.empty();
+        bool hasTransforms = !mr.subMeshTransforms.empty();
+        if (!hasEntityIds && !hasTransforms) return;
+
         SceneObject* obj = nullptr;
         for (auto& o : m_scene.GetObjects())
             if (o.entityId == e) { obj = &o; break; }
@@ -1325,16 +1360,34 @@ void Application::SyncECSToScene()
 
         uint32_t smCount = obj->mesh->GetSubmeshCount();
         obj->subMeshLocalTransforms.resize(smCount, glm::mat4(1.0f));
-        for (uint32_t si = 0; si < smCount && si < (uint32_t)mr.subMeshTransforms.size(); si++)
+
+        // Compute parent world matrix fresh so entity-backed offsets are frame-accurate.
+        glm::mat4 parentWorld = m_registry.Has<TransformComponent>(e)
+            ? TransformSystem::GetWorldMatrix(e, m_registry) : glm::mat4(1.0f);
+        glm::mat4 parentInv = glm::inverse(parentWorld);
+
+        for (uint32_t si = 0; si < smCount; si++)
         {
-            const auto& t = mr.subMeshTransforms[si];
-            glm::mat4 T = glm::translate(glm::mat4(1.0f), t.position);
-            glm::mat4 R = glm::eulerAngleYXZ(
-                glm::radians(t.rotEulerDeg.y),
-                glm::radians(t.rotEulerDeg.x),
-                glm::radians(t.rotEulerDeg.z));
-            glm::mat4 S = glm::scale(glm::mat4(1.0f), t.scale);
-            obj->subMeshLocalTransforms[si] = T * R * S;
+            // Entity-backed sub-mesh: use that entity's world transform directly.
+            if (si < (uint32_t)mr.subMeshEntityIds.size() && mr.subMeshEntityIds[si] != 0
+                && m_registry.Has<TransformComponent>(mr.subMeshEntityIds[si]))
+            {
+                glm::mat4 entWorld = TransformSystem::GetWorldMatrix(mr.subMeshEntityIds[si], m_registry);
+                obj->subMeshLocalTransforms[si] = parentInv * entWorld;
+                continue;
+            }
+            // Fallback: manual SubMeshTransform offset.
+            if (si < (uint32_t)mr.subMeshTransforms.size())
+            {
+                const auto& t = mr.subMeshTransforms[si];
+                glm::mat4 T = glm::translate(glm::mat4(1.0f), t.position);
+                glm::mat4 R = glm::eulerAngleYXZ(
+                    glm::radians(t.rotEulerDeg.y),
+                    glm::radians(t.rotEulerDeg.x),
+                    glm::radians(t.rotEulerDeg.z));
+                glm::mat4 S = glm::scale(glm::mat4(1.0f), t.scale);
+                obj->subMeshLocalTransforms[si] = T * R * S;
+            }
         }
     });
 
@@ -1505,12 +1558,22 @@ void Application::UpdateAnimations(float dt)
 
 void Application::RenderShadowPasses(vk::CommandBuffer cmd)
 {
+    auto bindBonesFnShadow = [this, &cmd](uint32_t entityId)
+    {
+        auto it = m_entityBoneSSBO.find(entityId);
+        if (it != m_entityBoneSSBO.end() && it->second)
+            it->second->BindToSet(cmd, *m_shadowPipeline.GetLayout(), 0);
+        else
+            m_boneSSBO.BindToSet(cmd, *m_shadowPipeline.GetLayout(), 0);
+    };
+
     for (uint32_t c = 0; c < VulkanShadowMap::NUM_CASCADES; ++c)
     {
         m_shadowMap.BeginRendering(cmd, c);
         m_shadowPipeline.Bind(cmd);
         m_boneSSBO.BindToSet(cmd, *m_shadowPipeline.GetLayout(), 0);
         m_scene.DrawShadow(cmd, m_shadowPipeline, m_cascadeMatrices[c]);
+        m_scene.DrawSkinnedShadow(cmd, m_shadowPipeline, m_cascadeMatrices[c], bindBonesFnShadow);
         m_shadowMap.EndRendering(cmd);
     }
     m_shadowMap.TransitionToShaderRead(cmd);
@@ -1521,6 +1584,7 @@ void Application::RenderShadowPasses(vk::CommandBuffer cmd)
         m_shadowPipeline.Bind(cmd);
         m_boneSSBO.BindToSet(cmd, *m_shadowPipeline.GetLayout(), 0);
         m_scene.DrawShadow(cmd, m_shadowPipeline, m_activeSpotMatrix);
+        m_scene.DrawSkinnedShadow(cmd, m_shadowPipeline, m_activeSpotMatrix, bindBonesFnShadow);
         m_spotShadowMap.EndRendering(cmd);
     }
     m_spotShadowMap.TransitionToShaderRead(cmd);
@@ -1530,6 +1594,15 @@ void Application::RenderShadowPasses(vk::CommandBuffer cmd)
         auto faceMats = VulkanPointShadowMap::ComputeFaceMatrices(
             m_activePointPos, 0.1f, m_activePointFar);
 
+        auto bindBonesFnPoint = [this, &cmd](uint32_t entityId)
+        {
+            auto it = m_entityBoneSSBO.find(entityId);
+            if (it != m_entityBoneSSBO.end() && it->second)
+                it->second->BindToSet(cmd, m_pointShadowPipeline.GetLayout(), 0);
+            else
+                m_boneSSBO.BindToSet(cmd, m_pointShadowPipeline.GetLayout(), 0);
+        };
+
         for (uint32_t face = 0; face < 6; ++face)
         {
             m_pointShadowMap.BeginRendering(cmd, 0, face);
@@ -1537,6 +1610,8 @@ void Application::RenderShadowPasses(vk::CommandBuffer cmd)
             m_boneSSBO.BindToSet(cmd, m_pointShadowPipeline.GetLayout(), 0);
             m_scene.DrawShadowPoint(cmd, m_pointShadowPipeline,
                 faceMats[face], m_activePointPos, m_activePointFar);
+            m_scene.DrawSkinnedShadowPoint(cmd, m_pointShadowPipeline,
+                faceMats[face], m_activePointPos, m_activePointFar, bindBonesFnPoint);
             m_pointShadowMap.EndRendering(cmd);
         }
     }

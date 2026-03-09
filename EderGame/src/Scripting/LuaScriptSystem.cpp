@@ -1523,7 +1523,6 @@ void LuaScriptSystem::BindAPI()
             s_reg->Get<CameraComponent>((Entity)e).farPlane = v;
     };
 
-    // ── CharacterController table ────────────────────────────────────────────────
     // Capsule-based kinematic character controller.
     // Call CharacterController.move(e, dx, dy, dz) every frame to move an entity.
     sol::table CC = m_lua.create_named_table("CharacterController");

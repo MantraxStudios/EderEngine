@@ -206,11 +206,12 @@ void Scene::DrawShadow(vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeli
     vk::PipelineLayout layout = *shadowPipeline.GetLayout();
     cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &lightViewProj);
 
-    // --- Opaque single-material objects (instanced) ---
+    // --- Opaque single-material, non-skinned objects (instanced) ---
     std::map<VulkanMesh*, std::vector<glm::mat4>> groups;
     for (auto& obj : objects)
     {
         if (!obj.mesh || !obj.material) continue;
+        if (obj.isSkinned) continue;                        // skinned drawn separately via DrawSkinnedShadow
         if (obj.material->IsTransparent()) continue;        // alpha-blend casts no shadow
         if (!obj.subMeshMaterials.empty()) continue;        // handled below per-submesh
         groups[obj.mesh].push_back(obj.worldMatrix);
@@ -234,12 +235,13 @@ void Scene::DrawShadow(vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeli
         }
     }
 
-    // --- Multi-material objects: draw only opaque submeshes (separate buffer from main pass) ---
+    // --- Multi-material objects: draw only opaque, non-skinned submeshes ---
     {
         std::vector<SceneObject*> mmObjs;
         for (auto& obj : objects)
         {
             if (!obj.mesh || obj.subMeshMaterials.empty()) continue;
+            if (obj.isSkinned) continue;                        // skinned drawn via DrawSkinnedShadow
             mmObjs.push_back(&obj);
         }
 
@@ -290,11 +292,12 @@ void Scene::DrawShadowPoint(vk::CommandBuffer cmd, VulkanPointShadowPipeline& pi
         vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
         0, static_cast<uint32_t>(sizeof(PushData)), &push);
 
-    // --- Opaque single-material objects (instanced) ---
+    // --- Opaque single-material, non-skinned objects (instanced) ---
     std::map<VulkanMesh*, std::vector<glm::mat4>> groups;
     for (auto& obj : objects)
     {
         if (!obj.mesh || !obj.material) continue;
+        if (obj.isSkinned) continue;                    // skinned drawn via DrawSkinnedShadowPoint
         if (obj.material->IsTransparent()) continue;
         if (!obj.subMeshMaterials.empty()) continue;
         groups[obj.mesh].push_back(obj.worldMatrix);
@@ -324,6 +327,7 @@ void Scene::DrawShadowPoint(vk::CommandBuffer cmd, VulkanPointShadowPipeline& pi
         for (auto& obj : objects)
         {
             if (!obj.mesh || obj.subMeshMaterials.empty()) continue;
+            if (obj.isSkinned) continue;                        // skinned drawn via DrawSkinnedShadowPoint
             mmObjs.push_back(&obj);
         }
 
@@ -361,6 +365,70 @@ void Scene::DrawShadowPoint(vk::CommandBuffer cmd, VulkanPointShadowPipeline& pi
     }
 }
 
+void Scene::DrawSkinnedShadow(vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeline,
+                               const glm::mat4& lightViewProj,
+                               const std::function<void(uint32_t)>& bindBonesFn)
+{
+    vk::PipelineLayout layout = *shadowPipeline.GetLayout();
+    cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &lightViewProj);
+
+    std::vector<SceneObject*> skinnedObjs;
+    for (auto& obj : objects)
+    {
+        if (!obj.mesh || !obj.isSkinned) continue;
+        if (obj.material && obj.material->IsTransparent()) continue;
+        skinnedObjs.push_back(&obj);
+    }
+    if (skinnedObjs.empty()) return;
+
+    std::vector<glm::mat4> transforms;
+    transforms.reserve(skinnedObjs.size());
+    for (auto* obj : skinnedObjs) transforms.push_back(obj->worldMatrix);
+    skinnedShadowInstanceBuffer.Upload(transforms);
+    skinnedShadowInstanceBuffer.Bind(cmd);
+
+    for (uint32_t i = 0; i < static_cast<uint32_t>(skinnedObjs.size()); ++i)
+    {
+        bindBonesFn(skinnedObjs[i]->entityId);
+        skinnedObjs[i]->mesh->DrawInstanced(cmd, i, 1);
+    }
+}
+
+void Scene::DrawSkinnedShadowPoint(vk::CommandBuffer cmd, VulkanPointShadowPipeline& pipeline,
+                                    const glm::mat4& lightViewProj, const glm::vec3& lightPos, float farPlane,
+                                    const std::function<void(uint32_t)>& bindBonesFn)
+{
+    vk::PipelineLayout layout = pipeline.GetLayout();
+
+    struct PushData { glm::mat4 viewProj; glm::vec4 lightPosAndFar; } push;
+    push.viewProj       = lightViewProj;
+    push.lightPosAndFar = glm::vec4(lightPos, farPlane);
+    cmd.pushConstants(layout,
+        vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
+        0, static_cast<uint32_t>(sizeof(PushData)), &push);
+
+    std::vector<SceneObject*> skinnedObjs;
+    for (auto& obj : objects)
+    {
+        if (!obj.mesh || !obj.isSkinned) continue;
+        if (obj.material && obj.material->IsTransparent()) continue;
+        skinnedObjs.push_back(&obj);
+    }
+    if (skinnedObjs.empty()) return;
+
+    std::vector<glm::mat4> transforms;
+    transforms.reserve(skinnedObjs.size());
+    for (auto* obj : skinnedObjs) transforms.push_back(obj->worldMatrix);
+    skinnedShadowInstanceBuffer.Upload(transforms);
+    skinnedShadowInstanceBuffer.Bind(cmd);
+
+    for (uint32_t i = 0; i < static_cast<uint32_t>(skinnedObjs.size()); ++i)
+    {
+        bindBonesFn(skinnedObjs[i]->entityId);
+        skinnedObjs[i]->mesh->DrawInstanced(cmd, i, 1);
+    }
+}
+
 void Scene::Clear()
 {
     objects.clear();
@@ -372,6 +440,7 @@ void Scene::Destroy()
     shadowInstanceBuffer.Destroy();
     transparentInstanceBuffer.Destroy();
     skinnedInstanceBuffer.Destroy();
+    skinnedShadowInstanceBuffer.Destroy();
     subMeshInstanceBuffer.Destroy();
     shadowSubMeshInstanceBuffer.Destroy();
     pointShadowSubMeshInstanceBuffer.Destroy();

@@ -22,9 +22,14 @@ public:
     void         DrawSkinned     (vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights,
                                   const std::function<void(uint32_t entityId)>& bindBonesFn);
     void         DrawTransparent (vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights);
-    void         DrawShadow      (vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeline, const glm::mat4& lightViewProj);
-    void         DrawShadowPoint (vk::CommandBuffer cmd, VulkanPointShadowPipeline& pipeline,
-                                  const glm::mat4& lightViewProj, const glm::vec3& lightPos, float farPlane);
+    void         DrawShadow            (vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeline, const glm::mat4& lightViewProj);
+    void         DrawSkinnedShadow     (vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeline, const glm::mat4& lightViewProj,
+                                        const std::function<void(uint32_t entityId)>& bindBonesFn);
+    void         DrawShadowPoint       (vk::CommandBuffer cmd, VulkanPointShadowPipeline& pipeline,
+                                        const glm::mat4& lightViewProj, const glm::vec3& lightPos, float farPlane);
+    void         DrawSkinnedShadowPoint(vk::CommandBuffer cmd, VulkanPointShadowPipeline& pipeline,
+                                        const glm::mat4& lightViewProj, const glm::vec3& lightPos, float farPlane,
+                                        const std::function<void(uint32_t entityId)>& bindBonesFn);
     void         Clear  ();
     void         Destroy();
 
@@ -35,7 +40,8 @@ private:
     VulkanInstanceBuffer     instanceBuffer;
     VulkanInstanceBuffer     shadowInstanceBuffer;
     VulkanInstanceBuffer     transparentInstanceBuffer;
-    VulkanInstanceBuffer     skinnedInstanceBuffer;           // per-object skinned draws
+    VulkanInstanceBuffer     skinnedInstanceBuffer;           // per-object skinned draws (main pass)
+    VulkanInstanceBuffer     skinnedShadowInstanceBuffer;     // per-object skinned draws (shadow passes)
     VulkanInstanceBuffer     subMeshInstanceBuffer;           // per-submesh multi-material (main pass)
     VulkanInstanceBuffer     shadowSubMeshInstanceBuffer;     // per-submesh multi-material (dir shadow)
     VulkanInstanceBuffer     pointShadowSubMeshInstanceBuffer;// per-submesh multi-material (point/spot shadow)

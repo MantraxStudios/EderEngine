@@ -148,6 +148,32 @@ public:
                     }
                     f << "\n";
                 }
+                if (!m.subMeshTransforms.empty())
+                {
+                    f << "mesh.submesh.xfcount=" << m.subMeshTransforms.size() << "\n";
+                    for (size_t si = 0; si < m.subMeshTransforms.size(); ++si)
+                    {
+                        const auto& st = m.subMeshTransforms[si];
+                        f << "mesh.submesh.t" << si << ".pos="   << Vec3Str(st.position)    << "\n";
+                        f << "mesh.submesh.t" << si << ".rot="   << Vec3Str(st.rotEulerDeg) << "\n";
+                        f << "mesh.submesh.t" << si << ".scale=" << Vec3Str(st.scale)       << "\n";
+                    }
+                }
+                // Per-submesh entity IDs (non-zero only)
+                {
+                    bool hasAny = false;
+                    for (auto id : m.subMeshEntityIds) if (id) { hasAny = true; break; }
+                    if (hasAny)
+                    {
+                        f << "mesh.submesh.entityids=";
+                        for (size_t si = 0; si < m.subMeshEntityIds.size(); ++si)
+                        {
+                            if (si > 0) f << ' ';
+                            f << m.subMeshEntityIds[si];
+                        }
+                        f << "\n";
+                    }
+                }
             }
 
             // ── LightComponent ────────────────────────────────────────────────
@@ -510,6 +536,26 @@ private:
                             pos = sep + 1;
                         }
                     }
+                }
+                if (kv.count("mesh.submesh.xfcount"))
+                {
+                    int tCount = std::stoi(kv.at("mesh.submesh.xfcount"));
+                    m.subMeshTransforms.resize(tCount);
+                    for (int si = 0; si < tCount; ++si)
+                    {
+                        auto& st = m.subMeshTransforms[si];
+                        std::string px = "mesh.submesh.t" + std::to_string(si);
+                        if (kv.count(px + ".pos"))   st.position    = ParseVec3(kv.at(px + ".pos"));
+                        if (kv.count(px + ".rot"))   st.rotEulerDeg = ParseVec3(kv.at(px + ".rot"));
+                        if (kv.count(px + ".scale")) st.scale       = ParseVec3(kv.at(px + ".scale"));
+                    }
+                }
+                if (kv.count("mesh.submesh.entityids"))
+                {
+                    std::istringstream es(kv.at("mesh.submesh.entityids"));
+                    std::string tok;
+                    while (es >> tok)
+                        try { m.subMeshEntityIds.push_back((uint32_t)std::stoul(tok)); } catch (...) {}
                 }
             }
 

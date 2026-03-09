@@ -31,7 +31,12 @@
       "Bash(cmake --build . --config Release)",
       "Bash(cmake --build . --config Debug)",
       "Bash(glslc \"shaders/triangle.frag\" -o \"shaders/triangle.frag.spv\")",
-      "WebSearch"
+      "WebSearch",
+      "Bash(cmd /c compile_shaders.bat)",
+      "Bash(xargs grep -l \"SetCascadeData\\\\|SetNearPlane\")",
+      "Bash(cmake --build . --config Release --target EderGraphics)",
+      "Bash(cmake --build EderGraphics/build)",
+      "Bash(cmake --build EderGame/build)"
     ]
   }
 }

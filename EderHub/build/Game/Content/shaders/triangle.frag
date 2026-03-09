@@ -106,8 +106,7 @@ float SampleCascade(vec3 worldPos, vec3 N, vec3 L, int cascade)
         uv.y  < 0.0 || uv.y  > 1.0)
         return 1.0;
 
-    // Slope-scaled depth bias: texel-aligned, uses same NdotL as normal-offset above.
-    float slopeBias  = 0.0001 * cascadeBiasScale[cascade];
+    float slopeBias  = 0.0005 * cascadeBiasScale[cascade];
     float slopeScale = clamp(sinAngle, 0.0, 1.0);
     float recvZ      = proj.z - slopeBias * (1.0 + slopeScale * 3.0);
 
@@ -120,31 +119,46 @@ float SampleCascade(vec3 worldPos, vec3 N, vec3 L, int cascade)
         vec2 o = VogelDisk(i, PCF_N, phi) * fR;
         shadow += (recvZ < texture(shadowMap, vec3(uv + o, float(cascade))).r) ? 1.0 : 0.0;
     }
-    return shadow / float(PCF_N);
+    shadow /= float(PCF_N);
+    return shadow;
 }
 
 float ShadowFactor(vec3 worldPos, vec3 N, vec3 L)
 {
-    float depth   = dot(worldPos - lights.cameraPos, lights.cameraForward);
-    // Objects at depth < nearPlane have no valid cascade coverage.
-    // Cascade 0 is built for the frustum slice starting at nearPlane; objects
-    // closer than that project into cascade 0 at Z values that compare falsely
-    // against shadow map data from a completely different world region
-    // (e.g. sky when the camera looks up) → false self-shadowing.
-    if (depth < lights.nearPlane) return 1.0;
+    // Use world-space distance from camera for cascade selection.
+    // The cascade light matrices are sphere-based (centered at camera, radius = cascadeSplit),
+    // so selection must use world distance — not view-depth — to avoid phantom shadows
+    // when the camera rotates (objects at grazing angles have near-zero view-depth but
+    // full world-distance, causing them to jump cascades as the camera moves).
+    float dist = length(worldPos - lights.cameraPos);
+    if (dist < lights.nearPlane) return 1.0;
 
     int   cascade = 3;
     for (int i = 0; i < 4; i++)
-        if (depth < lights.cascadeSplits[i]) { cascade = i; break; }
+        if (dist < lights.cascadeSplits[i]) { cascade = i; break; }
 
     float shadow = SampleCascade(worldPos, N, L, cascade);
 
     if (cascade < 3)
     {
         float far   = lights.cascadeSplits[cascade];
-        float blend = clamp((depth - far * 0.90) / (far * 0.10), 0.0, 1.0);
+        float blend = clamp((dist - far * 0.30) / (far * 0.70), 0.0, 1.0);
         if (blend > 0.0)
             shadow = mix(shadow, SampleCascade(worldPos, N, L, cascade + 1), blend);
+    }
+    else
+    {
+        // For cascade 3 only: fade out PCF samples that land near the UV edge.
+        vec4 lsPos3 = lights.cascadeMatrices[3] * vec4(worldPos, 1.0);
+        vec2 uv3    = lsPos3.xy / lsPos3.w * 0.5 + 0.5;
+        float edgeDist = min(min(uv3.x, 1.0 - uv3.x), min(uv3.y, 1.0 - uv3.y));
+        shadow = mix(1.0, shadow, clamp(edgeDist * 10.0, 0.0, 1.0));
+
+        // Fade toward FULLY LIT (1.0) over the last 25% of cascade-3's range.
+        float maxDist   = lights.cascadeSplits[3];
+        float fadeStart = maxDist * 0.75;
+        float fade = 1.0 - clamp((dist - fadeStart) / (maxDist - fadeStart), 0.0, 1.0);
+        shadow = mix(1.0, shadow, fade);
     }
     return shadow;
 }

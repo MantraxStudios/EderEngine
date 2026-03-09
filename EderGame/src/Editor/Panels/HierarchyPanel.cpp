@@ -18,40 +18,83 @@
 #include <cstdio>
 #include <cstring>
 
+// Copy all non-hierarchy components from src to dst.
+static void CopyComponents(Entity src, Entity dst, Registry& reg)
+{
+    if (reg.Has<TagComponent>(src))
+    {
+        auto tag = reg.Get<TagComponent>(src);
+        tag.name += " (copy)";
+        reg.Add<TagComponent>(dst) = tag;
+    }
+    if (reg.Has<TransformComponent>(src))
+        reg.Add<TransformComponent>(dst) = reg.Get<TransformComponent>(src);
+    if (reg.Has<MeshRendererComponent>(src))
+        reg.Add<MeshRendererComponent>(dst) = reg.Get<MeshRendererComponent>(src);
+    if (reg.Has<LightComponent>(src))
+        reg.Add<LightComponent>(dst) = reg.Get<LightComponent>(src);
+    if (reg.Has<AnimationComponent>(src))
+        reg.Add<AnimationComponent>(dst) = reg.Get<AnimationComponent>(src);
+    if (reg.Has<CameraComponent>(src))
+        reg.Add<CameraComponent>(dst) = reg.Get<CameraComponent>(src);
+    if (reg.Has<ScriptComponent>(src))
+        reg.Add<ScriptComponent>(dst) = reg.Get<ScriptComponent>(src);
+    if (reg.Has<RigidbodyComponent>(src))
+        reg.Add<RigidbodyComponent>(dst) = reg.Get<RigidbodyComponent>(src);
+    if (reg.Has<ColliderComponent>(src))
+        reg.Add<ColliderComponent>(dst) = reg.Get<ColliderComponent>(src);
+    if (reg.Has<CharacterControllerComponent>(src))
+        reg.Add<CharacterControllerComponent>(dst) = reg.Get<CharacterControllerComponent>(src);
+    if (reg.Has<AudioSourceComponent>(src))
+        reg.Add<AudioSourceComponent>(dst) = reg.Get<AudioSourceComponent>(src);
+    if (reg.Has<VolumetricFogComponent>(src))
+        reg.Add<VolumetricFogComponent>(dst) = reg.Get<VolumetricFogComponent>(src);
+    if (reg.Has<LayerComponent>(src))
+        reg.Add<LayerComponent>(dst) = reg.Get<LayerComponent>(src);
+}
+
+// Recursively duplicate entity e and all its descendants.
+// newParent = the already-duplicated parent to attach to (NULL_ENTITY for roots).
+// Returns the copy of e.
+static Entity DuplicateBranch(Entity e, Entity newParent, Registry& reg)
+{
+    Entity copy = reg.Create();
+    CopyComponents(e, copy, reg);
+
+    // Wire up hierarchy: attach copy to its new parent WITHOUT calling Attach()
+    // (which would recalculate local transforms). We preserve local transforms as-is.
+    if (newParent != NULL_ENTITY)
+    {
+        if (!reg.Has<HierarchyComponent>(copy))
+            reg.Add<HierarchyComponent>(copy);
+        reg.Get<HierarchyComponent>(copy).parent = newParent;
+
+        if (!reg.Has<HierarchyComponent>(newParent))
+            reg.Add<HierarchyComponent>(newParent);
+        reg.Get<HierarchyComponent>(newParent).children.push_back(copy);
+    }
+
+    // Recurse into children
+    if (reg.Has<HierarchyComponent>(e))
+    {
+        for (Entity child : reg.Get<HierarchyComponent>(e).children)
+            DuplicateBranch(child, copy, reg);
+    }
+
+    return copy;
+}
+
 void HierarchyPanel::DuplicateSelected()
 {
     if (!registry || selected == NULL_ENTITY) return;
-    Entity e    = selected;
-    Entity copy = registry->Create();
-    if (registry->Has<TagComponent>(e))
-    {
-        auto tag  = registry->Get<TagComponent>(e);
-        registry->Add<TagComponent>(copy) = tag;
-    }
-    if (registry->Has<TransformComponent>(e))
-        registry->Add<TransformComponent>(copy) = registry->Get<TransformComponent>(e);
-    if (registry->Has<MeshRendererComponent>(e))
-        registry->Add<MeshRendererComponent>(copy) = registry->Get<MeshRendererComponent>(e);
-    if (registry->Has<LightComponent>(e))
-        registry->Add<LightComponent>(copy) = registry->Get<LightComponent>(e);
-    if (registry->Has<AnimationComponent>(e))
-        registry->Add<AnimationComponent>(copy) = registry->Get<AnimationComponent>(e);
-    if (registry->Has<CameraComponent>(e))
-        registry->Add<CameraComponent>(copy) = registry->Get<CameraComponent>(e);
-    if (registry->Has<ScriptComponent>(e))
-        registry->Add<ScriptComponent>(copy) = registry->Get<ScriptComponent>(e);
-    if (registry->Has<RigidbodyComponent>(e))
-        registry->Add<RigidbodyComponent>(copy) = registry->Get<RigidbodyComponent>(e);
-    if (registry->Has<ColliderComponent>(e))
-        registry->Add<ColliderComponent>(copy) = registry->Get<ColliderComponent>(e);
-    if (registry->Has<CharacterControllerComponent>(e))
-        registry->Add<CharacterControllerComponent>(copy) = registry->Get<CharacterControllerComponent>(e);
-    if (registry->Has<AudioSourceComponent>(e))
-        registry->Add<AudioSourceComponent>(copy) = registry->Get<AudioSourceComponent>(e);
-    if (registry->Has<VolumetricFogComponent>(e))
-        registry->Add<VolumetricFogComponent>(copy) = registry->Get<VolumetricFogComponent>(e);
-    if (registry->Has<LayerComponent>(e))
-        registry->Add<LayerComponent>(copy) = registry->Get<LayerComponent>(e);
+    Entity e = selected;
+
+    // The duplicate root gets the same parent as the original
+    Entity origParent = NULL_ENTITY;
+    if (registry->Has<HierarchyComponent>(e))
+        origParent = registry->Get<HierarchyComponent>(e).parent;
+
+    Entity copy = DuplicateBranch(e, origParent, *registry);
     selected = copy;
 }
 

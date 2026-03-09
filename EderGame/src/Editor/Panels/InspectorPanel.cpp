@@ -463,6 +463,85 @@ void InspectorPanel::DrawMeshRendererComponent()
                     }
                     ImGui::PopID();
                 }
+
+                // ── Per-submesh entities / local transforms ───────────────
+                ImGui::Spacing();
+                ImGui::TextDisabled("-- Sub-mesh Entities --");
+                if (m.subMeshTransforms.size() < smCount)
+                    m.subMeshTransforms.resize(smCount);
+                if (m.subMeshEntityIds.size() < smCount)
+                    m.subMeshEntityIds.resize(smCount, 0);
+
+                for (uint32_t si = 0; si < smCount; ++si)
+                {
+                    ImGui::PushID((int)si + 10000);
+                    std::string smHint2 = m_getMeshSubmeshName
+                        ? m_getMeshSubmeshName(m.meshGuid, si) : "";
+                    char smLabel[128];
+                    if (!smHint2.empty())
+                        snprintf(smLabel, sizeof(smLabel), "Slot %u (%s)", si, smHint2.c_str());
+                    else
+                        snprintf(smLabel, sizeof(smLabel), "Slot %u", si);
+
+                    if (ImGui::TreeNodeEx(smLabel, 0))
+                    {
+                        uint32_t linkedId = m.subMeshEntityIds[si];
+                        bool hasEntity = linkedId != 0
+                            && registry && registry->Has<TransformComponent>(linkedId);
+
+                        if (hasEntity)
+                        {
+                            // Show linked entity name.
+                            const char* entName = "Entity";
+                            if (registry->Has<TagComponent>(linkedId))
+                                entName = registry->Get<TagComponent>(linkedId).name.c_str();
+                            ImGui::TextColored({0.4f,0.9f,0.4f,1.f}, "Entity: %s [%u]", entName, linkedId);
+                            ImGui::SameLine();
+                            if (ImGui::SmallButton("Unlink"))
+                                m.subMeshEntityIds[si] = 0;
+                        }
+                        else
+                        {
+                            // No entity — show manual transform + create button.
+                            auto& st = m.subMeshTransforms[si];
+                            ImGui::DragFloat3("Position", &st.position.x,    0.01f);
+                            ImGui::DragFloat3("Rotation", &st.rotEulerDeg.x, 0.5f);
+                            ImGui::DragFloat3("Scale",    &st.scale.x,       0.01f, 0.001f, 1000.0f);
+                            if (ImGui::SmallButton("Reset")) st = SubMeshTransform{};
+                            ImGui::SameLine();
+                            if (ImGui::SmallButton("Create Entity") && registry)
+                            {
+                                // Create a child entity that drives this sub-mesh.
+                                Entity newE = registry->Create();
+
+                                auto& tag = registry->Add<TagComponent>(newE);
+                                char tagName[64];
+                                if (!smHint2.empty())
+                                    snprintf(tagName, sizeof(tagName), "%s", smHint2.c_str());
+                                else
+                                    snprintf(tagName, sizeof(tagName), "SubMesh %u", si);
+                                tag.name = tagName;
+
+                                auto& tc = registry->Add<TransformComponent>(newE);
+                                tc.position = st.position;
+                                tc.rotation = st.rotEulerDeg;  // same YXZ euler convention
+                                tc.scale    = st.scale;
+
+                                // Wire HierarchyComponent to parent.
+                                auto& hc = registry->Add<HierarchyComponent>(newE);
+                                hc.parent = selected;
+                                if (registry->Has<HierarchyComponent>(selected))
+                                    registry->Get<HierarchyComponent>(selected).children.push_back(newE);
+                                else
+                                    registry->Add<HierarchyComponent>(selected).children.push_back(newE);
+
+                                m.subMeshEntityIds[si] = newE;
+                            }
+                        }
+                        ImGui::TreePop();
+                    }
+                    ImGui::PopID();
+                }
             }
         }
         ImGui::Spacing();

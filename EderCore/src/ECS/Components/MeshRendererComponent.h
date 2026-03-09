@@ -29,4 +29,9 @@ struct MeshRendererComponent
     // Per-submesh local transform offsets (runtime only, set via scripting).
     // Empty = no local offsets (all submeshes follow the parent worldMatrix).
     std::vector<SubMeshTransform> subMeshTransforms;
+
+    // Per-submesh ECS entity (0 = none, uses subMeshTransforms instead).
+    // When set, the sub-mesh world transform comes from that entity's TransformComponent
+    // so it can carry full ECS components: physics, scripts, colliders, etc.
+    std::vector<uint32_t> subMeshEntityIds;
 };

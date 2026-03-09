@@ -21,7 +21,6 @@ public:
 
     void ComputeCascades(
         const glm::mat4& camView,
-        const glm::mat4& camProj,
         const glm::vec3& lightDir,
         float nearPlane, float farPlane,
         glm::mat4 outMatrices[NUM_CASCADES],

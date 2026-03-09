@@ -566,7 +566,7 @@ void PlayerApp::UpdateLightBuffer()
     });
 
     m_shadowMap.ComputeCascades(
-        m_camera.GetView(), m_camera.GetProjection(aspect),
+        m_camera.GetView(),
         m_activeDirDir, m_camera.nearPlane, m_activeDirShadowDist,
         m_cascadeMatrices, m_cascadeSplits);
 
@@ -817,10 +817,13 @@ void PlayerApp::SyncECSToScene()
         }
     });
 
-    // ── Sync per-submesh local transforms ────────────────────────────────────
+    // ── Sync per-submesh local transforms (and entity-backed sub-meshes) ─────
     m_registry.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
     {
-        if (mr.subMeshTransforms.empty()) return;
+        bool hasEntityIds  = !mr.subMeshEntityIds.empty();
+        bool hasTransforms = !mr.subMeshTransforms.empty();
+        if (!hasEntityIds && !hasTransforms) return;
+
         SceneObject* obj = nullptr;
         for (auto& o : m_scene.GetObjects())
             if (o.entityId == e) { obj = &o; break; }
@@ -828,16 +831,31 @@ void PlayerApp::SyncECSToScene()
 
         uint32_t smCount = obj->mesh->GetSubmeshCount();
         obj->subMeshLocalTransforms.resize(smCount, glm::mat4(1.0f));
-        for (uint32_t si = 0; si < smCount && si < (uint32_t)mr.subMeshTransforms.size(); si++)
+
+        glm::mat4 parentWorld = m_registry.Has<TransformComponent>(e)
+            ? TransformSystem::GetWorldMatrix(e, m_registry) : glm::mat4(1.0f);
+        glm::mat4 parentInv = glm::inverse(parentWorld);
+
+        for (uint32_t si = 0; si < smCount; si++)
         {
-            const auto& t = mr.subMeshTransforms[si];
-            glm::mat4 T = glm::translate(glm::mat4(1.0f), t.position);
-            glm::mat4 R = glm::eulerAngleYXZ(
-                glm::radians(t.rotEulerDeg.y),
-                glm::radians(t.rotEulerDeg.x),
-                glm::radians(t.rotEulerDeg.z));
-            glm::mat4 S = glm::scale(glm::mat4(1.0f), t.scale);
-            obj->subMeshLocalTransforms[si] = T * R * S;
+            if (si < (uint32_t)mr.subMeshEntityIds.size() && mr.subMeshEntityIds[si] != 0
+                && m_registry.Has<TransformComponent>(mr.subMeshEntityIds[si]))
+            {
+                glm::mat4 entWorld = TransformSystem::GetWorldMatrix(mr.subMeshEntityIds[si], m_registry);
+                obj->subMeshLocalTransforms[si] = parentInv * entWorld;
+                continue;
+            }
+            if (si < (uint32_t)mr.subMeshTransforms.size())
+            {
+                const auto& t = mr.subMeshTransforms[si];
+                glm::mat4 T = glm::translate(glm::mat4(1.0f), t.position);
+                glm::mat4 R = glm::eulerAngleYXZ(
+                    glm::radians(t.rotEulerDeg.y),
+                    glm::radians(t.rotEulerDeg.x),
+                    glm::radians(t.rotEulerDeg.z));
+                glm::mat4 S = glm::scale(glm::mat4(1.0f), t.scale);
+                obj->subMeshLocalTransforms[si] = T * R * S;
+            }
         }
     });
 
@@ -1002,12 +1020,22 @@ void PlayerApp::UpdateAnimations(float dt)
 
 void PlayerApp::RenderShadowPasses(vk::CommandBuffer cmd)
 {
+    auto bindBonesFnShadow = [this, &cmd](uint32_t entityId)
+    {
+        auto it = m_entityBoneSSBO.find(entityId);
+        if (it != m_entityBoneSSBO.end() && it->second)
+            it->second->BindToSet(cmd, *m_shadowPipeline.GetLayout(), 0);
+        else
+            m_boneSSBO.BindToSet(cmd, *m_shadowPipeline.GetLayout(), 0);
+    };
+
     for (uint32_t c = 0; c < VulkanShadowMap::NUM_CASCADES; ++c)
     {
         m_shadowMap.BeginRendering(cmd, c);
         m_shadowPipeline.Bind(cmd);
         m_boneSSBO.BindToSet(cmd, *m_shadowPipeline.GetLayout(), 0);
         m_scene.DrawShadow(cmd, m_shadowPipeline, m_cascadeMatrices[c]);
+        m_scene.DrawSkinnedShadow(cmd, m_shadowPipeline, m_cascadeMatrices[c], bindBonesFnShadow);
         m_shadowMap.EndRendering(cmd);
     }
     m_shadowMap.TransitionToShaderRead(cmd);
@@ -1018,6 +1046,7 @@ void PlayerApp::RenderShadowPasses(vk::CommandBuffer cmd)
         m_shadowPipeline.Bind(cmd);
         m_boneSSBO.BindToSet(cmd, *m_shadowPipeline.GetLayout(), 0);
         m_scene.DrawShadow(cmd, m_shadowPipeline, m_activeSpotMatrix);
+        m_scene.DrawSkinnedShadow(cmd, m_shadowPipeline, m_activeSpotMatrix, bindBonesFnShadow);
         m_spotShadowMap.EndRendering(cmd);
     }
     m_spotShadowMap.TransitionToShaderRead(cmd);
@@ -1026,6 +1055,16 @@ void PlayerApp::RenderShadowPasses(vk::CommandBuffer cmd)
     {
         auto faceMats = VulkanPointShadowMap::ComputeFaceMatrices(
             m_activePointPos, 0.1f, m_activePointFar);
+
+        auto bindBonesFnPoint = [this, &cmd](uint32_t entityId)
+        {
+            auto it = m_entityBoneSSBO.find(entityId);
+            if (it != m_entityBoneSSBO.end() && it->second)
+                it->second->BindToSet(cmd, m_pointShadowPipeline.GetLayout(), 0);
+            else
+                m_boneSSBO.BindToSet(cmd, m_pointShadowPipeline.GetLayout(), 0);
+        };
+
         for (uint32_t face = 0; face < 6; ++face)
         {
             m_pointShadowMap.BeginRendering(cmd, 0, face);
@@ -1033,6 +1072,8 @@ void PlayerApp::RenderShadowPasses(vk::CommandBuffer cmd)
             m_boneSSBO.BindToSet(cmd, m_pointShadowPipeline.GetLayout(), 0);
             m_scene.DrawShadowPoint(cmd, m_pointShadowPipeline,
                 faceMats[face], m_activePointPos, m_activePointFar);
+            m_scene.DrawSkinnedShadowPoint(cmd, m_pointShadowPipeline,
+                faceMats[face], m_activePointPos, m_activePointFar, bindBonesFnPoint);
             m_pointShadowMap.EndRendering(cmd);
         }
     }

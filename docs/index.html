@@ -824,11 +824,72 @@ code {
           <tr><td><code>MeshRenderer.setCastShadow(e, bool)</code></td><td></td><td></td></tr>
           <tr><td><code>MeshRenderer.getMaterialName(e)</code></td><td><span class="ret-badge">string</span></td><td></td></tr>
           <tr><td><code>MeshRenderer.setMaterialName(e, name)</code></td><td></td><td>Switch material at runtime</td></tr>
-          <tr><td><code>MeshRenderer.getSubMeshCount(e)</code></td><td><span class="ret-badge">int</span></td><td>Number of sub-mesh material slots</td></tr>
+          <tr><td><code>MeshRenderer.getSubMeshCount(e)</code></td><td><span class="ret-badge">int</span></td><td>Number of sub-meshes in the loaded mesh asset</td></tr>
           <tr><td><code>MeshRenderer.getMaterialByIndex(e, idx)</code></td><td><span class="ret-badge">string</span></td><td>idx=0 → base material; idx≥1 → sub-mesh slot</td></tr>
           <tr><td><code>MeshRenderer.setMaterialByIndex(e, idx, name)</code></td><td></td><td>Override material at slot (idx=0 = base)</td></tr>
         </tbody>
       </table>
+
+      <h3>Sub-mesh access</h3>
+      <p>Multi-part meshes (e.g. FBX with several materials) expose each piece as a sub-mesh.
+         You can query, move and rotate individual pieces at runtime — perfect for doors, mechanical parts, etc.
+         Sub-mesh transforms are applied on top of the entity's world transform and are saved in the scene file.</p>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>MeshRenderer.getSubmeshName(e, idx)</code></td><td><span class="ret-badge">string</span></td><td>Assimp material name for sub-mesh at <code>idx</code></td></tr>
+          <tr><td><code>MeshRenderer.getSubmeshIndexByName(e, name)</code></td><td><span class="ret-badge">int</span></td><td>0-based index of the named sub-mesh, or <code>-1</code> if not found</td></tr>
+          <tr><td><code>MeshRenderer.setSubmeshPosition(e, idx, x, y, z)</code></td><td></td><td>Local-space position offset for sub-mesh <code>idx</code></td></tr>
+          <tr><td><code>MeshRenderer.setSubmeshRotation(e, idx, x, y, z)</code></td><td></td><td>Local-space rotation (XYZ Euler degrees) for sub-mesh <code>idx</code></td></tr>
+          <tr><td><code>MeshRenderer.setSubmeshScale(e, idx, x, y, z)</code></td><td></td><td>Local-space scale for sub-mesh <code>idx</code></td></tr>
+          <tr><td><code>MeshRenderer.getSubmeshPosition(e, idx)</code></td><td><span class="ret-badge">{x,y,z}</span></td><td>Returns current local position offset or <code>nil</code></td></tr>
+          <tr><td><code>MeshRenderer.getSubmeshRotation(e, idx)</code></td><td><span class="ret-badge">{x,y,z}</span></td><td>Returns current local rotation (degrees) or <code>nil</code></td></tr>
+          <tr><td><code>MeshRenderer.getSubmeshScale(e, idx)</code></td><td><span class="ret-badge">{x,y,z}</span></td><td>Returns current local scale or <code>nil</code></td></tr>
+          <tr><td><code>MeshRenderer.resetSubmeshTransform(e, idx)</code></td><td></td><td>Resets position/rotation/scale of sub-mesh <code>idx</code> to identity</td></tr>
+        </tbody>
+      </table>
+
+      <h4>Example — animated door</h4>
+      <pre><code>-- find the door panel sub-mesh by name
+local doorIdx = MeshRenderer.getSubmeshIndexByName(this_entity, "Door_Panel")
+
+function OnUpdate(dt)
+    -- rotate the door panel around Y
+    local r = MeshRenderer.getSubmeshRotation(this_entity, doorIdx)
+    MeshRenderer.setSubmeshRotation(this_entity, doorIdx, r.x, r.y + 45 * dt, r.z)
+end</code></pre>
+
+      <h3>Sub-mesh Entities</h3>
+      <p>Each sub-mesh slot can be promoted to a full <strong>ECS entity</strong> — meaning it can carry any component:
+         <em>Rigidbody, Collider, Script, AudioSource, etc.</em>
+         This is ideal for destructible objects, articulated machines, or any part that needs independent physics or scripting.</p>
+
+      <h4>How it works</h4>
+      <ul>
+        <li>In the Inspector, open a <strong>MeshRenderer</strong> and expand <em>Sub-mesh Entities</em>.</li>
+        <li>Click <strong>Create Entity</strong> on any slot — a new child entity is created, inherits the slot's current transform offset, and becomes visible in the Hierarchy.</li>
+        <li>Add any components to that child entity normally (Rigidbody, Collider, Script…).</li>
+        <li>At runtime the sub-mesh world transform is driven by the linked entity's <code>TransformComponent</code>, so physics / scripts move the geometry directly.</li>
+        <li>Click <strong>Unlink</strong> to detach the entity from the slot without deleting it; the slot falls back to the manual position/rotation/scale offsets.</li>
+      </ul>
+
+      <h4>Serialization</h4>
+      <p>Entity IDs are saved in the scene file under <code>mesh.submesh.entityids</code> (space-separated).
+         Because the scene serializer preserves entity IDs on load, cross-references are always valid after a reload.
+         The linked entities are serialized as ordinary entities — they carry all their components just like any other entity in the scene.</p>
+
+      <h4>Example — physics door hinge</h4>
+      <pre><code>-- Assume the door panel sub-mesh entity was created in the Editor
+-- and a HingeConstraint script was added to it.
+-- No Lua changes needed — physics drives the transform automatically.
+
+-- You can still query the sub-mesh transform at runtime:
+local doorIdx = MeshRenderer.getSubmeshIndexByName(this_entity, "Door_Panel")
+local pos = MeshRenderer.getSubmeshPosition(this_entity, doorIdx)
+print("door pos:", pos.x, pos.y, pos.z)
+
+-- Or override it from script (overrides entity-backed transform too):
+MeshRenderer.setSubmeshRotation(this_entity, doorIdx, 0, 90, 0)</code></pre>
     </section>
 
     <!-- ════════════════════════ LIGHT ═════════════════════════════════════ -->
@@ -2239,7 +2300,7 @@ const searchIndex = [
   { page:'rigidbody',    tag:'Component', title:'Rigidbody',           sub:'getMass setVelocity getVelocity isKinematic setGravity linearDrag angularDrag mass physics' },
   { page:'collider',     tag:'Component', title:'Collider',            sub:'isTrigger getShape Box Sphere Capsule radius friction restitution center' },
   { page:'hierarchy',    tag:'Component', title:'Hierarchy',           sub:'getParent getChildCount getChild parent children' },
-  { page:'meshrenderer', tag:'Component', title:'MeshRenderer',        sub:'isVisible setVisible castsShadow getMaterialName setMaterialName getSubMeshCount getMaterialByIndex setMaterialByIndex submesh material index mesh render' },
+  { page:'meshrenderer', tag:'Component', title:'MeshRenderer',        sub:'isVisible setVisible castsShadow getMaterialName setMaterialName getSubMeshCount getMaterialByIndex setMaterialByIndex getSubmeshName getSubmeshIndexByName setSubmeshPosition setSubmeshRotation setSubmeshScale getSubmeshPosition getSubmeshRotation getSubmeshScale resetSubmeshTransform submesh material index mesh render door transform' },
   { page:'light',        tag:'Component', title:'Light',               sub:'getType setColor getIntensity setRange getRange Point Spot Directional volumetric sunshafts castShadow volNumSteps volAbsorption volG volMaxDistance volJitter volTint shaftsBloomScale shaftsDecay shaftsWeight shaftsSunRadius shaftsTint' },
   { page:'animation',    tag:'Component', title:'Animation',           sub:'play stop isPlaying setClip getClip setSpeed setLoop getTime setBlendDuration' },
   { page:'volumetricfog',tag:'Component', title:'VolumetricFog',       sub:'isEnabled setDensity getFogStart getFogEnd getColor setColor setHorizonColor setSunScatterColor getHeightFalloff setHeightFalloff getHeightOffset setHeightOffset getScatterStrength setScatterStrength getMaxFogAmount setMaxFogAmount fog' },
