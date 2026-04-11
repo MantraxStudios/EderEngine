@@ -51,7 +51,7 @@ mesh.visible=1
 [entity]
 id=3
 tag.name=Entity
-transform.pos=0.000000 1.508472 0.000000
+transform.pos=-3.137523 -0.049072 0.000000
 transform.rot=-0.000000 0.000000 0.000000
 transform.scale=0.010000 0.010000 0.010000
 mesh.guid=264d75c6f89d75ce

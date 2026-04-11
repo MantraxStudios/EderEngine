@@ -63,6 +63,10 @@ private:
     void OpenNewScript(const std::string& parentRelDir);
     void DrawNewScriptPopup();
 
+    // New-prefab modal
+    void OpenNewPrefab(const std::string& parentRelDir);
+    void DrawNewPrefabPopup();
+
     // ── State ─────────────────────────────────────────────────────
     std::string m_selectedDir;          // relative to workDir (empty = root)
 
@@ -82,6 +86,11 @@ private:
     bool        m_newScriptOpen     = false;
     std::string m_newScriptParent;
     char        m_newScriptBuffer[128] = {};
+
+    // New-prefab state
+    bool        m_newPrefabOpen     = false;
+    std::string m_newPrefabParent;
+    char        m_newPrefabBuffer[128] = {};
 
     // Drag-and-drop
     uint64_t    m_dragGuid          = 0;

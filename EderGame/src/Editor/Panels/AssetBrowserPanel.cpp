@@ -35,6 +35,7 @@ const char* AssetBrowserPanel::IconForType(AssetType t)
         case AssetType::Material: return "[Mat] ";
         case AssetType::Scene:    return "[Scn] ";
         case AssetType::Script:   return "[Lua] ";
+        case AssetType::Prefab:   return "[Pfb] ";
         default:                  return "[?]   ";
     }
 }
@@ -367,6 +368,7 @@ void AssetBrowserPanel::OnDraw()
     DrawRenamePopup();
     DrawNewFolderPopup();
     DrawNewScriptPopup();
+    DrawNewPrefabPopup();
 
     // ── Confirm delete popup ──────────────────────────────────────
     if (m_confirmDeleteOpen)
@@ -549,6 +551,8 @@ void AssetBrowserPanel::DrawContextMenuFolder(const std::string& relDir)
     }
     if (ImGui::MenuItem("New Lua Script"))
         OpenNewScript(relDir);
+    if (ImGui::MenuItem("New Prefab"))
+        OpenNewPrefab(relDir);
     if (!relDir.empty())
     {
         ImGui::Separator();
@@ -684,6 +688,7 @@ void AssetBrowserPanel::DrawContent()
     {
         if (ImGui::MenuItem("New Folder"))      OpenNewFolder(m_selectedDir);
         if (ImGui::MenuItem("New Lua Script"))  OpenNewScript(m_selectedDir);
+        if (ImGui::MenuItem("New Prefab"))      OpenNewPrefab(m_selectedDir);
         if (ImGui::MenuItem("Refresh"))         AssetManager::Get().Refresh();
         ImGui::EndPopup();
     }
@@ -854,10 +859,9 @@ void AssetBrowserPanel::DrawNewScriptPopup()
             if (!name.empty())
             {
                 const std::string wd = WorkDir();
-                std::string relDir   = m_newScriptParent.empty() ? "assets/scripts" : m_newScriptParent;
-                fs::path absDir = fs::path(wd) / relDir;
+                const std::string& relDir = m_newScriptParent;
+                fs::path absDir = relDir.empty() ? fs::path(wd) : (fs::path(wd) / relDir);
                 std::error_code ec;
-                fs::create_directories(absDir, ec);
 
                 // Unique filename
                 std::string stem = name;
@@ -882,6 +886,95 @@ void AssetBrowserPanel::DrawNewScriptPopup()
                     f << "end\n";
                     f.close();
                     AssetManager::Get().Refresh();
+                }
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
+}
+
+void AssetBrowserPanel::OpenNewPrefab(const std::string& parentRelDir)
+{
+    m_newPrefabOpen   = true;
+    m_newPrefabParent = parentRelDir;
+    memset(m_newPrefabBuffer, 0, sizeof(m_newPrefabBuffer));
+    strncpy(m_newPrefabBuffer, "NewActor", sizeof(m_newPrefabBuffer) - 1);
+}
+
+void AssetBrowserPanel::DrawNewPrefabPopup()
+{
+    if (m_newPrefabOpen)
+    {
+        ImGui::OpenPopup("##new_prefab");
+        m_newPrefabOpen = false;
+        ImGui::SetNextWindowPos(ImGui::GetMainViewport()->GetCenter(),
+                                ImGuiCond_Appearing, ImVec2(0.5f, 0.5f));
+    }
+
+    if (ImGui::BeginPopupModal("##new_prefab", nullptr,
+            ImGuiWindowFlags_AlwaysAutoResize | ImGuiWindowFlags_NoTitleBar))
+    {
+        ImGui::Text("New Prefab (Actor)");
+        ImGui::Separator();
+        ImGui::SetNextItemWidth(260);
+        bool confirm = ImGui::InputText("##npfb_input", m_newPrefabBuffer,
+                                        sizeof(m_newPrefabBuffer),
+                                        ImGuiInputTextFlags_EnterReturnsTrue);
+        ImGui::SetItemDefaultFocus();
+        ImGui::Spacing();
+
+        if (ImGui::Button("Create", ImVec2(120, 0)) || confirm)
+        {
+            const std::string name(m_newPrefabBuffer);
+            if (!name.empty())
+            {
+                const std::string wd = WorkDir();
+                const std::string& relDir = m_newPrefabParent;
+                fs::path absDir = relDir.empty() ? fs::path(wd) : (fs::path(wd) / relDir);
+                std::error_code ec;
+
+                // Unique filename
+                std::string stem = name;
+                fs::path    absFile;
+                int         suffix = 0;
+                do {
+                    absFile = absDir / (stem + ".prefab");
+                    if (!fs::exists(absFile)) break;
+                    stem = name + "_" + std::to_string(++suffix);
+                } while (true);
+
+                // Write minimal prefab: single entity with TagComponent + TransformComponent
+                std::ofstream f(absFile.string(), std::ios::trunc);
+                if (f.is_open())
+                {
+                    f << "version=1\n";
+                    f << "name=" << stem << "\n";
+                    f << "prefab=1\n\n";
+                    f << "[entity]\n";
+                    f << "id=1\n";
+                    f << "tag.name=" << stem << "\n";
+                    f << "transform.pos=0 0 0\n";
+                    f << "transform.rot=0 0 0\n";
+                    f << "transform.scale=1 1 1\n";
+                    f.close();
+
+                    AssetManager::Get().Refresh();
+
+                    // Auto-open in prefab editor
+                    fs::path rel = fs::relative(absFile, fs::path(wd), ec);
+                    std::string relStr = rel.string();
+                    std::replace(relStr.begin(), relStr.end(), '\\', '/');
+                    std::transform(relStr.begin(), relStr.end(), relStr.begin(),
+                                   [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+
+                    const AssetMeta* meta = AssetManager::Get().Find(relStr);
+                    if (meta && m_onSelect)
+                        m_onSelect(meta->guid, *meta);
                 }
             }
             ImGui::CloseCurrentPopup();

@@ -44,6 +44,8 @@
 #include "ECS/Components/ScriptComponent.h"
 #include "ECS/Components/CharacterControllerComponent.h"
 #include "ECS/Components/AudioSourceComponent.h"
+#include "ECS/Components/PlayerStartComponent.h"
+#include "ECS/Components/PlayerComponent.h"
 
 #include <fstream>
 #include <sstream>
@@ -301,6 +303,17 @@ public:
                 f << "audio.spatial="     << (au.spatial     ? 1 : 0) << "\n";
                 f << "audio.muted="       << (au.muted       ? 1 : 0) << "\n";
             }
+
+            // ── PlayerStartComponent ─────────────────────────────────────────
+            if (reg.Has<PlayerStartComponent>(e))
+            {
+                const auto& ps = reg.Get<PlayerStartComponent>(e);
+                f << "playerstart.prefabPath=" << Escape(ps.prefabPath) << "\n";
+            }
+
+            // ── PlayerComponent ───────────────────────────────────────────────
+            if (reg.Has<PlayerComponent>(e))
+                f << "player.marker=1\n";
 
             f << "[/entity]\n\n";
         }
@@ -682,9 +695,173 @@ private:
                 if (kv.count("fog.scatterStr"))    fog.scatterStrength  = std::stof(kv.at("fog.scatterStr"));
                 if (kv.count("fog.maxFog"))        fog.maxFogAmount     = std::stof(kv.at("fog.maxFog"));
             }
+            // PlayerStartComponent
+            if (kv.count("playerstart.prefabPath"))
+            {
+                auto& ps = reg.Add<PlayerStartComponent>(e);
+                ps.prefabPath = Unescape(kv.at("playerstart.prefabPath"));
+            }
+
+            // PlayerComponent
+            if (kv.count("player.marker"))
+                reg.Add<PlayerComponent>(e);
         }
 
         return true;
+    }
+
+public:
+    // ─────────────────────────────────────────────────────────────────────────
+    //  SavePrefab — serialises the subtree rooted at `root` to a .prefab file.
+    //  Prefabs use the same format as .scene files (no [postprocess] block).
+    // ─────────────────────────────────────────────────────────────────────────
+    static bool SavePrefab(Entity root, Registry& reg, const std::string& path)
+    {
+        namespace fs = std::filesystem;
+        std::ofstream f(path, std::ios::trunc);
+        if (!f.is_open()) return false;
+
+        const std::string name = fs::path(path).stem().string();
+        f << "version=1\n";
+        f << "name=" << Escape(name) << "\n";
+        f << "prefab=1\n\n";
+
+        // Collect the subtree
+        std::vector<Entity> entities;
+        std::function<void(Entity)> collect = [&](Entity e) {
+            entities.push_back(e);
+            if (reg.Has<HierarchyComponent>(e))
+                for (Entity c : reg.Get<HierarchyComponent>(e).children)
+                    collect(c);
+        };
+        collect(root);
+
+        // Temporarily redirect so Save() serializes only the subtree —
+        // we build a minimal Registry containing exactly those entities.
+        // (Reuses the per-entity serialisation code via a temporary Registry)
+        Registry sub;
+        std::unordered_map<Entity, Entity> oldToNew;
+        for (Entity e : entities) {
+            Entity ne = sub.Create();
+            oldToNew[e] = ne;
+        }
+        for (size_t i = 0; i < entities.size(); ++i) {
+            Entity src = entities[i];
+            Entity dst = oldToNew.at(src);
+            // Copy all components
+            if (reg.Has<TagComponent>(src))             sub.Add<TagComponent>(dst)             = reg.Get<TagComponent>(src);
+            if (reg.Has<TransformComponent>(src))       sub.Add<TransformComponent>(dst)       = reg.Get<TransformComponent>(src);
+            if (reg.Has<MeshRendererComponent>(src))    sub.Add<MeshRendererComponent>(dst)    = reg.Get<MeshRendererComponent>(src);
+            if (reg.Has<LightComponent>(src))           sub.Add<LightComponent>(dst)           = reg.Get<LightComponent>(src);
+            if (reg.Has<AnimationComponent>(src))       sub.Add<AnimationComponent>(dst)       = reg.Get<AnimationComponent>(src);
+            if (reg.Has<VolumetricFogComponent>(src))   sub.Add<VolumetricFogComponent>(dst)   = reg.Get<VolumetricFogComponent>(src);
+            if (reg.Has<ColliderComponent>(src))        sub.Add<ColliderComponent>(dst)        = reg.Get<ColliderComponent>(src);
+            if (reg.Has<RigidbodyComponent>(src))       sub.Add<RigidbodyComponent>(dst)       = reg.Get<RigidbodyComponent>(src);
+            if (reg.Has<ScriptComponent>(src))          sub.Add<ScriptComponent>(dst)          = reg.Get<ScriptComponent>(src);
+            if (reg.Has<CharacterControllerComponent>(src)) sub.Add<CharacterControllerComponent>(dst) = reg.Get<CharacterControllerComponent>(src);
+            if (reg.Has<AudioSourceComponent>(src))     sub.Add<AudioSourceComponent>(dst)     = reg.Get<AudioSourceComponent>(src);
+            if (reg.Has<PlayerStartComponent>(src))     sub.Add<PlayerStartComponent>(dst)     = reg.Get<PlayerStartComponent>(src);
+            // Remap hierarchy
+            if (reg.Has<HierarchyComponent>(src)) {
+                const auto& h = reg.Get<HierarchyComponent>(src);
+                auto& hDst = sub.Add<HierarchyComponent>(dst);
+                hDst.parent = (h.parent != NULL_ENTITY && oldToNew.count(h.parent))
+                               ? oldToNew.at(h.parent) : NULL_ENTITY;
+                for (Entity c : h.children)
+                    if (oldToNew.count(c)) hDst.children.push_back(oldToNew.at(c));
+            }
+        }
+        // Serialize the sub-registry (reuse Save logic by iterating sub.GetEntities())
+        for (Entity e : sub.GetEntities()) {
+            f << "[entity]\n";
+            f << "id=" << e << "\n";
+            if (sub.Has<TagComponent>(e))
+                f << "tag.name=" << Escape(sub.Get<TagComponent>(e).name) << "\n";
+            if (sub.Has<TransformComponent>(e)) {
+                const auto& t = sub.Get<TransformComponent>(e);
+                f << "transform.pos="   << Vec3Str(t.position) << "\n";
+                f << "transform.rot="   << Vec3Str(t.rotation) << "\n";
+                f << "transform.scale=" << Vec3Str(t.scale)    << "\n";
+            }
+            if (sub.Has<HierarchyComponent>(e)) {
+                const auto& h = sub.Get<HierarchyComponent>(e);
+                f << "hierarchy.parent=" << h.parent << "\n";
+                f << "hierarchy.children=";
+                for (size_t i = 0; i < h.children.size(); ++i) { if (i) f << ' '; f << h.children[i]; }
+                f << "\n";
+            }
+            if (sub.Has<ScriptComponent>(e)) {
+                const auto& sc = sub.Get<ScriptComponent>(e);
+                char buf[32]; snprintf(buf, sizeof(buf), "%llx", (unsigned long long)sc.scriptGuid);
+                f << "script.guid=" << buf << "\n";
+                f << "script.path=" << Escape(sc.scriptPath) << "\n";
+            }
+            if (sub.Has<CharacterControllerComponent>(e)) {
+                const auto& cc = sub.Get<CharacterControllerComponent>(e);
+                f << "cc.radius="     << cc.radius     << "\n";
+                f << "cc.height="     << cc.height     << "\n";
+                f << "cc.stepOffset=" << cc.stepOffset << "\n";
+                f << "cc.slopeLimit=" << cc.slopeLimit << "\n";
+                f << "cc.skinWidth="  << cc.skinWidth  << "\n";
+                f << "cc.center="     << Vec3Str(cc.center) << "\n";
+            }
+            if (sub.Has<ColliderComponent>(e)) {
+                const auto& c = sub.Get<ColliderComponent>(e);
+                f << "collider.shape="          << static_cast<int>(c.shape)      << "\n";
+                f << "collider.boxHalfExtents=" << Vec3Str(c.boxHalfExtents)      << "\n";
+                f << "collider.radius="         << c.radius                        << "\n";
+                f << "collider.capsuleHalfH="   << c.capsuleHalfHeight            << "\n";
+                f << "collider.center="         << Vec3Str(c.center)              << "\n";
+                f << "collider.isTrigger="      << (c.isTrigger ? 1 : 0)         << "\n";
+            }
+            if (sub.Has<RigidbodyComponent>(e)) {
+                const auto& rb = sub.Get<RigidbodyComponent>(e);
+                f << "rb.mass="        << rb.mass                   << "\n";
+                f << "rb.isKinematic=" << (rb.isKinematic ? 1 : 0) << "\n";
+                f << "rb.useGravity="  << (rb.useGravity  ? 1 : 0) << "\n";
+            }
+            if (sub.Has<MeshRendererComponent>(e)) {
+                const auto& m = sub.Get<MeshRendererComponent>(e);
+                char buf[32];
+                snprintf(buf, sizeof(buf), "%llx", (unsigned long long)m.meshGuid);
+                f << "mesh.guid="    << buf << "\n";
+                f << "mesh.path="    << Escape(m.meshPath) << "\n";
+                snprintf(buf, sizeof(buf), "%llx", (unsigned long long)m.materialGuid);
+                f << "mesh.matGuid=" << buf << "\n";
+                f << "mesh.matName=" << Escape(m.materialName) << "\n";
+                f << "mesh.visible=" << (m.visible ? 1 : 0) << "\n";
+            }
+            if (sub.Has<PlayerStartComponent>(e))
+                f << "playerstart.prefabPath=" << Escape(sub.Get<PlayerStartComponent>(e).prefabPath) << "\n";
+            f << "[/entity]\n\n";
+        }
+        return true;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    //  LoadPrefab — loads a .prefab file into `reg` and returns the root entity.
+    //  The root is the entity with no parent (or NULL_ENTITY on failure).
+    // ─────────────────────────────────────────────────────────────────────────
+    static Entity LoadPrefab(const std::string& path, Registry& reg)
+    {
+        if (!Load(path, reg)) return NULL_ENTITY;
+        for (Entity e : reg.GetEntities()) {
+            bool isRoot = !reg.Has<HierarchyComponent>(e) ||
+                           reg.Get<HierarchyComponent>(e).parent == NULL_ENTITY;
+            if (isRoot) return e;
+        }
+        return reg.GetEntities().empty() ? NULL_ENTITY : reg.GetEntities()[0];
+    }
+
+    static Entity LoadPrefabFromBytes(const std::vector<uint8_t>& bytes, Registry& reg)
+    {
+        if (!LoadFromBytes(bytes, reg)) return NULL_ENTITY;
+        for (Entity e : reg.GetEntities()) {
+            bool isRoot = !reg.Has<HierarchyComponent>(e) ||
+                           reg.Get<HierarchyComponent>(e).parent == NULL_ENTITY;
+            if (isRoot) return e;
+        }
+        return reg.GetEntities().empty() ? NULL_ENTITY : reg.GetEntities()[0];
     }
 
 private:

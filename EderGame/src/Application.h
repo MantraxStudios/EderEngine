@@ -71,7 +71,11 @@ private:
 
     // ── Init helpers ─────────────────────────────────────────────────────────
     void InitMaterials();
-    void InitPostProcess();    void WireEditorCallbacks();
+    void InitPostProcess();
+    void WireEditorCallbacks();
+    // Loads each PlayerStart's prefab as child entities (editor preview).
+    // Runs only in edit mode; idempotent (tracks loaded state per entity+path).
+    void UpdatePlayerStartPreviews();
 
     // ── Scene operations ─────────────────────────────────────────────────
     void NewScene();
@@ -110,10 +114,12 @@ private:
     float       m_mouseDY    = 0.0f;
 
     // ── Core ─────────────────────────────────────────────────────────────────
-    Camera   m_camera;
-    Editor   m_editor;
-    Scene    m_scene;
-    Registry m_registry;
+    Camera    m_camera;
+    Editor    m_editor;
+    Scene     m_scene;
+    Registry  m_registry;
+    // Points to m_registry normally; redirected to the prefab registry while in prefab-edit mode.
+    Registry* m_activeReg = nullptr;
 
     // ── Geometry / materials ─────────────────────────────────────────────────
     VulkanTexture m_albedoTex;
@@ -189,6 +195,9 @@ private:
     std::unordered_map<std::string, uint64_t> m_lastMatTexGuid;
     // Per-entity bone matrices (populated by UpdateAnimations, consumed by DrawSkinned callback)
     std::unordered_map<uint32_t, std::vector<glm::mat4>> m_entityBoneMatrices;
+
+    // ── PlayerStart preview tracking: entity → last loaded prefab path ────────
+    std::unordered_map<uint32_t, std::string> m_playerStartLoaded;
 
     // ── Scene persistence state ───────────────────────────────────────────────
     std::string m_currentScenePath;

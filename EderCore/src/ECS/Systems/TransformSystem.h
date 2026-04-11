@@ -194,6 +194,21 @@ public:
         Detach(e, registry);
     }
 
+    // Destroy an entity and ALL its descendants recursively.
+    // Detaches each node from the hierarchy before destroying it.
+    static void DestroyWithChildren(Entity e, Registry& registry)
+    {
+        if (registry.Has<HierarchyComponent>(e))
+        {
+            // Copy the children list — it will be modified as we destroy
+            auto children = registry.Get<HierarchyComponent>(e).children;
+            for (Entity child : children)
+                DestroyWithChildren(child, registry);
+        }
+        Detach(e, registry);
+        registry.Destroy(e);
+    }
+
     static bool IsDescendant(Entity candidate, Entity ancestor, const Registry& registry)
     {
         Entity cur = candidate;

@@ -7,6 +7,8 @@
 #include "Renderer/Vulkan/VulkanInstance.h"
 #include "Renderer/Vulkan/VulkanSwapchain.h"
 #include <IO/AssetManager.h>
+#include <filesystem>
+#include "ECS/Components/TagComponent.h"
 #include <Events/EventBus.h>
 #include <Events/Events.h>
 #include <cstring>
@@ -199,7 +201,26 @@ void Editor::Init(SDL_Window* window)
                     m_currentSceneName = meta.name;
                 }
             }
+            else if (meta.type == Krayon::AssetType::Prefab)
+            {
+                const std::string absPath =
+                    Krayon::AssetManager::Get().GetWorkDir() + "/" + meta.path;
+                OpenPrefab(absPath);
+            }
         });
+
+    // Wire hierarchy "Save as Prefab" callback
+    hierarchy.SetSavePrefabCallback([this](Entity e) {
+        m_savePrefabEntity    = e;
+        m_savePrefabModalOpen = true;
+        // Default filename from entity tag
+        std::string def = "Prefab";
+        Registry* activeReg = m_prefabMode ? &m_prefabRegistry : m_lastSceneRegistry;
+        if (activeReg && activeReg->Has<TagComponent>(e))
+            def = activeReg->Get<TagComponent>(e).name;
+        std::strncpy(m_savePrefabAsName, def.c_str(), sizeof(m_savePrefabAsName) - 1);
+        m_savePrefabAsName[sizeof(m_savePrefabAsName) - 1] = '\0';
+    });
 }
 
 void Editor::Shutdown()
@@ -234,10 +255,21 @@ void Editor::EndFrame()
 
 void Editor::Draw(Camera& cam, Registry& registry, float dt)
 {
+    m_lastSceneRegistry = &registry;
     stats      .Update(dt);
     cameraPanel.SetCamera(&cam);
-    hierarchy  .SetRegistry(&registry);
-    inspector  .SetRegistry(&registry);
+
+    // In prefab mode, panels target the isolated prefab registry
+    if (m_prefabMode)
+    {
+        hierarchy.SetRegistry(&m_prefabRegistry);
+        inspector.SetRegistry(&m_prefabRegistry);
+    }
+    else
+    {
+        hierarchy.SetRegistry(&registry);
+        inspector.SetRegistry(&registry);
+    }
     inspector  .SetSelected(hierarchy.GetSelected());
 
     HandleSceneShortcuts();
@@ -270,6 +302,8 @@ void Editor::Draw(Camera& cam, Registry& registry, float dt)
     }
     if (showDemo)         ImGui::ShowDemoWindow(&showDemo);
     DrawBuildGameModal();
+    DrawPrefabBanner();
+    DrawSavePrefabModal();
 }
 
 void Editor::Render(VkCommandBuffer cmd)
@@ -309,33 +343,35 @@ bool Editor::WantCaptureKeyboard() const { return ImGui::GetIO().WantCaptureKeyb
 // ──────────────────────────────────────────────────────────────────────────────
 void Editor::HandleSceneShortcuts()
 {
-    const ImGuiIO& io = ImGui::GetIO();
-    if (!io.WantCaptureKeyboard) return;
+    const ImGuiIO& io    = ImGui::GetIO();
+    const bool     ctrl  = io.KeyCtrl;
+    const bool     shift = io.KeyShift;
 
-    const bool ctrl  = io.KeyCtrl;
-    const bool shift = io.KeyShift;
-
-    if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_N, false))
-    {
-        if (m_onNewScene) m_onNewScene();
-    }
+    // ── Global shortcuts (always active, even when viewport has focus) ────────
     if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_S, false))
     {
-        m_saveSceneAsOpen = true;
-        std::strncpy(m_saveSceneAsName, m_currentSceneName.c_str(), sizeof(m_saveSceneAsName) - 1);
-    }
-    if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_D, false))
-    {
-        hierarchy.DuplicateSelected();
+        if (m_onSaveScene) m_onSaveScene();
     }
     if (ctrl && shift && ImGui::IsKeyPressed(ImGuiKey_S, false))
     {
         m_saveSceneAsOpen = true;
         std::strncpy(m_saveSceneAsName, m_currentSceneName.c_str(), sizeof(m_saveSceneAsName) - 1);
     }
+    if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_N, false))
+    {
+        if (m_onNewScene) m_onNewScene();
+    }
     if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_O, false))
     {
         m_openScenePickerOpen = true;
+    }
+
+    // ── Context shortcuts (only when ImGui has keyboard focus) ────────────────
+    if (!io.WantCaptureKeyboard) return;
+
+    if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_D, false))
+    {
+        hierarchy.DuplicateSelected();
     }
 
     // Build
@@ -634,6 +670,25 @@ void Editor::DrawToolbar()
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Toggle Snap");
     }
 
+    // ── Gizmo visibility ─────────────────────────────────────────────────────
+    ImGui::SameLine();
+    ImGui::SeparatorEx(ImGuiSeparatorFlags_Vertical);
+    ImGui::SameLine();
+    {
+        auto VizBtn = [&](const char* label, GizmoVisibility v, const char* tip)
+        {
+            bool active = (gizmoVisibility == v);
+            if (active) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.20f, 0.45f, 0.80f, 1.0f));
+            if (ImGui::Button(label, ImVec2(28, 24))) gizmoVisibility = v;
+            if (active) ImGui::PopStyleColor();
+            if (ImGui::IsItemHovered()) ImGui::SetTooltip("%s", tip);
+            ImGui::SameLine();
+        };
+        VizBtn("GA", GizmoVisibility::All,          "Gizmos: Show All");
+        VizBtn("GS", GizmoVisibility::SelectedOnly, "Gizmos: Selected Only");
+        VizBtn("GN", GizmoVisibility::None,         "Gizmos: Hidden");
+    }
+
     // ── Play / Pause / Stop (center) ─────────────────────────────────────────
     // Total width: Play(60) + Pause(60) + Stop(60) + arrow(20) + 4 gaps(4) = 216
     float centerX = (vp->Size.x - (60.0f + 60.0f + 60.0f + 20.0f + 4.0f * 4.0f)) * 0.5f;
@@ -920,4 +975,106 @@ void Editor::DrawBuildGameModal()
     }
 
     ImGui::EndPopup();
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  Prefab Editor
+// ─────────────────────────────────────────────────────────────────────────────
+
+void Editor::OpenPrefab(const std::string& absPath)
+{
+    m_prefabRegistry.Clear();
+    Krayon::SceneSerializer::Load(absPath, m_prefabRegistry);
+    m_prefabPath = absPath;
+    m_prefabMode = true;
+    hierarchy.SetSelected(NULL_ENTITY);
+}
+
+void Editor::ClosePrefab(bool save)
+{
+    if (save && !m_prefabPath.empty())
+        Krayon::SceneSerializer::Save(m_prefabPath, m_prefabRegistry,
+                                      std::filesystem::path(m_prefabPath).stem().string());
+    m_prefabRegistry.Clear();
+    m_prefabMode = false;
+    m_prefabPath.clear();
+    hierarchy.SetSelected(NULL_ENTITY);
+}
+
+void Editor::DrawPrefabBanner()
+{
+    if (!m_prefabMode) return;
+    namespace fs = std::filesystem;
+    const std::string stem = fs::path(m_prefabPath).filename().string();
+
+    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_Always);
+    ImGui::SetNextWindowSize(ImVec2(ImGui::GetIO().DisplaySize.x, 36), ImGuiCond_Always);
+    ImGui::SetNextWindowBgAlpha(0.92f);
+    ImGuiWindowFlags flags = ImGuiWindowFlags_NoDecoration
+                           | ImGuiWindowFlags_NoMove
+                           | ImGuiWindowFlags_NoSavedSettings
+                           | ImGuiWindowFlags_NoDocking
+                           | ImGuiWindowFlags_NoNav;
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(0.10f, 0.22f, 0.10f, 1.0f));
+    if (ImGui::Begin("##prefab_banner", nullptr, flags))
+    {
+        ImGui::SetCursorPosY(ImGui::GetCursorPosY() + 3.0f);
+        ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "PREFAB:");
+        ImGui::SameLine();
+        ImGui::Text("%s", stem.c_str());
+        ImGui::SameLine(ImGui::GetContentRegionAvail().x - 230);
+        ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0.20f, 0.55f, 0.20f, 1.0f));
+        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.30f, 0.70f, 0.30f, 1.0f));
+        if (ImGui::Button("Save Prefab", ImVec2(110, 0))) ClosePrefab(true);
+        ImGui::PopStyleColor(2);
+        ImGui::SameLine();
+        if (ImGui::Button("<- Back to Scene", ImVec2(115, 0))) ClosePrefab(false);
+    }
+    ImGui::End();
+    ImGui::PopStyleColor();
+}
+
+void Editor::DrawSavePrefabModal()
+{
+    if (!m_savePrefabModalOpen) return;
+    ImGui::OpenPopup("Save as Prefab##modal");
+    m_savePrefabModalOpen = false;
+
+    if (ImGui::BeginPopupModal("Save as Prefab##modal", nullptr, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        ImGui::Text("Prefab name (saved into Content/prefabs/):");
+        ImGui::SetNextItemWidth(320);
+        ImGui::InputText("##pfbname", m_savePrefabAsName, sizeof(m_savePrefabAsName));
+
+        ImGui::Spacing();
+        if (ImGui::Button("Save", ImVec2(120, 0)))
+        {
+            const std::string wd = Krayon::AssetManager::Get().GetWorkDir();
+            Registry* activeReg = m_prefabMode ? &m_prefabRegistry : m_lastSceneRegistry;
+            if (!wd.empty() && m_savePrefabEntity != NULL_ENTITY && activeReg)
+            {
+                namespace fs = std::filesystem;
+                fs::path prefabDir = fs::path(wd) / "prefabs";
+                fs::create_directories(prefabDir);
+                std::string stem = m_savePrefabAsName;
+                if (stem.empty()) stem = "Prefab";
+                fs::path outPath = prefabDir / (stem + ".prefab");
+                Krayon::SceneSerializer::SavePrefab(m_savePrefabEntity, *activeReg, outPath.string());
+                // Register the new .prefab with AssetManager (relative path)
+                std::error_code errc;
+                fs::path relPath = fs::relative(outPath, fs::path(wd), errc);
+                if (!errc) {
+                    std::string relStr = relPath.string();
+                    std::replace(relStr.begin(), relStr.end(), '\\', '/');
+                    Krayon::AssetManager::Get().Register(relStr);
+                }
+            }
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Cancel", ImVec2(120, 0)))
+            ImGui::CloseCurrentPopup();
+
+        ImGui::EndPopup();
+    }
 }

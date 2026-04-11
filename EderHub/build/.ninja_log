@@ -1,10 +1,10 @@
 # ninja log v7
-35	758	7944500308718016	CMakeFiles/EderHub.dir/C_/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui_tables.cpp.obj	4d12cde6457fbcfc
-24	790	7944500308718016	CMakeFiles/EderHub.dir/src/imgui_impl_sdlrenderer3.cpp.obj	e0e1be78020de6bb
-43	823	7944500308874542	CMakeFiles/EderHub.dir/C_/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui_impl_sdl3.cpp.obj	7a8bc8b15dd87af6
-31	894	7944500308718016	CMakeFiles/EderHub.dir/C_/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui_draw.cpp.obj	449f2e89fb6a6e95
-38	1026	7944500308874542	CMakeFiles/EderHub.dir/C_/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui_widgets.cpp.obj	eb5dc2ba4b39dab
-28	1518	7944500308718016	CMakeFiles/EderHub.dir/C_/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui.cpp.obj	d025c6eb455fdf1f
-17	1937	7944500308561552	CMakeFiles/EderHub.dir/src/main.cpp.obj	b5c67b8e19cebaea
-31	2395	7946296456925481	CMakeFiles/EderHub.dir/src/HubApp.cpp.obj	36e8ca5766009cc5
-2396	3027	7946296480576266	EderHub.exe	5bbb50888dbbb3f6
+39	1632	7948612509776086	CMakeFiles/EderHub.dir/C_/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui_tables.cpp.obj	4d12cde6457fbcfc
+35	1829	7948612509736052	CMakeFiles/EderHub.dir/C_/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui_draw.cpp.obj	449f2e89fb6a6e95
+44	1883	7948612509816203	CMakeFiles/EderHub.dir/C_/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui_widgets.cpp.obj	eb5dc2ba4b39dab
+28	2206	7948612509655947	CMakeFiles/EderHub.dir/src/imgui_impl_sdlrenderer3.cpp.obj	e0e1be78020de6bb
+48	2209	7948612509866221	CMakeFiles/EderHub.dir/C_/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui_impl_sdl3.cpp.obj	7a8bc8b15dd87af6
+31	2828	7948612509695992	CMakeFiles/EderHub.dir/C_/Users/tupap/OneDrive/Escritorio/EderEngine/EderGame/vendor/include/imgui/imgui.cpp.obj	d025c6eb455fdf1f
+19	3723	7948612509575846	CMakeFiles/EderHub.dir/src/main.cpp.obj	b5c67b8e19cebaea
+24	4118	7948612509625920	CMakeFiles/EderHub.dir/src/HubApp.cpp.obj	36e8ca5766009cc5
+4119	5339	7948612550558879	EderHub.exe	5bbb50888dbbb3f6

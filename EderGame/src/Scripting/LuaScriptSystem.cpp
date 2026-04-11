@@ -27,14 +27,31 @@ namespace fs = std::filesystem;
 #include "ECS/Components/CameraComponent.h"
 #include "ECS/Components/CharacterControllerComponent.h"
 #include "ECS/Components/AudioSourceComponent.h"
+#include "ECS/Components/PlayerComponent.h"
+#include "ECS/Components/PlayerStartComponent.h"
 #include "Audio/AudioSystem.h"
 #include "ECS/Systems/TransformSystem.h"
 #include "UI/UISystem.h"
 #include <IO/AssetManager.h>
+#include <IO/SceneSerializer.h>
 #include <IO/DebugDraw.h>
 #include "Physics/PhysicsSystem.h"
 #include <SDL3/SDL.h>
 #include <cstring>
+#include <functional>
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Input state — file-scope so BeginFrame() and BindAPI lambdas share it.
+// Snapshotted once per rendered frame in BeginFrame(), NOT per physics sub-step.
+// ─────────────────────────────────────────────────────────────────────────────
+namespace {
+    bool     s_keysPrev[SDL_SCANCODE_COUNT] = {};
+    bool     s_keysCurr[SDL_SCANCODE_COUNT] = {};
+    uint32_t s_mousePrev = 0;
+    uint32_t s_mouseCurr = 0;
+    float    s_mouseX  = 0.f, s_mouseY  = 0.f;
+    float    s_mouseDX = 0.f, s_mouseDY = 0.f;
+}
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Singleton
@@ -64,6 +81,40 @@ void LuaScriptSystem::Init()
     BindAPI();
 
     m_initialized = true;
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// BeginFrame — call once per rendered frame, BEFORE the physics sub-step loop.
+// Snapshots keyboard + mouse state so getKeyDown/getKeyUp fire exactly once
+// per frame regardless of how many physics Update() calls happen.
+// ─────────────────────────────────────────────────────────────────────────────
+void LuaScriptSystem::BeginFrame()
+{
+    if (!m_initialized) return;
+
+    // Shift current → previous
+    std::memcpy(s_keysPrev, s_keysCurr, sizeof(s_keysCurr));
+    s_mousePrev = s_mouseCurr;
+
+    // Keyboard — clear if window has lost focus so no keys get stuck
+    if (SDL_GetKeyboardFocus())
+    {
+        int numKeys = 0;
+        const bool* keys = SDL_GetKeyboardState(&numKeys);
+        int n = (numKeys < SDL_SCANCODE_COUNT) ? numKeys : SDL_SCANCODE_COUNT;
+        std::memcpy(s_keysCurr, keys, static_cast<std::size_t>(n) * sizeof(bool));
+    }
+    else
+    {
+        std::memset(s_keysCurr, 0, sizeof(s_keysCurr));
+    }
+
+    // Mouse buttons + relative delta (SDL accumulates since the last call — call
+    // exactly once per frame so the full frame delta is captured)
+    s_mouseCurr = SDL_GetRelativeMouseState(&s_mouseDX, &s_mouseDY);
+
+    // Absolute cursor position
+    SDL_GetMouseState(&s_mouseX, &s_mouseY);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -97,7 +148,6 @@ void LuaScriptSystem::Update(Registry& registry, float dt)
 
     // Update the registry pointer used by all Lua API bindings this frame
     m_lua["__set_registry"](static_cast<void*>(&registry));
-    m_lua["__update_input"]();
 
     registry.Each<ScriptComponent>([&](Entity e, ScriptComponent& sc)
     {
@@ -496,14 +546,113 @@ void LuaScriptSystem::BindAPI()
         return (int)s_reg->Create();
     };
     Ent["destroy"] = [](int e) {
-        if (s_reg) s_reg->Destroy((Entity)e);
-        LuaScriptSystem::Get().Remove((Entity)e);
+        if (!s_reg) return;
+        // Collect the full subtree before destroying so we can clean up Lua envs
+        std::vector<Entity> toRemove;
+        std::function<void(Entity)> collect = [&](Entity n) {
+            toRemove.push_back(n);
+            if (s_reg->Has<HierarchyComponent>(n))
+                for (Entity c : s_reg->Get<HierarchyComponent>(n).children)
+                    collect(c);
+        };
+        collect((Entity)e);
+        TransformSystem::DestroyWithChildren((Entity)e, *s_reg);
+        for (Entity n : toRemove)
+            LuaScriptSystem::Get().Remove(n);
     };
     Ent["isValid"] = [](int e) -> bool {
         if (!s_reg || e == (int)NULL_ENTITY) return false;
         for (Entity alive : s_reg->GetEntities())
             if (alive == (Entity)e) return true;
         return false;
+    };
+
+    // instantiate(source [, x, y, z]) — deep-clone an entity with all its
+    // children and components. The root copy is placed at (x,y,z) if given,
+    // or keeps the original position. Returns the root clone's entity ID.
+    // Cloned ScriptComponents start fresh (OnStart fires next frame).
+    // CollisionCallbackComponents are NOT copied (set up by the engine at start).
+    // ── Helper: deep-clone from srcReg/src into s_reg (used by instantiate) ──
+    // Defined as a static lambda so both int and string overloads share it.
+    // NOTE: captures nothing; uses s_reg as the destination.
+    static auto CloneIntoSReg = [](Registry& srcReg, Entity src,
+                                   bool hasPos, float ox, float oy, float oz) -> int
+    {
+        if (!s_reg || src == NULL_ENTITY) return (int)NULL_ENTITY;
+
+        std::function<Entity(Entity, Entity)> clone = [&](Entity e, Entity newParent) -> Entity
+        {
+            Entity copy = s_reg->Create();
+            if (srcReg.Has<TagComponent>(e))             s_reg->Add<TagComponent>(copy)             = srcReg.Get<TagComponent>(e);
+            if (srcReg.Has<TransformComponent>(e))       s_reg->Add<TransformComponent>(copy)       = srcReg.Get<TransformComponent>(e);
+            if (srcReg.Has<MeshRendererComponent>(e))    s_reg->Add<MeshRendererComponent>(copy)    = srcReg.Get<MeshRendererComponent>(e);
+            if (srcReg.Has<LightComponent>(e))           s_reg->Add<LightComponent>(copy)           = srcReg.Get<LightComponent>(e);
+            if (srcReg.Has<AnimationComponent>(e))       s_reg->Add<AnimationComponent>(copy)       = srcReg.Get<AnimationComponent>(e);
+            if (srcReg.Has<CameraComponent>(e))          s_reg->Add<CameraComponent>(copy)          = srcReg.Get<CameraComponent>(e);
+            if (srcReg.Has<RigidbodyComponent>(e))       s_reg->Add<RigidbodyComponent>(copy)       = srcReg.Get<RigidbodyComponent>(e);
+            if (srcReg.Has<ColliderComponent>(e))        s_reg->Add<ColliderComponent>(copy)        = srcReg.Get<ColliderComponent>(e);
+            if (srcReg.Has<CharacterControllerComponent>(e)) s_reg->Add<CharacterControllerComponent>(copy) = srcReg.Get<CharacterControllerComponent>(e);
+            if (srcReg.Has<AudioSourceComponent>(e))     s_reg->Add<AudioSourceComponent>(copy)     = srcReg.Get<AudioSourceComponent>(e);
+            if (srcReg.Has<VolumetricFogComponent>(e))   s_reg->Add<VolumetricFogComponent>(copy)   = srcReg.Get<VolumetricFogComponent>(e);
+            if (srcReg.Has<LayerComponent>(e))           s_reg->Add<LayerComponent>(copy)           = srcReg.Get<LayerComponent>(e);
+            if (srcReg.Has<ScriptComponent>(e)) {
+                auto sc = srcReg.Get<ScriptComponent>(e);
+                sc.started = false;
+                s_reg->Add<ScriptComponent>(copy) = sc;
+            }
+            if (newParent != NULL_ENTITY) {
+                auto& hc = s_reg->Add<HierarchyComponent>(copy);
+                hc.parent = newParent;
+                s_reg->Get<HierarchyComponent>(newParent).children.push_back(copy);
+            }
+            if (srcReg.Has<HierarchyComponent>(e)) {
+                if (!s_reg->Has<HierarchyComponent>(copy))
+                    s_reg->Add<HierarchyComponent>(copy);
+                for (Entity child : srcReg.Get<HierarchyComponent>(e).children)
+                    clone(child, copy);
+            }
+            return copy;
+        };
+
+        Entity root = clone(src, NULL_ENTITY);
+        if (hasPos && s_reg->Has<TransformComponent>(root))
+            s_reg->Get<TransformComponent>(root).position = { ox, oy, oz };
+        return (int)root;
+    };
+
+    Ent["instantiate"] = [](sol::object srcArg, sol::variadic_args va) -> int {
+        if (!s_reg) return (int)NULL_ENTITY;
+
+        float ox = 0.f, oy = 0.f, oz = 0.f;
+        bool  hasPos = false;
+
+        if (srcArg.get_type() == sol::type::string)
+        {
+            // Load from .prefab file path
+            std::string path = srcArg.as<std::string>();
+            hasPos = (va.size() >= 3);
+            if (hasPos) { ox = (float)va[0]; oy = (float)va[1]; oz = (float)va[2]; }
+            // Resolve path: try relative to workDir first, then absolute
+            const std::string wd = Krayon::AssetManager::Get().GetWorkDir();
+            std::string absPath = path;
+            if (!wd.empty()) {
+                namespace fs = std::filesystem;
+                fs::path candidate = fs::path(wd) / path;
+                if (fs::exists(candidate)) absPath = candidate.string();
+            }
+            Registry prefabReg;
+            Entity prefabRoot = Krayon::SceneSerializer::LoadPrefab(absPath, prefabReg);
+            if (prefabRoot == NULL_ENTITY) return (int)NULL_ENTITY;
+            return CloneIntoSReg(prefabReg, prefabRoot, hasPos, ox, oy, oz);
+        }
+
+        // Original behaviour: clone existing entity by ID
+        int src = srcArg.as<int>();
+        if (src == (int)NULL_ENTITY) return (int)NULL_ENTITY;
+        hasPos = (va.size() >= 3);
+        if (hasPos) { ox = (float)va[0]; oy = (float)va[1]; oz = (float)va[2]; }
+
+        return CloneIntoSReg(*s_reg, (Entity)src, hasPos, ox, oy, oz);
     };
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1617,30 +1766,9 @@ void LuaScriptSystem::BindAPI()
     };
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Input — keyboard, mouse buttons, mouse motion
-    // Updated once per frame via __update_input() before any OnUpdate call.
+    // Input — keyboard, mouse buttons, mouse motion.
+    // State is snapshotted once per rendered frame by BeginFrame() (not here).
     // ─────────────────────────────────────────────────────────────────────────
-    static bool     s_keysPrev[SDL_SCANCODE_COUNT] = {};
-    static bool     s_keysCurr[SDL_SCANCODE_COUNT] = {};
-    static uint32_t s_mousePrev = 0;
-    static uint32_t s_mouseCurr = 0;
-    static float    s_mouseX    = 0.f, s_mouseY  = 0.f;
-    static float    s_mouseDX   = 0.f, s_mouseDY = 0.f;
-
-    static float s_prevMouseX = 0.f, s_prevMouseY = 0.f;
-
-    m_lua["__update_input"] = []() {
-        std::memcpy(s_keysPrev, s_keysCurr, sizeof(s_keysCurr));
-        s_mousePrev = s_mouseCurr;
-        int numKeys = 0;
-        const bool* keys = SDL_GetKeyboardState(&numKeys);
-        int n = (numKeys < SDL_SCANCODE_COUNT) ? numKeys : SDL_SCANCODE_COUNT;
-        std::memcpy(s_keysCurr, keys, static_cast<std::size_t>(n) * sizeof(bool));
-        s_mouseCurr = SDL_GetRelativeMouseState(&s_mouseDX, &s_mouseDY);
-    };
-
-
-
     sol::table Inp = m_lua.create_named_table("Input");
 
     Inp["MB_RIGHT"]  = 3;
@@ -1777,6 +1905,58 @@ void LuaScriptSystem::BindAPI()
     SceneT["load"] = [this](const std::string& path)
     {
         m_pendingScene = path;
+    };
+
+    // ── Game ──────────────────────────────────────────────────────────────────
+    sol::table GameT = m_lua.create_named_table("Game");
+    GameT["quit"] = [this]()
+    {
+        m_pendingQuit = true;
+    };
+
+    // Game.getPlayer() → entity id of the spawned player, or 0 if none.
+    GameT["getPlayer"] = [this]() -> int {
+        if (!s_reg) return 0;
+        // Return cached if still valid
+        if (m_playerEntity != NULL_ENTITY && s_reg->Has<PlayerComponent>(m_playerEntity))
+            return (int)m_playerEntity;
+        // Full search
+        for (Entity e : s_reg->GetEntities()) {
+            if (s_reg->Has<PlayerComponent>(e)) {
+                m_playerEntity = e;
+                return (int)e;
+            }
+        }
+        return 0;
+    };
+
+    // Game.spawnPlayer(prefabPath [, x, y, z]) → entity id
+    // Loads a .prefab from disk, spawns it into the current scene, marks it
+    // with PlayerComponent and caches it as the player entity.
+    GameT["spawnPlayer"] = [this](const std::string& path, sol::variadic_args va) -> int {
+        if (!s_reg) return 0;
+        bool  hasPos = (va.size() >= 3);
+        float ox = hasPos ? (float)va[0] : 0.f;
+        float oy = hasPos ? (float)va[1] : 0.f;
+        float oz = hasPos ? (float)va[2] : 0.f;
+
+        const std::string wd = Krayon::AssetManager::Get().GetWorkDir();
+        std::string absPath = path;
+        if (!wd.empty()) {
+            namespace fs = std::filesystem;
+            fs::path candidate = fs::path(wd) / path;
+            if (fs::exists(candidate)) absPath = candidate.string();
+        }
+        Registry prefabReg;
+        Entity prefabRoot = Krayon::SceneSerializer::LoadPrefab(absPath, prefabReg);
+        if (prefabRoot == NULL_ENTITY) return 0;
+
+        int root = CloneIntoSReg(prefabReg, prefabRoot, hasPos, ox, oy, oz);
+        if (root != 0) {
+            s_reg->Add<PlayerComponent>((Entity)root);
+            m_playerEntity = (Entity)root;
+        }
+        return root;
     };
 
     // ─────────────────────────────────────────────────────────────────────────

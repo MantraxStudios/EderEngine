@@ -41,6 +41,7 @@ private:
     void DrawCharacterControllerComponent();
     void DrawScriptComponent();
     void DrawAudioSourceComponent();
+    void DrawPlayerStartComponent();
     void DrawAddComponent();
 
     // Returns true (and fills outPath/outGuid) when an asset is dropped.

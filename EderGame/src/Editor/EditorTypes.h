@@ -1,7 +1,8 @@
 #pragma once
 
-enum class PlayState  { Stopped, Playing, Paused };
-enum class GizmoMode  { Translate, Rotate, Scale };
+enum class PlayState       { Stopped, Playing, Paused };
+enum class GizmoMode       { Translate, Rotate, Scale };
+enum class GizmoVisibility { All, SelectedOnly, None  };
 
 // Where EderPlayer renders when you press Play.
 //   Embedded  — child window inside the Viewport panel (like UE "Simulate").

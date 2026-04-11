@@ -35,6 +35,8 @@
 
 // ── Extra components ─────────────────────────────────────────────────────
 #include "ECS/Components/VolumetricFogComponent.h"
+#include "ECS/Components/PlayerStartComponent.h"
+#include "ECS/Components/PlayerComponent.h"
 
 // ── Post-process graph ────────────────────────────────────────────────────
 #include "PostProcess/PostProcessGraph.h"

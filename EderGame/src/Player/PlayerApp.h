@@ -71,6 +71,8 @@ private:
 
     // ── Init helpers ─────────────────────────────────────────────────────────
     void InitMaterials();
+    // Scans the loaded scene for a PlayerStartComponent and spawns its prefab.
+    void AutoSpawnPlayer();
     void InitPostProcess();
     void RebuildPostProcessPasses();
 

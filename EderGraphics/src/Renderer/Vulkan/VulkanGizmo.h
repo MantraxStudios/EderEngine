@@ -19,10 +19,12 @@ public:
 
     // Call between BeginRendering / EndRendering of the target framebuffer.
     // selectedEntity: entity to highlight (0 = none)
+    // onlySelected:   if true, only the selected entity's gizmo is drawn
     void Draw(vk::CommandBuffer cmd,
               const Registry&  registry,
               const glm::mat4& viewProj,
-              uint32_t         selectedEntity = 0);
+              uint32_t         selectedEntity = 0,
+              bool             onlySelected   = false);
 
 private:
     struct Vertex   { float x, y, z; };

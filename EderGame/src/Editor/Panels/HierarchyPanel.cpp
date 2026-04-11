@@ -13,6 +13,8 @@
 #include "ECS/Components/AudioSourceComponent.h"
 #include "ECS/Components/VolumetricFogComponent.h"
 #include "ECS/Components/LayerComponent.h"
+#include "ECS/Components/PlayerStartComponent.h"
+#include "ECS/Components/PlayerComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 #include <imgui/imgui.h>
 #include <cstdio>
@@ -107,7 +109,9 @@ void HierarchyPanel::DrawEntityNode(Entity e)
         : "Entity";
 
     const char* icon;
-    if      (registry->Has<LightComponent>      (e)) icon = "[L] ";
+    if      (registry->Has<PlayerStartComponent>(e))  icon = "[PS]";
+    else if (registry->Has<PlayerComponent>     (e))  icon = "[PC]";
+    else if (registry->Has<LightComponent>      (e))  icon = "[L] ";
     else if (registry->Has<MeshRendererComponent>(e)) icon = "[M] ";
     else                                               icon = "[A] ";
 
@@ -157,6 +161,12 @@ void HierarchyPanel::DrawEntityNode(Entity e)
         {
             selected = e;
             DuplicateSelected();
+        }
+
+        if (ImGui::MenuItem("Save as Prefab..."))
+        {
+            selected = e;
+            if (m_onSavePrefab) m_onSavePrefab(e);
         }
 
         bool hasParent = registry->Has<HierarchyComponent>(e)
@@ -291,8 +301,10 @@ void HierarchyPanel::OnDraw()
 
     if (pendingDestroy != NULL_ENTITY)
     {
-        if (selected == pendingDestroy) selected = NULL_ENTITY;
-        TransformSystem::PrepareDestroy(pendingDestroy, *registry);
-        registry->Destroy(pendingDestroy);
+        // Clear selection if it's the entity being destroyed or any of its descendants
+        if (selected == pendingDestroy ||
+            TransformSystem::IsDescendant(selected, pendingDestroy, *registry))
+            selected = NULL_ENTITY;
+        TransformSystem::DestroyWithChildren(pendingDestroy, *registry);
     }
 }

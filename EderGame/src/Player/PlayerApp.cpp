@@ -16,6 +16,9 @@
 #include "ECS/Components/VolumetricFogComponent.h"
 #include "ECS/Components/AnimationComponent.h"
 #include "ECS/Components/CameraComponent.h"
+#include "ECS/Components/PlayerStartComponent.h"
+#include "ECS/Components/PlayerComponent.h"
+#include "ECS/Components/LayerComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 #include "Renderer/VulkanRenderer.h"
 #include "Renderer/Vulkan/VulkanInstance.h"
@@ -52,6 +55,9 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
         physAccum += dt;
 
         {
+            if (LuaScriptSystem::Get().ConsumePendingQuit())
+                m_running = false;
+
             std::string next = LuaScriptSystem::Get().ConsumePendingScene();
             if (!next.empty())
             {
@@ -75,6 +81,7 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
         }
 
         PollEvents();
+        LuaScriptSystem::Get().BeginFrame();
         ProcessInput(dt);
 
         VulkanRenderer::Get().BeginFrame();
@@ -185,6 +192,7 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
     PhysicsSystem::Get().Init();
     LuaScriptSystem::Get().Init();
     AudioSystem::Get().Init();
+    AutoSpawnPlayer();
 }
 
 int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
@@ -212,6 +220,9 @@ int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
         physAccum += dt;
 
         {
+            if (LuaScriptSystem::Get().ConsumePendingQuit())
+                m_running = false;
+
             std::string next = LuaScriptSystem::Get().ConsumePendingScene();
             if (!next.empty())
             {
@@ -235,6 +246,7 @@ int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
         }
 
         PollEvents();
+        LuaScriptSystem::Get().BeginFrame();
         ProcessInput(dt);
 
         VulkanRenderer::Get().BeginFrame();
@@ -344,6 +356,108 @@ void PlayerApp::InitPreview(const std::string& scenePath)
     PhysicsSystem::Get().Init();
     LuaScriptSystem::Get().Init();
     AudioSystem::Get().Init();
+    AutoSpawnPlayer();
+}
+
+void PlayerApp::AutoSpawnPlayer()
+{
+    namespace fs = std::filesystem;
+    using namespace Krayon;
+
+    Entity startEntity = NULL_ENTITY;
+    m_registry.Each<PlayerStartComponent>([&](Entity e, PlayerStartComponent& ps) {
+        if (ps.prefabPath.empty()) return;
+        startEntity = e;
+    });
+    if (startEntity == NULL_ENTITY) return;
+
+    const PlayerStartComponent& ps = m_registry.Get<PlayerStartComponent>(startEntity);
+    glm::vec3 spawnPos = {};
+    if (m_registry.Has<TransformComponent>(startEntity))
+        spawnPos = m_registry.Get<TransformComponent>(startEntity).position;
+
+    // If the scene was saved with the prefab already as children (editor preview),
+    // just mark the existing first child as the player — no re-spawn needed.
+    if (m_registry.Has<HierarchyComponent>(startEntity))
+    {
+        auto& hc = m_registry.Get<HierarchyComponent>(startEntity);
+        if (!hc.children.empty())
+        {
+            Entity existing = hc.children[0];
+            if (!m_registry.Has<PlayerComponent>(existing))
+                m_registry.Add<PlayerComponent>(existing);
+            std::cout << "[EderPlayer] PlayerStart: using pre-loaded player children.\n";
+            return;
+        }
+    }
+
+    // Resolve path
+    const std::string wd = AssetManager::Get().GetWorkDir();
+    std::string absPath = ps.prefabPath;
+    if (!wd.empty()) {
+        fs::path candidate = fs::path(wd) / ps.prefabPath;
+        if (fs::exists(candidate)) absPath = candidate.string();
+    }
+
+    // Also try PAK
+    Registry prefabReg;
+    Entity prefabRoot = NULL_ENTITY;
+    auto bytes = AssetManager::Get().GetBytes(ps.prefabPath);
+    if (!bytes.empty())
+        prefabRoot = SceneSerializer::LoadPrefabFromBytes(bytes, prefabReg);
+    else
+        prefabRoot = SceneSerializer::LoadPrefab(absPath, prefabReg);
+
+    if (prefabRoot == NULL_ENTITY) {
+        std::cerr << "[EderPlayer] PlayerStart: could not load prefab: " << ps.prefabPath << "\n";
+        return;
+    }
+
+    // Deep-clone from prefabReg into m_registry
+    std::function<Entity(Entity, Entity)> clone = [&](Entity src, Entity newParent) -> Entity {
+        Entity dst = m_registry.Create();
+        if (prefabReg.Has<TagComponent>(src))             m_registry.Add<TagComponent>(dst)             = prefabReg.Get<TagComponent>(src);
+        if (prefabReg.Has<TransformComponent>(src))       m_registry.Add<TransformComponent>(dst)       = prefabReg.Get<TransformComponent>(src);
+        if (prefabReg.Has<MeshRendererComponent>(src))    m_registry.Add<MeshRendererComponent>(dst)    = prefabReg.Get<MeshRendererComponent>(src);
+        if (prefabReg.Has<LightComponent>(src))           m_registry.Add<LightComponent>(dst)           = prefabReg.Get<LightComponent>(src);
+        if (prefabReg.Has<AnimationComponent>(src))       m_registry.Add<AnimationComponent>(dst)       = prefabReg.Get<AnimationComponent>(src);
+        if (prefabReg.Has<CameraComponent>(src))          m_registry.Add<CameraComponent>(dst)          = prefabReg.Get<CameraComponent>(src);
+        if (prefabReg.Has<RigidbodyComponent>(src))       m_registry.Add<RigidbodyComponent>(dst)       = prefabReg.Get<RigidbodyComponent>(src);
+        if (prefabReg.Has<ColliderComponent>(src))        m_registry.Add<ColliderComponent>(dst)        = prefabReg.Get<ColliderComponent>(src);
+        if (prefabReg.Has<CharacterControllerComponent>(src)) m_registry.Add<CharacterControllerComponent>(dst) = prefabReg.Get<CharacterControllerComponent>(src);
+        if (prefabReg.Has<AudioSourceComponent>(src))     m_registry.Add<AudioSourceComponent>(dst)     = prefabReg.Get<AudioSourceComponent>(src);
+        if (prefabReg.Has<VolumetricFogComponent>(src))   m_registry.Add<VolumetricFogComponent>(dst)   = prefabReg.Get<VolumetricFogComponent>(src);
+        if (prefabReg.Has<LayerComponent>(src)) m_registry.Add<LayerComponent>(dst) = prefabReg.Get<LayerComponent>(src);
+        if (prefabReg.Has<ScriptComponent>(src)) {
+            auto sc = prefabReg.Get<ScriptComponent>(src);
+            sc.started = false;
+            m_registry.Add<ScriptComponent>(dst) = sc;
+        }
+        if (newParent != NULL_ENTITY) {
+            auto& hc = m_registry.Add<HierarchyComponent>(dst);
+            hc.parent = newParent;
+            m_registry.Get<HierarchyComponent>(newParent).children.push_back(dst);
+        }
+        if (prefabReg.Has<HierarchyComponent>(src)) {
+            if (!m_registry.Has<HierarchyComponent>(dst))
+                m_registry.Add<HierarchyComponent>(dst);
+            for (Entity child : prefabReg.Get<HierarchyComponent>(src).children)
+                clone(child, dst);
+        }
+        return dst;
+    };
+
+    // Parent the spawned root under the PlayerStart entity (consistent with editor preview)
+    if (!m_registry.Has<HierarchyComponent>(startEntity))
+        m_registry.Add<HierarchyComponent>(startEntity);
+
+    Entity root = clone(prefabRoot, startEntity);
+    if (m_registry.Has<TransformComponent>(root))
+        m_registry.Get<TransformComponent>(root).position = glm::vec3(0.0f); // relative to PlayerStart
+    m_registry.Add<PlayerComponent>(root);
+
+    std::cout << "[EderPlayer] PlayerStart: spawned player at ("
+              << spawnPos.x << "," << spawnPos.y << "," << spawnPos.z << ")\n";
 }
 
 void PlayerApp::InitMaterials()

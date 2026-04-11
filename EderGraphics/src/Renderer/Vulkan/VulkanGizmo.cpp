@@ -297,7 +297,8 @@ void VulkanGizmo::AddCapsule(std::vector<Vertex>& v, const glm::mat4& world,
 void VulkanGizmo::Draw(vk::CommandBuffer cmd,
                         const Registry&  registry,
                         const glm::mat4& viewProj,
-                        uint32_t         selectedEntity)
+                        uint32_t         selectedEntity,
+                        bool             onlySelected)
 {
     std::vector<Vertex>   verts;
     std::vector<DrawCall> calls;
@@ -305,6 +306,7 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
 
     for (Entity e : registry.GetEntities())
     {
+        if (onlySelected && e != selectedEntity) continue;
         if (!registry.Has<LightComponent>(e))     continue;
         if (!registry.Has<TransformComponent>(e)) continue;
 
@@ -352,6 +354,7 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
 
     for (Entity e : registry.GetEntities())
     {
+        if (onlySelected && e != selectedEntity) continue;
         if (!registry.Has<ColliderComponent>(e))  continue;
         if (!registry.Has<TransformComponent>(e)) continue;
 
@@ -391,6 +394,7 @@ void VulkanGizmo::Draw(vk::CommandBuffer cmd,
 
     for (Entity e : registry.GetEntities())
     {
+        if (onlySelected && e != selectedEntity) continue;
         if (!registry.Has<CharacterControllerComponent>(e)) continue;
         if (!registry.Has<TransformComponent>(e))           continue;
 

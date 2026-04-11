@@ -28,6 +28,11 @@ public:
     void Init    ();
     void Shutdown();
 
+    // Call once per rendered frame (before the physics loop) to snapshot input state.
+    // Separating this from Update() ensures getKeyDown/getKeyUp fire exactly once
+    // even when Update() is called multiple times per frame (fixed timestep sub-steps).
+    void BeginFrame();
+
     // Per-frame: loads + starts new scripts, calls OnUpdate on all.
     void Update(Registry& registry, float dt);
 
@@ -45,6 +50,14 @@ public:
         std::string s = std::move(m_pendingScene);
         m_pendingScene.clear();
         return s;
+    }
+
+    // Returns true (and clears the flag) when a script called Game.quit().
+    bool ConsumePendingQuit()
+    {
+        bool q = m_pendingQuit;
+        m_pendingQuit = false;
+        return q;
     }
 
 private:
@@ -65,4 +78,6 @@ private:
     std::unordered_map<Entity, sol::environment> m_envs;
     bool                                       m_initialized = false;
     std::string                                m_pendingScene;
+    bool                                       m_pendingQuit  = false;
+    Entity                                     m_playerEntity = 0; // cached player (PlayerComponent)
 };

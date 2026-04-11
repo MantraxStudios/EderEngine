@@ -513,6 +513,8 @@ code {
       <a class="sidebar-link" href="#" onclick="return showPage('charcontroller')"><span class="dot"></span>CharacterController</a>
       <a class="sidebar-link" href="#" onclick="return showPage('input')"><span class="dot"></span>Input</a>
       <a class="sidebar-link" href="#" onclick="return showPage('scene')"><span class="dot"></span>Scene</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('game')"><span class="dot"></span>Game</a>
+      <a class="sidebar-link" href="#" onclick="return showPage('prefabs')"><span class="dot"></span>Prefabs &amp; Actors</a>
       <a class="sidebar-link" href="#" onclick="return showPage('audiosource')"><span class="dot"></span>AudioSource</a>
       <a class="sidebar-link" href="#" onclick="return showPage('ui')"><span class="dot"></span>UI System</a>
     </div>
@@ -599,7 +601,8 @@ code {
           <tr><td><code>Animation</code></td><td>Play, stop, clip, speed, looping</td></tr>
           <tr><td><code>VolumetricFog</code></td><td>Density, distance, scatter, color</td></tr>
           <tr><td><code>Layer</code></td><td>Layer index (0-31) and collision/raycast mask per entity</td></tr>
-          <tr><td><code>Entity</code></td><td>Create, destroy, isValid</td></tr>
+          <tr><td><code>Entity</code></td><td>Create, destroy (recursive), instantiate, isValid</td></tr>
+          <tr><td><code>Game</code></td><td>Runtime control — quit the game</td></tr>
           <tr><td><code>Vec3</code></td><td>length, dot, normalize</td></tr>
           <tr><td><code>Script</code></td><td>Call functions across entity scripts</td></tr>
           <tr><td><code>System</code></td><td>Files, directories, time, OS info</td></tr>
@@ -1574,15 +1577,38 @@ GRAVITY = <span class="num">-9.81</span>
     <section class="page" id="page-entity">
       <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>Entity</span></div>
       <h2>Entity <span class="badge">Utility</span></h2>
-      <p class="page-desc">Create and destroy entities at runtime.</p>
+      <p class="page-desc">Create, destroy and instantiate entities at runtime.</p>
       <table class="api-table">
         <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
         <tbody>
           <tr><td><code>Entity.create()</code></td><td><span class="ret-badge">entity id</span></td><td>Spawns a new empty entity</td></tr>
-          <tr><td><code>Entity.destroy(e)</code></td><td></td><td>Destroys entity next frame</td></tr>
-          <tr><td><code>Entity.isValid(e)</code></td><td><span class="ret-badge">bool</span></td><td>Still alive?</td></tr>
+          <tr><td><code>Entity.destroy(e)</code></td><td></td><td>Destroys the entity and <strong>all its children</strong> recursively. Safe to call from any callback.</td></tr>
+          <tr><td><code>Entity.isValid(e)</code></td><td><span class="ret-badge">bool</span></td><td>Returns <code>true</code> if the entity is still alive</td></tr>
+          <tr><td><code>Entity.instantiate(src)</code></td><td><span class="ret-badge">entity id</span></td><td>Deep-clones entity <code>src</code> (integer id) and its entire child hierarchy at the same world position. Returns the root of the new clone.</td></tr>
+          <tr><td><code>Entity.instantiate(src, x, y, z)</code></td><td><span class="ret-badge">entity id</span></td><td>Same as above but places the root at world position <code>(x, y, z)</code>.</td></tr>
+          <tr><td><code>Entity.instantiate(path)</code></td><td><span class="ret-badge">entity id</span></td><td>Loads a <code>.prefab</code> file by relative content path (e.g. <code>"prefabs/Player.prefab"</code>) and spawns it at the origin.</td></tr>
+          <tr><td><code>Entity.instantiate(path, x, y, z)</code></td><td><span class="ret-badge">entity id</span></td><td>Same as above but places the spawned root at world position <code>(x, y, z)</code>.</td></tr>
         </tbody>
       </table>
+
+      <div class="note">
+        <strong>OnStart on clones:</strong> <code>OnStart()</code> is called on every cloned entity the first frame it becomes active — just like a freshly placed entity.
+      </div>
+
+      <h3>Instantiate example</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="cmt">-- Spawn a bullet prefab 1 unit in front of the player</span>
+<span class="kw">local</span> pos = <span class="tbl">Transform</span>.getPosition(<span class="tbl">this_entity</span>)
+<span class="kw">local</span> bullet = <span class="tbl">Entity</span>.instantiate(bulletPrefab, pos.x, pos.y + <span class="num">1</span>, pos.z)</pre>
+      </div>
+
+      <h3>Recursive destroy example</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="cmt">-- Destroys the enemy and all attached children (weapons, particles…)</span>
+<span class="tbl">Entity</span>.destroy(enemyEntity)</pre>
+      </div>
     </section>
 
     <!-- ═══════════════════════════ VEC3 ═══════════════════════════════════ -->
@@ -1867,6 +1893,132 @@ GRAVITY = <span class="num">-9.81</span>
 
       <div class="page-nav">
         <a class="pnav-btn" href="#" onclick="return showPage('input')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Input</span></a>
+        <a class="pnav-btn next" href="#" onclick="return showPage('game')"><span class="pnav-dir">Next →</span><span class="pnav-title">Game</span></a>
+      </div>
+    </section>
+
+    <!-- ════════════════════════════ GAME ═════════════════════════════════ -->
+    <section class="page" id="page-game">
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>Game</span></div>
+      <h2>Game <span class="badge">Utility</span></h2>
+      <p class="page-desc">Runtime control over the running game session. Works in both EderPlayer standalone and embedded play mode.</p>
+
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Game.quit()</code></td><td></td><td>Requests the game to exit cleanly at the end of the current frame. In the editor (embedded play) this stops play mode instead of closing the application.</td></tr>
+          <tr><td><code>Game.getPlayer()</code></td><td><span class="ret-badge">entity id</span></td><td>Returns the entity marked with <code>PlayerComponent</code> (the actor spawned from <code>PlayerStartComponent</code>). Returns <code>0</code> if no player has been spawned yet.</td></tr>
+          <tr><td><code>Game.spawnPlayer(path)</code></td><td><span class="ret-badge">entity id</span></td><td>Loads the prefab at <code>path</code> (relative content path), spawns it, marks it with <code>PlayerComponent</code>, and caches it for future <code>getPlayer()</code> calls.</td></tr>
+          <tr><td><code>Game.spawnPlayer(path, x, y, z)</code></td><td><span class="ret-badge">entity id</span></td><td>Same as above but places the player root at world position <code>(x, y, z)</code>.</td></tr>
+        </tbody>
+      </table>
+
+      <div class="note">
+        <code>Game.quit()</code> is deferred — the current frame finishes executing before the session ends.<br>
+        <code>Game.getPlayer()</code> searches for a <code>PlayerComponent</code> entity the first time it's called and caches the result.
+      </div>
+
+      <h3>Example — quit on key press</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="kw">if</span> <span class="tbl">Input</span>.getKeyDown(<span class="tbl">Input</span>.KEY_ESCAPE) <span class="kw">then</span>
+        <span class="tbl">Game</span>.quit()
+    <span class="kw">end</span>
+<span class="kw">end</span></pre>
+      </div>
+
+      <div class="page-nav">
+        <a class="pnav-btn" href="#" onclick="return showPage('scene')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Scene</span></a>
+        <a class="pnav-btn next" href="#" onclick="return showPage('prefabs')"><span class="pnav-dir">Next →</span><span class="pnav-title">Prefabs &amp; Actors</span></a>
+      </div>
+    </section>
+
+    <!-- ══════════════════════════ PREFABS & ACTORS ═════════════════════════ -->
+    <section class="page" id="page-prefabs">
+      <div class="breadcrumb"><a href="#" onclick="return showPage('home')">Home</a><span>/</span><span>Prefabs &amp; Actors</span></div>
+      <h2>Prefabs &amp; Actors <span class="badge">Workflow</span></h2>
+      <p class="page-desc">Prefabs are reusable actor templates — like Blueprints in Unreal Engine. You configure them once in the Prefab Editor and place (or spawn) instances in any scene.</p>
+
+      <h3>Creating a Prefab (Actor)</h3>
+      <p>In the <strong>Asset Browser</strong>, right-click on any folder and choose <strong>New Prefab</strong>. Enter a name (e.g. <code>PlayerCharacter</code>). The file is created at <code>Content/assets/prefabs/PlayerCharacter.prefab</code> and the Prefab Editor opens automatically.</p>
+
+      <h3>Prefab Editor</h3>
+      <p>While in prefab mode a <span style="color:#4caf50;font-weight:600">green banner</span> appears at the top of the editor showing the prefab name with two buttons:</p>
+      <table class="api-table">
+        <thead><tr><th>Button</th><th>Action</th></tr></thead>
+        <tbody>
+          <tr><td><code>[Save Prefab]</code></td><td>Writes changes back to the <code>.prefab</code> file on disk.</td></tr>
+          <tr><td><code>[← Back to Scene]</code></td><td>Closes the prefab editor and returns to the main scene without saving.</td></tr>
+        </tbody>
+      </table>
+      <p>The <strong>World Outliner</strong> and <strong>Details</strong> panels operate on the prefab's isolated registry. Right-click in the Outliner to add child entities. Use <strong>Add Component</strong> in Details to attach MeshRenderer, Rigidbody, Collider, Script, etc.</p>
+
+      <h3>Adding a Script (Behavior)</h3>
+      <ol style="margin:0 0 1rem 1.5rem;padding:0;line-height:2">
+        <li>In the Asset Browser → right-click → <strong>New Lua Script</strong> → enter a name.</li>
+        <li>In the Prefab Editor, select the root entity → <strong>Add Component → Script</strong>.</li>
+        <li>Drag the <code>.lua</code> file from the Asset Browser onto the <strong>Script</strong> slot in Details.</li>
+        <li>Click <strong>Edit Script</strong> to open it directly in VS Code.</li>
+      </ol>
+
+      <h3>PlayerStart — Auto-Spawn at Game Start</h3>
+      <p>Place a <strong>Player Start</strong> component on any scene entity to mark the spawn point. At game start EderPlayer automatically finds it, loads the specified prefab, spawns it at that position, and marks the result with <code>PlayerComponent</code>.</p>
+      <ol style="margin:0 0 1rem 1.5rem;padding:0;line-height:2">
+        <li>Create an empty entity in the scene (e.g. <code>PlayerStart</code>).</li>
+        <li>In Details → <strong>Add Component → Player Start</strong>.</li>
+        <li>Drag a <code>.prefab</code> from the Asset Browser onto the <strong>Prefab Path</strong> slot.</li>
+        <li>Position the entity where the player should appear.</li>
+      </ol>
+
+      <div class="note">
+        The auto-spawned actor is accessible via <code>Game.getPlayer()</code> from any script.
+      </div>
+
+      <h3>Spawning from scripts</h3>
+      <table class="api-table">
+        <thead><tr><th>Function</th><th>Returns</th><th>Description</th></tr></thead>
+        <tbody>
+          <tr><td><code>Entity.instantiate("prefabs/Bullet.prefab")</code></td><td><span class="ret-badge">entity id</span></td><td>Loads and spawns a prefab by path. Returns the root entity.</td></tr>
+          <tr><td><code>Entity.instantiate("prefabs/Bullet.prefab", x, y, z)</code></td><td><span class="ret-badge">entity id</span></td><td>Same, but at a specific world position.</td></tr>
+          <tr><td><code>Game.spawnPlayer("prefabs/Hero.prefab", x, y, z)</code></td><td><span class="ret-badge">entity id</span></td><td>Spawns and registers the player. Subsequent <code>Game.getPlayer()</code> calls return this entity.</td></tr>
+          <tr><td><code>Game.getPlayer()</code></td><td><span class="ret-badge">entity id</span></td><td>Returns the cached player entity (spawned by PlayerStart or <code>spawnPlayer</code>).</td></tr>
+        </tbody>
+      </table>
+
+      <h3>Full example — shoot a bullet</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="cmt">-- Shooter.lua  (attached to the player prefab)</span>
+<span class="kw">local</span> bulletPrefab = <span class="str">"prefabs/Bullet.prefab"</span>
+<span class="kw">local</span> shootCooldown = <span class="num">0</span>
+
+<span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    shootCooldown = shootCooldown - dt
+    <span class="kw">if</span> <span class="tbl">Input</span>.getKeyDown(<span class="tbl">Input</span>.KEY_SPACE) <span class="kw">and</span> shootCooldown &lt;= <span class="num">0</span> <span class="kw">then</span>
+        <span class="kw">local</span> pos = <span class="tbl">Transform</span>.getPosition(this_entity)
+        <span class="tbl">Entity</span>.instantiate(bulletPrefab, pos.x, pos.y, pos.z + <span class="num">1</span>)
+        shootCooldown = <span class="num">0.3</span>
+    <span class="kw">end</span>
+<span class="kw">end</span></pre>
+      </div>
+
+      <h3>Full example — access the player from another script</h3>
+      <div class="code-wrap">
+        <div class="code-header"><span class="code-lang">Lua</span><button class="copy-btn" onclick="copyCode(this)">Copy</button></div>
+        <pre><span class="cmt">-- Enemy.lua</span>
+<span class="kw">function</span> <span class="fn">OnUpdate</span>(dt)
+    <span class="kw">local</span> player = <span class="tbl">Game</span>.getPlayer()
+    <span class="kw">if</span> player == <span class="num">0</span> <span class="kw">then</span> <span class="kw">return</span> <span class="kw">end</span>
+
+    <span class="kw">local</span> ppos = <span class="tbl">Transform</span>.getPosition(player)
+    <span class="kw">local</span> epos = <span class="tbl">Transform</span>.getPosition(this_entity)
+    <span class="cmt">-- move towards player...</span>
+<span class="kw">end</span></pre>
+      </div>
+
+      <div class="page-nav">
+        <a class="pnav-btn" href="#" onclick="return showPage('game')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Game</span></a>
         <a class="pnav-btn next" href="#" onclick="return showPage('audiosource')"><span class="pnav-dir">Next →</span><span class="pnav-title">AudioSource</span></a>
       </div>
     </section>
@@ -1980,7 +2132,7 @@ GRAVITY = <span class="num">-9.81</span>
       </div>
 
       <div class="page-nav">
-        <a class="pnav-btn" href="#" onclick="return showPage('scene')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Scene</span></a>
+        <a class="pnav-btn" href="#" onclick="return showPage('game')"><span class="pnav-dir">← Previous</span><span class="pnav-title">Game</span></a>
         <a class="pnav-btn next" href="#" onclick="return showPage('examples')"><span class="pnav-dir">Next →</span><span class="pnav-title">Examples</span></a>
       </div>
     </section>

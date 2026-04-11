@@ -36,7 +36,11 @@
       "Bash(xargs grep -l \"SetCascadeData\\\\|SetNearPlane\")",
       "Bash(cmake --build . --config Release --target EderGraphics)",
       "Bash(cmake --build EderGraphics/build)",
-      "Bash(cmake --build EderGame/build)"
+      "Bash(cmake --build EderGame/build)",
+      "Bash(ninja EderGame EderPlayer)",
+      "Bash(ninja EderGame)",
+      "Bash(ninja EderPlayer)",
+      "Bash(grep -h \"^struct\\\\|^class\" \"c:/Users/tupap/OneDrive/Escritorio/EderEngine/EderCore/src/ECS/Components/\"*.h)"
     ]
   }
 }

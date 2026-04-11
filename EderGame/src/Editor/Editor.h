@@ -19,6 +19,8 @@
 #include "Panels/MaterialEditorPanel.h"
 #include "Panels/PostProcessPanel.h"
 #include "PostProcess/PostProcessGraph.h"
+#include <IO/SceneSerializer.h>
+#include "ECS/Components/PlayerStartComponent.h"
 
 class Editor
 {
@@ -41,13 +43,18 @@ public:
     bool WantCaptureMouse()    const;
     bool WantCaptureKeyboard() const;
 
-    PlayState  GetPlayState()  const { return playState;  }
-    GizmoMode  GetGizmoMode()  const { return gizmoMode;  }
-    PlayTarget GetPlayTarget() const { return m_playTarget; }
-    Entity     GetSelected()   const { return hierarchy.GetSelected(); }
+    PlayState       GetPlayState()       const { return playState;       }
+    GizmoMode       GetGizmoMode()       const { return gizmoMode;       }
+    GizmoVisibility GetGizmoVisibility() const { return gizmoVisibility; }
+    PlayTarget      GetPlayTarget()      const { return m_playTarget;     }
+    Entity          GetSelected()        const { return hierarchy.GetSelected(); }
 
     // Force the editor back to Stopped state (e.g. when EderPlayer process exits).
     void ForceStop() { playState = PlayState::Stopped; }
+
+    // Prefab mode accessors — used by Application to redirect rendering to the prefab registry.
+    bool      IsPrefabMode()     const { return m_prefabMode; }
+    Registry& GetPrefabRegistry()      { return m_prefabRegistry; }
 
     // Screen-space rectangle of the rendered scene image inside the Viewport panel.
     // Valid after the first Draw() call.  Use for Win32 window embedding.
@@ -132,9 +139,10 @@ private:
     bool showDemo          = false;
     bool firstLayout       = true;
 
-    PlayState playState    = PlayState::Stopped;
-    GizmoMode gizmoMode    = GizmoMode::Translate;
-    bool        snapEnabled  = false;
+    PlayState       playState        = PlayState::Stopped;
+    GizmoMode       gizmoMode        = GizmoMode::Translate;
+    GizmoVisibility gizmoVisibility  = GizmoVisibility::All;
+    bool            snapEnabled      = false;
     float       snapValue    = 10.0f;
     PlayTarget  m_playTarget = PlayTarget::Embedded;
 
@@ -163,6 +171,20 @@ private:
     std::function<void(const std::string&, const std::string&, const std::string&)> m_onBuildPak;
     std::function<void()>                   m_onPlay;
     std::function<void()>                   m_onStop;
+
+    // ── Prefab editor state ──────────────────────────────────────────────────────
+    bool        m_prefabMode         = false;
+    std::string m_prefabPath;              // absolute path being edited
+    char        m_savePrefabAsName[256]  = {};
+    bool        m_savePrefabModalOpen    = false;
+    Entity      m_savePrefabEntity       = NULL_ENTITY;
+    Registry    m_prefabRegistry;         // isolated ECS for prefab editing
+    Registry*   m_lastSceneRegistry      = nullptr; // set each Draw() for modal use
+
+    void OpenPrefab (const std::string& absPath);
+    void ClosePrefab(bool save);
+    void DrawPrefabBanner();
+    void DrawSavePrefabModal();
 
     StatsPanel          stats;
     CameraPanel         cameraPanel;

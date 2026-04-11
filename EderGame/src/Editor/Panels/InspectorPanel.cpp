@@ -11,6 +11,8 @@
 #include "ECS/Components/ScriptComponent.h"
 #include "ECS/Components/CharacterControllerComponent.h"
 #include "ECS/Components/AudioSourceComponent.h"
+#include "ECS/Components/PlayerStartComponent.h"
+#include "ECS/Components/PlayerComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 #include "Physics/PhysicsSystem.h"
 #include "Scripting/LuaScriptSystem.h"
@@ -189,6 +191,7 @@ void InspectorPanel::OnDraw()
     DrawCharacterControllerComponent();
     DrawScriptComponent();
     DrawAudioSourceComponent();
+    DrawPlayerStartComponent();
 
     ImGui::Spacing();
     ImGui::Separator();
@@ -1026,9 +1029,18 @@ void InspectorPanel::DrawScriptComponent()
             LuaScriptSystem::Get().Reload(selected);
         }
 
-        // Show path
+        // Open in VS Code
         if (!sc.scriptPath.empty())
         {
+            ImGui::SameLine();
+            if (ImGui::Button("Edit Script"))
+            {
+                namespace fs = std::filesystem;
+                const std::string wd = Krayon::AssetManager::Get().GetWorkDir();
+                std::string abs = (fs::path(wd) / sc.scriptPath).string();
+                std::string cmd = "code \"" + abs + "\"";
+                system(cmd.c_str());
+            }
             ImGui::SameLine();
             ImGui::TextDisabled("%s", sc.scriptPath.c_str());
         }
@@ -1138,7 +1150,64 @@ void InspectorPanel::DrawAddComponent()
             registry->Add<ScriptComponent>(selected);
         if (canAddAudio && ImGui::MenuItem("   Audio Source"))
             registry->Add<AudioSourceComponent>(selected);
+        if (!registry->Has<PlayerStartComponent>(selected) && ImGui::MenuItem("   Player Start"))
+            registry->Add<PlayerStartComponent>(selected);
         ImGui::EndPopup();
+    }
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+//  PlayerStartComponent
+// ─────────────────────────────────────────────────────────────────────────────
+void InspectorPanel::DrawPlayerStartComponent()
+{
+    if (!registry->Has<PlayerStartComponent>(selected)) return;
+    if (!ComponentHeader<PlayerStartComponent>("Player Start", registry, selected,
+            ImVec4(0.2f, 0.8f, 0.3f, 1.0f)))
+        return;
+
+    auto& ps = registry->Get<PlayerStartComponent>(selected);
+
+    ImGui::BeginTable("##pst", 3, ImGuiTableFlags_SizingFixedFit);
+    ImGui::TableSetupColumn("label", ImGuiTableColumnFlags_WidthFixed, 100.0f);
+    ImGui::TableSetupColumn("val",   ImGuiTableColumnFlags_WidthStretch);
+    ImGui::TableSetupColumn("btn",   ImGuiTableColumnFlags_WidthFixed, 26.0f);
+
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextDisabled("Prefab");
+    ImGui::TableSetColumnIndex(1);
+    ImGui::SetNextItemWidth(-1);
+
+    // Show the current path in a read-only input
+    char buf[512];
+    std::strncpy(buf, ps.prefabPath.c_str(), sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+    ImGui::InputText("##psp", buf, sizeof(buf), ImGuiInputTextFlags_ReadOnly);
+
+    // Drag-drop target for .prefab assets
+    if (ImGui::BeginDragDropTarget())
+    {
+        if (const ImGuiPayload* pl = ImGui::AcceptDragDropPayload("ASSET_GUID"))
+        {
+            uint64_t guid = *(const uint64_t*)pl->Data;
+            const auto* metaPtr = Krayon::AssetManager::Get().FindByGuid(guid);
+            if (metaPtr && (metaPtr->type == Krayon::AssetType::Prefab || metaPtr->type == Krayon::AssetType::Scene))
+                ps.prefabPath = metaPtr->path;
+        }
+        ImGui::EndDragDropTarget();
+    }
+
+    ImGui::TableSetColumnIndex(2);
+    if (ImGui::Button("X##clrps", ImVec2(22, 0))) ps.prefabPath.clear();
+    if (ImGui::IsItemHovered()) ImGui::SetTooltip("Clear");
+
+    ImGui::EndTable();
+
+    if (registry->Has<PlayerComponent>(selected))
+    {
+        ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.3f, 1.0f), "[Player]  This entity is the spawned player.");
     }
 }
 

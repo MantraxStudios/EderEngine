@@ -14,6 +14,11 @@ public:
     void   SetSelected(Entity e)    { selected = e; }
     void   DuplicateSelected();
 
+    // Called when user picks "Save as Prefab" from the context menu.
+    // Signature: void(Entity root)
+    using SavePrefabCallback = std::function<void(Entity)>;
+    void SetSavePrefabCallback(SavePrefabCallback cb) { m_onSavePrefab = std::move(cb); }
+
 private:
     void DrawEntityNode(Entity e);
 
@@ -26,4 +31,6 @@ private:
     Entity        pendingDetach = NULL_ENTITY;
 
     char searchBuf[128] = {};
+
+    SavePrefabCallback m_onSavePrefab;
 };

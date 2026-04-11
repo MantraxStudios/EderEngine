@@ -57,7 +57,8 @@ namespace Krayon
         Material,   // .mat  (editor surface asset)
         Scene,      // .scene (editor serialised scene)
         Script,     // .lua  (Lua script)
-        Font        // .ttf  .otf
+        Font,       // .ttf  .otf
+        Prefab      // .prefab (entity prefab)
     };
 
     inline std::string AssetTypeToString(AssetType t)
@@ -74,6 +75,7 @@ namespace Krayon
             case AssetType::Scene:    return "Scene";
             case AssetType::Script:   return "Script";
             case AssetType::Font:     return "Font";
+            case AssetType::Prefab:   return "Prefab";
             default:                  return "Unknown";
         }
     }
@@ -90,6 +92,7 @@ namespace Krayon
         if (s == "Scene")    return AssetType::Scene;
         if (s == "Script")   return AssetType::Script;
         if (s == "Font")     return AssetType::Font;
+        if (s == "Prefab")   return AssetType::Prefab;
         return AssetType::Unknown;
     }
 
@@ -119,6 +122,8 @@ namespace Krayon
             return AssetType::Script;
         if (e == ".ttf" || e == ".otf")
             return AssetType::Font;
+        if (e == ".prefab")
+            return AssetType::Prefab;
         return AssetType::Unknown;
     }
 
@@ -549,6 +554,7 @@ namespace Krayon
         }
 
         /// Read a .mat file into a MaterialAsset struct.
+        /// Works in both loose-file (editor) and compiled (PAK) modes.
         /// Returns false if the GUID is not found or the file is malformed.
         bool ReadMaterialAsset(uint64_t guid, MaterialAsset& out) const
         {
@@ -556,16 +562,18 @@ namespace Krayon
             if (it == m_byGuid.end() || it->second.type != AssetType::Material)
                 return false;
 
-            const std::string absPath = m_workDir + "/" + it->second.path;
-            std::ifstream f(absPath);
-            if (!f.is_open()) return false;
+            // Use GetBytes so this works in PAK (compiled) mode too.
+            const std::vector<uint8_t> bytes =
+                const_cast<AssetManager*>(this)->GetBytes(it->second.path);
+            if (bytes.empty()) return false;
 
             out = MaterialAsset{};
             out.guid = guid;
             out.name = it->second.name;
 
+            std::istringstream ss(std::string(bytes.begin(), bytes.end()));
             std::string line;
-            while (std::getline(f, line))
+            while (std::getline(ss, line))
             {
                 if (line.empty() || line[0] == '#') continue;
                 const size_t eq = line.find('=');

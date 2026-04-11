@@ -35,6 +35,14 @@ static constexpr uint32_t kAssimpFlags =
     aiProcess_JoinIdenticalVertices |
     aiProcess_LimitBoneWeights;
 
+// FBX files export in centimeters by default → apply 0.01 scale to convert to meters
+static bool IsFbx(const std::string& hint)
+{
+    auto ext = hint.substr(hint.size() > 4 ? hint.size() - 4 : 0);
+    for (auto& c : ext) c = (char)tolower((unsigned char)c);
+    return ext == ".fbx";
+}
+
 void VulkanMesh::Load(const std::string& path)
 {
     auto& am = Krayon::AssetManager::Get();
@@ -61,8 +69,15 @@ void VulkanMesh::LoadFromMemory(const uint8_t* data, size_t size, const std::str
 
     Assimp::Importer importer;
 
+    uint32_t flags = kAssimpFlags;
+    if (IsFbx(hint))
+    {
+        importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, 0.01f);
+        flags |= aiProcess_GlobalScale;
+    }
+
     const aiScene* scene = importer.ReadFileFromMemory(
-        data, size, kAssimpFlags,
+        data, size, flags,
         hint.empty() ? nullptr : hint.c_str());
 
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
@@ -110,7 +125,14 @@ void VulkanMesh::_LoadFromPath(const std::string& path)
 
     Assimp::Importer importer;
 
-    const aiScene* scene = importer.ReadFile(path, kAssimpFlags);
+    uint32_t flags = kAssimpFlags;
+    if (IsFbx(path))
+    {
+        importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, 0.01f);
+        flags |= aiProcess_GlobalScale;
+    }
+
+    const aiScene* scene = importer.ReadFile(path, flags);
 
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode)
         throw std::runtime_error("Assimp: " + std::string(importer.GetErrorString()));

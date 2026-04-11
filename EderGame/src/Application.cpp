@@ -24,8 +24,17 @@
 #include "Core/TextureManager.h"
 #include "ECS/Components/VolumetricFogComponent.h"
 #include "ECS/Components/AnimationComponent.h"
+#include "ECS/Components/AudioSourceComponent.h"
 #include "ECS/Components/CameraComponent.h"
+#include "ECS/Components/ColliderComponent.h"
+#include "ECS/Components/CharacterControllerComponent.h"
 #include "ECS/Components/HierarchyComponent.h"
+#include "ECS/Components/LightComponent.h"
+#include "ECS/Components/MeshRendererComponent.h"
+#include "ECS/Components/RigidbodyComponent.h"
+#include "ECS/Components/ScriptComponent.h"
+#include "ECS/Components/TagComponent.h"
+#include "ECS/Components/TransformComponent.h"
 #include "ECS/Systems/TransformSystem.h"
 #include "Renderer/VulkanRenderer.h"
 #include "Renderer/Vulkan/VulkanInstance.h"
@@ -37,6 +46,8 @@
 #include <IO/AssetManager.h>
 #include <IO/SceneSerializer.h>
 #include <IO/DebugDraw.h>
+#include "ECS/Components/PlayerStartComponent.h"
+#include "ECS/Components/PlayerComponent.h"
 
 int Application::Run()
 {
@@ -62,10 +73,14 @@ int Application::Run()
         prevTime = currTime;
 
         PollEvents();
+        LuaScriptSystem::Get().BeginFrame();
 
         if (m_playingInline && m_editor.GetPlayState() == PlayState::Playing)
         {
             {
+                if (LuaScriptSystem::Get().ConsumePendingQuit())
+                    StopPlayMode();   // Game.quit() stops inline play
+
                 std::string next = LuaScriptSystem::Get().ConsumePendingScene();
                 if (!next.empty())
                 {
@@ -115,7 +130,10 @@ int Application::Run()
         }
 
         HandleSceneViewResize();
-        ProcessInput(dt);
+        // Editor camera is disabled while the game is playing so it doesn't
+        // interfere with script input (relative mouse mode, mouse delta, etc.)
+        if (!m_playingInline || m_editor.GetPlayState() != PlayState::Playing)
+            ProcessInput(dt);
 
         m_editor.BeginFrame();
         if (m_lookActive)
@@ -142,6 +160,26 @@ int Application::Run()
             continue;
         }
 
+        // Switch active registry when entering / leaving prefab-edit mode
+        {
+            Registry* nextReg = m_editor.IsPrefabMode()
+                ? &m_editor.GetPrefabRegistry() : &m_registry;
+            if (nextReg != m_activeReg)
+            {
+                m_activeReg = nextReg;
+                // Clear scene objects so stale meshes from the previous mode don't linger
+                m_scene.Clear();
+                m_lastMeshGuid.clear();
+                m_lastAnimMeshGuid.clear();
+                m_lastMaterialName.clear();
+                m_lastSubMeshMaterials.clear();
+            }
+        }
+
+        // Keep PlayerStart prefab children in sync while not playing
+        if (!m_playingInline && !m_editor.IsPrefabMode())
+            UpdatePlayerStartPreviews();
+
         UpdateLightBuffer();
 
         auto cmd = VulkanRenderer::Get().GetCommandBuffer();
@@ -163,7 +201,7 @@ int Application::Run()
         RenderPostProcess(cmd);
         RenderMainPass(cmd);
 
-        m_editor.Draw(m_camera, m_registry, dt);
+        m_editor.Draw(m_camera, *m_activeReg, dt);
         m_editor.Render(cmd);
         VulkanRenderer::Get().EndFrame();
         Krayon::DebugDraw::Get().Tick(dt);
@@ -175,6 +213,7 @@ int Application::Run()
 
 void Application::Init()
 {
+    m_activeReg = &m_registry;
     SDL_Init(SDL_INIT_VIDEO);
 
     m_window = SDL_CreateWindow(
@@ -392,6 +431,100 @@ void Application::WireEditorCallbacks()
     });
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// UpdatePlayerStartPreviews
+// In editor mode: for each PlayerStartComponent with a prefabPath, ensure its
+// prefab is loaded as child entities so the actor is visible in the viewport.
+// Idempotent: tracks loaded path per entity and only reloads when the path changes.
+// ─────────────────────────────────────────────────────────────────────────────
+void Application::UpdatePlayerStartPreviews()
+{
+    namespace fs = std::filesystem;
+    const std::string wd = Krayon::AssetManager::Get().GetWorkDir();
+    if (wd.empty()) return;
+
+    // Helper: deep-clone prefabReg subtree into m_registry, parented under dstParent
+    std::function<Entity(Registry&, Entity, Entity)> cloneNode =
+        [&](Registry& src, Entity se, Entity dstParent) -> Entity
+    {
+        Entity dst = m_registry.Create();
+        if (src.Has<TagComponent>(se))          m_registry.Add<TagComponent>(dst)          = src.Get<TagComponent>(se);
+        if (src.Has<TransformComponent>(se))    m_registry.Add<TransformComponent>(dst)    = src.Get<TransformComponent>(se);
+        if (src.Has<MeshRendererComponent>(se)) m_registry.Add<MeshRendererComponent>(dst) = src.Get<MeshRendererComponent>(se);
+        if (src.Has<LightComponent>(se))        m_registry.Add<LightComponent>(dst)        = src.Get<LightComponent>(se);
+        if (src.Has<AnimationComponent>(se))    m_registry.Add<AnimationComponent>(dst)    = src.Get<AnimationComponent>(se);
+        // Wire hierarchy
+        if (dstParent != NULL_ENTITY)
+        {
+            auto& hc = m_registry.Has<HierarchyComponent>(dst)
+                ? m_registry.Get<HierarchyComponent>(dst)
+                : m_registry.Add<HierarchyComponent>(dst);
+            hc.parent = dstParent;
+            auto& ph = m_registry.Has<HierarchyComponent>(dstParent)
+                ? m_registry.Get<HierarchyComponent>(dstParent)
+                : m_registry.Add<HierarchyComponent>(dstParent);
+            ph.children.push_back(dst);
+        }
+        if (src.Has<HierarchyComponent>(se))
+            for (Entity child : src.Get<HierarchyComponent>(se).children)
+                cloneNode(src, child, dst);
+        return dst;
+    };
+
+    m_registry.Each<PlayerStartComponent>([&](Entity e, PlayerStartComponent& ps)
+    {
+        if (ps.prefabPath.empty()) return;
+
+        auto it = m_playerStartLoaded.find(e);
+        // Already loaded the same path — nothing to do
+        if (it != m_playerStartLoaded.end() && it->second == ps.prefabPath) return;
+
+        // Path changed or first load: destroy old preview children
+        if (it != m_playerStartLoaded.end())
+        {
+            if (m_registry.Has<HierarchyComponent>(e))
+            {
+                std::vector<Entity> toDestroy = m_registry.Get<HierarchyComponent>(e).children;
+                for (Entity child : toDestroy)
+                    m_registry.Destroy(child);
+                m_registry.Get<HierarchyComponent>(e).children.clear();
+            }
+        }
+
+        // Load the prefab into a temp registry
+        Registry prefabReg;
+        bool loaded = false;
+        auto bytes = Krayon::AssetManager::Get().GetBytes(ps.prefabPath);
+        if (!bytes.empty())
+            loaded = Krayon::SceneSerializer::LoadPrefabFromBytes(bytes, prefabReg) != NULL_ENTITY;
+        else
+        {
+            fs::path absPath = fs::path(wd) / ps.prefabPath;
+            if (fs::exists(absPath))
+                loaded = Krayon::SceneSerializer::LoadPrefab(absPath.string(), prefabReg) != NULL_ENTITY;
+        }
+
+        if (!loaded) return;
+
+        // Find root entity in prefab (no parent in HierarchyComponent)
+        Entity prefabRoot = NULL_ENTITY;
+        prefabReg.Each<TransformComponent>([&](Entity pe, TransformComponent&) {
+            if (prefabRoot != NULL_ENTITY) return;
+            if (!prefabReg.Has<HierarchyComponent>(pe) ||
+                prefabReg.Get<HierarchyComponent>(pe).parent == NULL_ENTITY)
+                prefabRoot = pe;
+        });
+
+        if (prefabRoot == NULL_ENTITY) return;
+
+        // Clone prefab into scene as children of the PlayerStart entity
+        // (only visual components: no physics/scripts in editor preview)
+        cloneNode(prefabReg, prefabRoot, e);
+
+        m_playerStartLoaded[e] = ps.prefabPath;
+    });
+}
+
 void Application::StartPlayMode()
 {
     const bool wantEmbedded = (m_editor.GetPlayTarget() == PlayTarget::Embedded);
@@ -409,6 +542,26 @@ void Application::StartPlayMode()
         LuaScriptSystem::Get().Init();
         AudioSystem::Get().Init();
         m_playingInline = true;
+
+        // ── Mark player: the preview children of PlayerStart become the player ──
+        // (UpdatePlayerStartPreviews already loaded the prefab as children in edit mode)
+        m_registry.Each<PlayerStartComponent>([&](Entity e, PlayerStartComponent& ps) {
+            if (ps.prefabPath.empty()) return;
+            if (!m_registry.Has<HierarchyComponent>(e)) return;
+            auto& hc = m_registry.Get<HierarchyComponent>(e);
+            if (hc.children.empty()) return;
+            Entity playerRoot = hc.children[0];
+            if (!m_registry.Has<PlayerComponent>(playerRoot))
+                m_registry.Add<PlayerComponent>(playerRoot);
+        });
+
+        // Release editor camera lock so it doesn't interfere with game input
+        if (m_lookActive)
+        {
+            m_lookActive = false;
+            SDL_SetWindowRelativeMouseMode(m_window, false);
+            m_mouseDX = m_mouseDY = 0.0f;
+        }
 
         m_editor.AppendBuildLog("[Play] Running inline in editor.");
         return;
@@ -559,6 +712,7 @@ void Application::NewScene()
     m_lastMaterialName.clear();
     m_lastMatTexGuid.clear();
     m_lastSubMeshMaterials.clear();
+    m_playerStartLoaded.clear();
 
     m_currentScenePath = "";
     m_currentSceneName = "Untitled";
@@ -585,9 +739,13 @@ void Application::SaveSceneAs(const std::string& name)
     fs::path    absFile;
     int         suffix = 0;
     do {
-        absFile = scenesDir / (stem + ".scene");
+        absFile = fs::weakly_canonical(scenesDir / (stem + ".scene"));
         if (!fs::exists(absFile)) break;
-        if (absFile.string() == m_currentScenePath) break;
+        // Compare canonicalized paths so relative vs absolute and slash style
+        // differences don't cause a spurious _1 suffix on the current scene.
+        std::error_code ce;
+        auto curCanon = fs::weakly_canonical(fs::path(m_currentScenePath), ce);
+        if (!ce && absFile == curCanon) break;
         stem = name + "_" + std::to_string(++suffix);
     } while (true);
 
@@ -613,12 +771,13 @@ void Application::LoadScene(const std::string& absPath)
     m_lastMaterialName.clear();
     m_lastMatTexGuid.clear();
     m_lastSubMeshMaterials.clear();
+    m_playerStartLoaded.clear();
 
     std::string loadedName;
     m_ppGraph = {};
     if (Krayon::SceneSerializer::Load(absPath, m_registry, &loadedName, &m_ppGraph))
     {
-        m_currentScenePath = absPath;
+        m_currentScenePath = fs::weakly_canonical(absPath).string();
         m_currentSceneName = loadedName.empty()
             ? fs::path(absPath).stem().string()
             : loadedName;
@@ -789,6 +948,7 @@ void Application::BuildPak(const std::string&,
             copyFile(bldDir / "SDL3.dll",                "SDL3.dll");
             copyFile(bldDir / "assimp-vc143-mt.dll",     "assimp-vc143-mt.dll");
             copyFile(bldDir / "lua54.dll",               "lua54.dll");
+            copyFile(bldDir / "fmod.dll",                "fmod.dll");
 
             m_editor.AppendBuildLog("[Package] Done -> " + outDir.string());
             m_editor.SetBuildRunning(false);
@@ -857,10 +1017,6 @@ void Application::PollEvents()
         case SDL_EVENT_WINDOW_RESIZED:
         case SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED:
             VulkanRenderer::Get().SetFramebufferResized();
-            break;
-        case SDL_EVENT_KEY_DOWN:
-            if (event.key.scancode == SDL_SCANCODE_ESCAPE)
-                m_running = false;
             break;
         case SDL_EVENT_MOUSE_MOTION:
             if (m_lookActive)
@@ -955,6 +1111,7 @@ void Application::HandleSceneViewResize()
 
 void Application::UpdateLightBuffer()
 {
+    Registry& reg = *m_activeReg;
     auto& sc     = VulkanSwapchain::Get();
     float aspect = static_cast<float>(sc.GetExtent().width) /
                    static_cast<float>(sc.GetExtent().height);
@@ -975,13 +1132,13 @@ void Application::UpdateLightBuffer()
     struct LightEntry { Entity e; float distSq; };
     std::vector<LightEntry> pointEntries, spotEntries;
 
-    m_registry.Each<LightComponent>([&](Entity e, LightComponent& l)
+    reg.Each<LightComponent>([&](Entity e, LightComponent& l)
     {
-        if (!m_registry.Has<TransformComponent>(e)) return;
+        if (!reg.Has<TransformComponent>(e)) return;
 
         if (l.type == LightType::Directional)
         {
-            glm::mat4 mat = TransformSystem::GetWorldMatrix(e, m_registry);
+            glm::mat4 mat = TransformSystem::GetWorldMatrix(e, reg);
             glm::vec3 dir = glm::normalize(glm::vec3(mat * glm::vec4(0, -1, 0, 0)));
 
             if (!m_hasDir)
@@ -1002,13 +1159,13 @@ void Application::UpdateLightBuffer()
         }
         else if (l.type == LightType::Point)
         {
-            glm::vec3 pos = glm::vec3(TransformSystem::GetWorldMatrix(e, m_registry)[3]);
+            glm::vec3 pos = glm::vec3(TransformSystem::GetWorldMatrix(e, reg)[3]);
             glm::vec3 d   = pos - camPos;
             pointEntries.push_back({ e, glm::dot(d, d) });
         }
         else if (l.type == LightType::Spot)
         {
-            glm::mat4 mat = TransformSystem::GetWorldMatrix(e, m_registry);
+            glm::mat4 mat = TransformSystem::GetWorldMatrix(e, reg);
             glm::vec3 pos = glm::vec3(mat[3]);
             glm::vec3 d   = pos - camPos;
             spotEntries.push_back({ e, glm::dot(d, d) });
@@ -1025,9 +1182,9 @@ void Application::UpdateLightBuffer()
     for (auto& entry : pointEntries)
     {
         Entity e        = entry.e;
-        auto&  l        = m_registry.Get<LightComponent>(e);
+        auto&  l        = reg.Get<LightComponent>(e);
         PointLight pl{};
-        pl.position  = glm::vec3(TransformSystem::GetWorldMatrix(e, m_registry)[3]);
+        pl.position  = glm::vec3(TransformSystem::GetWorldMatrix(e, reg)[3]);
         pl.color     = l.color;
         pl.intensity = l.intensity;
         pl.radius    = l.range;
@@ -1050,8 +1207,8 @@ void Application::UpdateLightBuffer()
     for (auto& entry : spotEntries)
     {
         Entity e   = entry.e;
-        auto&  l   = m_registry.Get<LightComponent>(e);
-        glm::mat4 mat = TransformSystem::GetWorldMatrix(e, m_registry);
+        auto&  l   = reg.Get<LightComponent>(e);
+        glm::mat4 mat = TransformSystem::GetWorldMatrix(e, reg);
         glm::vec3 dir = glm::normalize(glm::vec3(mat * glm::vec4(0, -1, 0, 0)));
 
         SpotLight sl{};
@@ -1095,10 +1252,11 @@ void Application::UpdateLightBuffer()
 
 void Application::SyncECSToScene()
 {
+    Registry& reg = *m_activeReg;
     auto& objs = m_scene.GetObjects();
     objs.erase(std::remove_if(objs.begin(), objs.end(),
         [&](const SceneObject& o) {
-            bool remove = o.entityId != 0 && !m_registry.Has<MeshRendererComponent>(o.entityId);
+            bool remove = o.entityId != 0 && !reg.Has<MeshRendererComponent>(o.entityId);
             if (remove) {
                 m_lastMeshGuid        .erase(o.entityId);
                 m_lastAnimMeshGuid    .erase(o.entityId);
@@ -1108,7 +1266,7 @@ void Application::SyncECSToScene()
             return remove;
         }), objs.end());
 
-    m_registry.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
+    reg.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
     {
         std::string loadPath;
         if (mr.meshGuid != 0)
@@ -1315,12 +1473,12 @@ void Application::SyncECSToScene()
         m_lastMaterialName[e] = mr.materialName;
         // ...existing code...
 
-        if (m_registry.Has<TransformComponent>(e))
-            obj.worldMatrix = TransformSystem::GetWorldMatrix(e, m_registry);
+        if (reg.Has<TransformComponent>(e))
+            obj.worldMatrix = TransformSystem::GetWorldMatrix(e, reg);
     });
 
-    
-    m_registry.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
+
+    reg.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
     {
         if (mr.subMeshMaterialNames.empty()) return;
 
@@ -1347,7 +1505,7 @@ void Application::SyncECSToScene()
     });
 
     // ── Sync per-submesh local transforms (and entity-backed sub-meshes) ─────
-    m_registry.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
+    reg.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
     {
         bool hasEntityIds  = !mr.subMeshEntityIds.empty();
         bool hasTransforms = !mr.subMeshTransforms.empty();
@@ -1362,17 +1520,17 @@ void Application::SyncECSToScene()
         obj->subMeshLocalTransforms.resize(smCount, glm::mat4(1.0f));
 
         // Compute parent world matrix fresh so entity-backed offsets are frame-accurate.
-        glm::mat4 parentWorld = m_registry.Has<TransformComponent>(e)
-            ? TransformSystem::GetWorldMatrix(e, m_registry) : glm::mat4(1.0f);
+        glm::mat4 parentWorld = reg.Has<TransformComponent>(e)
+            ? TransformSystem::GetWorldMatrix(e, reg) : glm::mat4(1.0f);
         glm::mat4 parentInv = glm::inverse(parentWorld);
 
         for (uint32_t si = 0; si < smCount; si++)
         {
             // Entity-backed sub-mesh: use that entity's world transform directly.
             if (si < (uint32_t)mr.subMeshEntityIds.size() && mr.subMeshEntityIds[si] != 0
-                && m_registry.Has<TransformComponent>(mr.subMeshEntityIds[si]))
+                && reg.Has<TransformComponent>(mr.subMeshEntityIds[si]))
             {
-                glm::mat4 entWorld = TransformSystem::GetWorldMatrix(mr.subMeshEntityIds[si], m_registry);
+                glm::mat4 entWorld = TransformSystem::GetWorldMatrix(mr.subMeshEntityIds[si], reg);
                 obj->subMeshLocalTransforms[si] = parentInv * entWorld;
                 continue;
             }
@@ -1393,10 +1551,10 @@ void Application::SyncECSToScene()
 
     for (auto& obj : m_scene.GetObjects())
     {
-        if (obj.entityId == 0 || !m_registry.Has<TransformComponent>(obj.entityId)) continue;
+        if (obj.entityId == 0 || !reg.Has<TransformComponent>(obj.entityId)) continue;
 
-        obj.isSkinned   = m_registry.Has<AnimationComponent>(obj.entityId);
-        obj.worldMatrix = TransformSystem::GetWorldMatrix(obj.entityId, m_registry);
+        obj.isSkinned   = reg.Has<AnimationComponent>(obj.entityId);
+        obj.worldMatrix = TransformSystem::GetWorldMatrix(obj.entityId, reg);
     }
 
     for (auto& obj : m_scene.GetObjects())
@@ -1409,11 +1567,11 @@ void Application::SyncECSToScene()
 
     if (m_playingInline)
     {
-        m_registry.Each<CameraComponent>([&](Entity e, CameraComponent& cam)
+        reg.Each<CameraComponent>([&](Entity e, CameraComponent& cam)
         {
             if (!cam.isActive) return;
-            if (!m_registry.Has<TransformComponent>(e)) return;
-            glm::mat4 world = TransformSystem::GetWorldMatrix(e, m_registry);
+            if (!reg.Has<TransformComponent>(e)) return;
+            glm::mat4 world = TransformSystem::GetWorldMatrix(e, reg);
             glm::vec3 pos   = glm::vec3(world[3]);
             float sz        = glm::length(glm::vec3(world[2]));
             glm::vec3 fwd   = (sz > 0.f) ? (-glm::vec3(world[2]) / sz) : glm::vec3(0, 0, -1);
@@ -1430,12 +1588,13 @@ void Application::SyncECSToScene()
 
 void Application::UpdateAnimations(float dt)
 {
+    Registry& reg = *m_activeReg;
     // Remove SSBOs for entities that no longer have an AnimationComponent.
     // waitIdle ensures the GPU is done with the buffer before freeing it.
     {
         std::vector<uint32_t> toErase;
         for (auto& [eid, _] : m_entityBoneSSBO)
-            if (!m_registry.Has<AnimationComponent>(eid))
+            if (!reg.Has<AnimationComponent>(eid))
                 toErase.push_back(eid);
         if (!toErase.empty())
         {
@@ -1450,12 +1609,12 @@ void Application::UpdateAnimations(float dt)
 
     static const std::vector<glm::mat4> s_identity(MAX_BONES, glm::mat4(1.0f));
 
-    m_registry.Each<AnimationComponent>([&](Entity e, AnimationComponent& anim)
+    reg.Each<AnimationComponent>([&](Entity e, AnimationComponent& anim)
     {
         // Reset per-entity bone buffer to identity before writing this entity's bones
         std::vector<glm::mat4> boneMatrices(s_identity);
-        if (!m_registry.Has<MeshRendererComponent>(e)) return;
-        const auto& mr = m_registry.Get<MeshRendererComponent>(e);
+        if (!reg.Has<MeshRendererComponent>(e)) return;
+        const auto& mr = reg.Get<MeshRendererComponent>(e);
 
         std::string loadPath;
         if (mr.meshGuid != 0)
@@ -1648,7 +1807,10 @@ void Application::RenderSceneView(vk::CommandBuffer cmd)
 
     Entity selected = m_editor.GetSelected();
 
-    m_gizmo.Draw(cmd, m_registry, vp, selected);
+    const GizmoVisibility gv = m_editor.GetGizmoVisibility();
+    if (gv != GizmoVisibility::None)
+        m_gizmo.Draw(cmd, m_registry, vp, selected,
+                     gv == GizmoVisibility::SelectedOnly);
 
     m_uiRenderer.Draw(cmd, m_debugFb.GetExtent().width, m_debugFb.GetExtent().height);
 

@@ -106,6 +106,8 @@ float SampleCascade(vec3 worldPos, vec3 N, vec3 L, int cascade)
         uv.y  < 0.0 || uv.y  > 1.0)
         return 1.0;
 
+    // Slope-scaled depth bias. 0.0005 gives ~0.01–0.06 world-unit offset across all
+    // cascades (enough to prevent self-shadowing / acne on flat and angled surfaces).
     float slopeBias  = 0.0005 * cascadeBiasScale[cascade];
     float slopeScale = clamp(sinAngle, 0.0, 1.0);
     float recvZ      = proj.z - slopeBias * (1.0 + slopeScale * 3.0);
@@ -141,6 +143,10 @@ float ShadowFactor(vec3 worldPos, vec3 N, vec3 L)
 
     if (cascade < 3)
     {
+        // Blend over the last 70% of each cascade to hide the circular seam.
+        // Starting at 30% (instead of 60%) reduces the pure-cascade-N inner area,
+        // which minimises the lit circle when the nearest cascade has no shadow casters
+        // at a given UV (e.g. scene objects outside the cascade sphere).
         float far   = lights.cascadeSplits[cascade];
         float blend = clamp((dist - far * 0.30) / (far * 0.70), 0.0, 1.0);
         if (blend > 0.0)
@@ -148,13 +154,18 @@ float ShadowFactor(vec3 worldPos, vec3 N, vec3 L)
     }
     else
     {
-        // For cascade 3 only: fade out PCF samples that land near the UV edge.
+        // For cascade 3 only: fade out PCF samples that land near the UV edge
+        // (Vogel disk can leak outside [0,1] → border color = white = 1.0 = lit).
+        // Safe here because there is no cascade+1 to blend with, so the fade
+        // only affects the terminal cascade and does not create a lit sphere.
         vec4 lsPos3 = lights.cascadeMatrices[3] * vec4(worldPos, 1.0);
         vec2 uv3    = lsPos3.xy / lsPos3.w * 0.5 + 0.5;
         float edgeDist = min(min(uv3.x, 1.0 - uv3.x), min(uv3.y, 1.0 - uv3.y));
         shadow = mix(1.0, shadow, clamp(edgeDist * 10.0, 0.0, 1.0));
 
         // Fade toward FULLY LIT (1.0) over the last 25% of cascade-3's range.
+        // Fading toward 0 would zero out the directional light beyond the shadow
+        // range, creating a dark band at the horizon that looks like a far shadow.
         float maxDist   = lights.cascadeSplits[3];
         float fadeStart = maxDist * 0.75;
         float fade = 1.0 - clamp((dist - fadeStart) / (maxDist - fadeStart), 0.0, 1.0);
