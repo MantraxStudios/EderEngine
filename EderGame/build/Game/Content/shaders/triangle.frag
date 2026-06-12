@@ -46,9 +46,11 @@ layout(set = 1, binding = 0) uniform LightUBO {
     vec4             groundAmbient;
 } lights;
 
-layout(set = 1, binding = 1) uniform sampler2DArray   shadowMap;
-layout(set = 1, binding = 2) uniform sampler2DArray   spotShadowMap;
-layout(set = 1, binding = 3) uniform samplerCubeArray pointShadowMap;
+// Shadow comparison samplers: each texture() tap performs a hardware-filtered
+// (bilinear 2x2) depth comparison — smooth PCF without per-tap binary noise.
+layout(set = 1, binding = 1) uniform sampler2DArrayShadow   shadowMap;
+layout(set = 1, binding = 2) uniform sampler2DArrayShadow   spotShadowMap;
+layout(set = 1, binding = 3) uniform samplerCubeArrayShadow pointShadowMap;
 
 layout(location = 0) out vec4 outColor;
 
@@ -120,9 +122,12 @@ float WorldPhi(vec3 p)
     return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453) * 6.28318530;
 }
 
+// With hardware-PCF taps (each one is a filtered 2x2 comparison) 16 Vogel taps
+// give an effective ~64-sample kernel — smoother than the old 32 binary taps
+// at half the cost.
 #define DIR_FILTER_TEXELS  3.0
 #define FILTER_TEXELS      1.0
-#define PCF_N              32
+#define PCF_N              16
 
 const float cascadeBiasScale[4] = float[4](1.0, 1.5, 2.0, 3.0);
 
@@ -160,7 +165,8 @@ float SampleCascade(vec3 worldPos, vec3 N, vec3 L, int cascade)
     for (int i = 0; i < PCF_N; i++)
     {
         vec2 o = VogelDisk(i, PCF_N, phi) * fR;
-        shadow += (recvZ < texture(shadowMap, vec3(uv + o, float(cascade))).r) ? 1.0 : 0.0;
+        // Hardware PCF: 4th component is the compare reference, result in [0,1].
+        shadow += texture(shadowMap, vec4(uv + o, float(cascade), recvZ));
     }
     shadow /= float(PCF_N);
     return shadow;
@@ -239,7 +245,7 @@ float ShadowSpot(int slot, vec3 worldPos, vec3 N, vec3 L)
     for (int i = 0; i < PCF_N; i++)
     {
         vec2 o = VogelDisk(i, PCF_N, phi) * fR;
-        shadow += (recvZ < texture(spotShadowMap, vec3(uv + o, float(slot))).r) ? 1.0 : 0.0;
+        shadow += texture(spotShadowMap, vec4(uv + o, float(slot), recvZ));
     }
     return shadow / float(PCF_N);
 }
@@ -274,7 +280,8 @@ float ShadowPoint(int slot, vec3 worldPos, vec3 lightPos, vec3 N)
     {
         vec2 o    = VogelDisk(i, PCF_N, phi) * fR;
         vec3 sdir = biasedDir + o.x * tang + o.y * btan;
-        shadow   += (curDist <= texture(pointShadowMap, vec4(sdir, float(slot))).r) ? 1.0 : 0.0;
+        // samplerCubeArrayShadow: compare reference is the extra argument.
+        shadow   += texture(pointShadowMap, vec4(sdir, float(slot)), curDist);
     }
     return shadow / float(PCF_N);
 }

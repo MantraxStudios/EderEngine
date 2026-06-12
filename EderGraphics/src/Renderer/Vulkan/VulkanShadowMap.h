@@ -14,10 +14,13 @@ public:
     void EndRendering          (vk::CommandBuffer cmd);
     void TransitionToShaderRead(vk::CommandBuffer cmd);
 
-    vk::ImageView GetArrayView() const { return *arrayView; }
-    vk::Sampler   GetSampler()   const { return *sampler;   }
-    vk::Format    GetFormat()    const { return format;     }
-    uint32_t      GetSize()      const { return mapSize;    }
+    vk::ImageView GetArrayView()      const { return *arrayView;      }
+    vk::Sampler   GetSampler()        const { return *sampler;        }
+    // Comparison sampler (linear + compareOp LessOrEqual) for hardware PCF.
+    // Use with sampler2DArrayShadow in shaders; GetSampler() stays raw for debug views.
+    vk::Sampler   GetCompareSampler() const { return *compareSampler; }
+    vk::Format    GetFormat()         const { return format;          }
+    uint32_t      GetSize()           const { return mapSize;         }
 
     void ComputeCascades(
         const glm::mat4& camView,
@@ -33,8 +36,9 @@ private:
     vk::raii::Image        depthImage  = nullptr;
     vk::raii::DeviceMemory depthMemory = nullptr;
     vk::raii::ImageView    layerViews[NUM_CASCADES] = { nullptr, nullptr, nullptr, nullptr };
-    vk::raii::ImageView    arrayView   = nullptr;
-    vk::raii::Sampler      sampler     = nullptr;
+    vk::raii::ImageView    arrayView      = nullptr;
+    vk::raii::Sampler      sampler        = nullptr;
+    vk::raii::Sampler      compareSampler = nullptr;
 
     vk::Format      format                    = vk::Format::eUndefined;
     vk::ImageLayout layerLayouts[NUM_CASCADES] = {};

@@ -80,6 +80,13 @@ void VulkanSpotShadowMap::Create(uint32_t size)
     si.mipmapMode   = vk::SamplerMipmapMode::eNearest;
     sampler = vk::raii::Sampler(device, si);
 
+    // Hardware-PCF comparison sampler (see VulkanShadowMap::Create).
+    si.magFilter     = vk::Filter::eLinear;
+    si.minFilter     = vk::Filter::eLinear;
+    si.compareEnable = vk::True;
+    si.compareOp     = vk::CompareOp::eLessOrEqual;
+    compareSampler   = vk::raii::Sampler(device, si);
+
     std::cout << "[Vulkan] SpotShadowMap OK (" << MAX_SLOTS << " slots, " << size << "px)" << std::endl;
 }
 
@@ -163,6 +170,7 @@ glm::mat4 VulkanSpotShadowMap::ComputeMatrix(const glm::vec3& pos, const glm::ve
 
 void VulkanSpotShadowMap::Destroy()
 {
+    compareSampler = nullptr;
     sampler   = nullptr;
     arrayView = nullptr;
     for (auto& v : layerViews) v = nullptr;

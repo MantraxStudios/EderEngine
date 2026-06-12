@@ -90,6 +90,15 @@ void VulkanShadowMap::Create(uint32_t size)
     si.borderColor  = vk::BorderColor::eFloatOpaqueWhite;
     si.mipmapMode   = vk::SamplerMipmapMode::eNearest;
     sampler = vk::raii::Sampler(device, si);
+
+    // Hardware-PCF comparison sampler: each tap returns a bilinearly filtered
+    // depth comparison (2x2) instead of a binary pass/fail — removes the grainy
+    // noise from the Vogel-disk PCF in the fragment shader.
+    si.magFilter     = vk::Filter::eLinear;
+    si.minFilter     = vk::Filter::eLinear;
+    si.compareEnable = vk::True;
+    si.compareOp     = vk::CompareOp::eLessOrEqual;   // lit when recvZ <= stored
+    compareSampler   = vk::raii::Sampler(device, si);
 }
 
 void VulkanShadowMap::BeginRendering(vk::CommandBuffer cmd, uint32_t cascadeIndex)
@@ -229,6 +238,7 @@ void VulkanShadowMap::ComputeCascades(
 
 void VulkanShadowMap::Destroy()
 {
+    compareSampler = nullptr;
     sampler   = nullptr;
     arrayView = nullptr;
     for (auto& v : layerViews) v = nullptr;

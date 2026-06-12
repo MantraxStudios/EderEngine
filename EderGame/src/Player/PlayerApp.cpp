@@ -1,4 +1,4 @@
-#include "PlayerApp.h"
+﻿#include "PlayerApp.h"
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_vulkan.h>
@@ -155,16 +155,16 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
 
     InitMaterials();
 
-    m_shadowMap.Create(1024);
+    m_shadowMap.Create(2048);
     m_shadowPipeline.Create(m_shadowMap.GetFormat());
     m_spotShadowMap.Create(1024);
     m_pointShadowMap.Create(512);
     m_pointShadowPipeline.Create(m_pointShadowMap.GetFormat());
 
     m_lights.Build(m_pipeline);
-    m_lights.BindShadowMap     (m_shadowMap.GetArrayView(),          m_shadowMap.GetSampler());
-    m_lights.BindSpotShadowMap (m_spotShadowMap.GetArrayView(),      m_spotShadowMap.GetSampler());
-    m_lights.BindPointShadowMap(m_pointShadowMap.GetCubeArrayView(), m_pointShadowMap.GetSampler());
+    m_lights.BindShadowMap     (m_shadowMap.GetArrayView(),          m_shadowMap.GetCompareSampler());
+    m_lights.BindSpotShadowMap (m_spotShadowMap.GetArrayView(),      m_spotShadowMap.GetCompareSampler());
+    m_lights.BindPointShadowMap(m_pointShadowMap.GetCubeArrayView(), m_pointShadowMap.GetCompareSampler());
 
     m_skybox.Create(VulkanSwapchain::Get().GetFormat(),
                     VulkanRenderer::Get().GetDepthFormat());
@@ -321,16 +321,16 @@ void PlayerApp::InitPreview(const std::string& scenePath)
 
     InitMaterials();
 
-    m_shadowMap.Create(1024);
+    m_shadowMap.Create(2048);
     m_shadowPipeline.Create(m_shadowMap.GetFormat());
     m_spotShadowMap.Create(1024);
     m_pointShadowMap.Create(512);
     m_pointShadowPipeline.Create(m_pointShadowMap.GetFormat());
 
     m_lights.Build(m_pipeline);
-    m_lights.BindShadowMap     (m_shadowMap.GetArrayView(),          m_shadowMap.GetSampler());
-    m_lights.BindSpotShadowMap (m_spotShadowMap.GetArrayView(),      m_spotShadowMap.GetSampler());
-    m_lights.BindPointShadowMap(m_pointShadowMap.GetCubeArrayView(), m_pointShadowMap.GetSampler());
+    m_lights.BindShadowMap     (m_shadowMap.GetArrayView(),          m_shadowMap.GetCompareSampler());
+    m_lights.BindSpotShadowMap (m_spotShadowMap.GetArrayView(),      m_spotShadowMap.GetCompareSampler());
+    m_lights.BindPointShadowMap(m_pointShadowMap.GetCubeArrayView(), m_pointShadowMap.GetCompareSampler());
 
     m_skybox.Create(VulkanSwapchain::Get().GetFormat(),
                     VulkanRenderer::Get().GetDepthFormat());
@@ -377,7 +377,7 @@ void PlayerApp::AutoSpawnPlayer()
         spawnPos = m_registry.Get<TransformComponent>(startEntity).position;
 
     // If the scene was saved with the prefab already as children (editor preview),
-    // just mark the existing first child as the player — no re-spawn needed.
+    // just mark the existing first child as the player â€” no re-spawn needed.
     if (m_registry.Has<HierarchyComponent>(startEntity))
     {
         auto& hc = m_registry.Get<HierarchyComponent>(startEntity);
@@ -780,7 +780,7 @@ void PlayerApp::SyncECSToScene()
             }
         }
 
-        // ── Per-submesh materials ─────────────────────────────────
+        // â”€â”€ Per-submesh materials â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
         for (size_t si = 0; si < mr.subMeshMaterialGuids.size(); si++)
         {
             uint64_t smGuid = mr.subMeshMaterialGuids[si];
@@ -904,7 +904,7 @@ void PlayerApp::SyncECSToScene()
 
     });
 
-    // ── Sync subMeshMaterials to SceneObjects ─────────────────────────────────
+    // â”€â”€ Sync subMeshMaterials to SceneObjects â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
     m_registry.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
     {
         if (mr.subMeshMaterialNames.empty()) return;
@@ -931,7 +931,7 @@ void PlayerApp::SyncECSToScene()
         }
     });
 
-    // ── Sync per-submesh local transforms (and entity-backed sub-meshes) ─────
+    // â”€â”€ Sync per-submesh local transforms (and entity-backed sub-meshes) â”€â”€â”€â”€â”€
     m_registry.Each<MeshRendererComponent>([&](Entity e, MeshRendererComponent& mr)
     {
         bool hasEntityIds  = !mr.subMeshEntityIds.empty();
@@ -1305,7 +1305,7 @@ void PlayerApp::RenderPostProcess(vk::CommandBuffer cmd)
             m_volumetricLight.Draw(cmd,
                 m_sceneFb.GetColorView(),  m_sceneFb.GetSampler(),
                 m_sceneFb.GetDepthView(),  m_sceneFb.GetSampler(),
-                m_shadowMap.GetArrayView(), m_shadowMap.GetSampler(),
+                m_shadowMap.GetArrayView(), m_shadowMap.GetCompareSampler(),
                 invVP, m_cascadeMatrices, m_cascadeSplits,
                 sunWorldDir,
                 m_hasDir ? m_activeDirColor     : glm::vec3(0.0f),

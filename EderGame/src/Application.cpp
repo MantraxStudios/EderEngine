@@ -251,16 +251,17 @@ void Application::Init()
 
     InitMaterials();
 
-    m_shadowMap.Create(1024);
+    m_shadowMap.Create(2048);
     m_shadowPipeline.Create(m_shadowMap.GetFormat());
     m_spotShadowMap.Create(1024);
     m_pointShadowMap.Create(512);
     m_pointShadowPipeline.Create(m_pointShadowMap.GetFormat());
 
     m_lights.Build(m_pipeline);
-    m_lights.BindShadowMap     (m_shadowMap.GetArrayView(),          m_shadowMap.GetSampler());
-    m_lights.BindSpotShadowMap (m_spotShadowMap.GetArrayView(),      m_spotShadowMap.GetSampler());
-    m_lights.BindPointShadowMap(m_pointShadowMap.GetCubeArrayView(), m_pointShadowMap.GetSampler());
+    // Comparison samplers → hardware PCF (sampler*Shadow in triangle/volumetric.frag).
+    m_lights.BindShadowMap     (m_shadowMap.GetArrayView(),          m_shadowMap.GetCompareSampler());
+    m_lights.BindSpotShadowMap (m_spotShadowMap.GetArrayView(),      m_spotShadowMap.GetCompareSampler());
+    m_lights.BindPointShadowMap(m_pointShadowMap.GetCubeArrayView(), m_pointShadowMap.GetCompareSampler());
 
     InitPostProcess();
 
@@ -1846,7 +1847,7 @@ void Application::RenderPostProcess(vk::CommandBuffer cmd)
             m_volumetricLight.Draw(cmd,
                 m_debugFb.GetColorView(),  m_debugFb.GetSampler(),
                 m_debugFb.GetDepthView(),  m_debugFb.GetSampler(),
-                m_shadowMap.GetArrayView(), m_shadowMap.GetSampler(),
+                m_shadowMap.GetArrayView(), m_shadowMap.GetCompareSampler(),
                 invVP, m_cascadeMatrices, m_cascadeSplits,
                 sunWorldDir,
                 m_hasDir ? m_activeDirColor     : glm::vec3(0.0f),

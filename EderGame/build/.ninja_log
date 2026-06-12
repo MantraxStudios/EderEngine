@@ -69,3 +69,9 @@
 15372	30771	8029433360978792	CMakeFiles/EderGame.dir/src/Application.cpp.obj	6ddd92151347de81
 15450	35220	8029433361764460	CMakeFiles/EderGame.dir/src/Scripting/LuaScriptSystem.cpp.obj	b4bb9881485926c6
 35220	35756	8029433559459348	EderGame.exe	e862c9ee7c3bfdfb
+16	6634	8029439805614332	CMakeFiles/EderPlayer.dir/src/Player/PlayerMain.cpp.obj	24738b43c9e71507
+23	8659	8029439805679934	CMakeFiles/EderPlayer.dir/src/Player/PlayerApp.cpp.obj	48fa135b5dab7ea5
+23	488	8029440388281461	EderPlayer.exe	faf95f13458dbaed
+496	8504	8029440393000418	CMakeFiles/EderGame.dir/src/main.cpp.obj	df055f1a7d0e262a
+490	10754	8029440392959700	CMakeFiles/EderGame.dir/src/Application.cpp.obj	6ddd92151347de81
+10754	11357	8029440495597508	EderGame.exe	e862c9ee7c3bfdfb

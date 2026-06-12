@@ -14,9 +14,11 @@ public:
     void EndRendering          (vk::CommandBuffer cmd);
     void TransitionToShaderRead(vk::CommandBuffer cmd);
 
-    vk::ImageView GetArrayView() const { return *arrayView; }
-    vk::Sampler   GetSampler()   const { return *sampler;   }
-    vk::Format    GetFormat()    const { return format;     }
+    vk::ImageView GetArrayView()      const { return *arrayView;      }
+    vk::Sampler   GetSampler()        const { return *sampler;        }
+    // Comparison sampler (linear + LessOrEqual) for hardware-PCF shadow sampling.
+    vk::Sampler   GetCompareSampler() const { return *compareSampler; }
+    vk::Format    GetFormat()         const { return format;          }
 
     // Build a perspective viewProj for a spot light.
     // outerCos: cosine of the outer cone half-angle.
@@ -30,8 +32,9 @@ private:
     vk::raii::Image        depthImage  = nullptr;
     vk::raii::DeviceMemory depthMemory = nullptr;
     vk::raii::ImageView    layerViews[MAX_SLOTS] = { nullptr, nullptr, nullptr, nullptr };
-    vk::raii::ImageView    arrayView   = nullptr;
-    vk::raii::Sampler      sampler     = nullptr;
+    vk::raii::ImageView    arrayView      = nullptr;
+    vk::raii::Sampler      sampler        = nullptr;
+    vk::raii::Sampler      compareSampler = nullptr;
 
     vk::Format      format                  = vk::Format::eUndefined;
     vk::ImageLayout layerLayouts[MAX_SLOTS] = {};

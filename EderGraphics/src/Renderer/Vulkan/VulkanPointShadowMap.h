@@ -16,9 +16,11 @@ public:
     void EndRendering          (vk::CommandBuffer cmd);
     void TransitionToShaderRead(vk::CommandBuffer cmd, uint32_t slot);
 
-    vk::ImageView GetCubeArrayView() const { return *cubeArrayView; }
-    vk::Sampler   GetSampler()       const { return *sampler;       }
-    vk::Format    GetFormat()        const { return format;         }
+    vk::ImageView GetCubeArrayView()  const { return *cubeArrayView;  }
+    vk::Sampler   GetSampler()        const { return *sampler;        }
+    // Comparison sampler (linear + LessOrEqual) for hardware-PCF shadow sampling.
+    vk::Sampler   GetCompareSampler() const { return *compareSampler; }
+    vk::Format    GetFormat()         const { return format;          }
 
     // Returns all 6 face viewProj matrices for a point light at 'pos' with given farPlane.
     static std::array<glm::mat4, 6> ComputeFaceMatrices(const glm::vec3& pos,
@@ -39,8 +41,9 @@ private:
           nullptr,nullptr,nullptr,nullptr, nullptr,nullptr,nullptr,nullptr };
 
     // Cube-array view for shader sampling
-    vk::raii::ImageView    cubeArrayView = nullptr;
-    vk::raii::Sampler      sampler       = nullptr;
+    vk::raii::ImageView    cubeArrayView  = nullptr;
+    vk::raii::Sampler      sampler        = nullptr;
+    vk::raii::Sampler      compareSampler = nullptr;
 
     vk::Format format  = vk::Format::eUndefined;
     uint32_t   mapSize = 512;

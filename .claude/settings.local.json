@@ -47,7 +47,8 @@
       "Read(//c/Program Files \\(x86\\)/**)",
       "Read(//c/Users/tupap/**)",
       "PowerShell(Get-Command *)",
-      "PowerShell(cmake *)"
+      "PowerShell(cmake *)",
+      "PowerShell(Get-Process *)"
     ]
   }
 }

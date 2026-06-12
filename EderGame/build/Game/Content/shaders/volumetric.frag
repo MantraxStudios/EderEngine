@@ -5,7 +5,7 @@ layout(location = 0) out vec4 outColor;
 
 layout(set = 0, binding = 0) uniform sampler2D      sceneTex;
 layout(set = 0, binding = 1) uniform sampler2D      depthTex;
-layout(set = 0, binding = 2) uniform sampler2DArray shadowMapTex;
+layout(set = 0, binding = 2) uniform sampler2DArrayShadow shadowMapTex;
 
 layout(set = 0, binding = 3) uniform VolumetricUBO
 {
@@ -51,8 +51,10 @@ layout(set = 1, binding = 0) uniform LightUBO
     vec4             groundAmbient;
 } lights;
 
-layout(set = 1, binding = 2) uniform sampler2DArray   spotShadowMap;
-layout(set = 1, binding = 3) uniform samplerCubeArray pointShadowMap;
+// Comparison samplers (hardware PCF) — must match the lights descriptor set,
+// which now binds compare-enabled samplers (see LightBuffer Bind* calls).
+layout(set = 1, binding = 2) uniform sampler2DArrayShadow   spotShadowMap;
+layout(set = 1, binding = 3) uniform samplerCubeArrayShadow pointShadowMap;
 
 float IGN(vec2 pixelPos)
 {
@@ -83,7 +85,8 @@ float SampleCascade(vec3 worldPos, int cascade)
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 ||
         ref  < 0.0 || ref  > 1.0)
         return 1.0;
-    return (texture(shadowMapTex, vec3(uv, float(cascade))).r >= ref - 0.0005) ? 1.0 : 0.0;
+    // Hardware compare (LessOrEqual): 1.0 when ref - bias <= stored depth.
+    return texture(shadowMapTex, vec4(uv, float(cascade), ref - 0.0005));
 }
 
 float DirVisibility(vec3 worldPos, float viewDist)
@@ -104,15 +107,14 @@ float SpotVisibility(vec3 worldPos, int slot)
     if (uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0 ||
         ref  < 0.0 || ref  > 1.0)
         return 1.0;
-    return (texture(spotShadowMap, vec3(uv, float(slot))).r >= ref - 0.002) ? 1.0 : 0.0;
+    return texture(spotShadowMap, vec4(uv, float(slot), ref - 0.002));
 }
 
 float PointVisibility(vec3 worldPos, vec3 lightPos, int slot, float farPlane)
 {
-    vec3  dir    = worldPos - lightPos;
-    float dist   = length(dir);
-    float stored = texture(pointShadowMap, vec4(dir, float(slot))).r * farPlane;
-    return (stored >= dist - 0.15) ? 1.0 : 0.0;
+    vec3  dir = worldPos - lightPos;
+    float ref = (length(dir) - 0.15) / farPlane;   // stored depth is dist/far
+    return texture(pointShadowMap, vec4(dir, float(slot)), ref);
 }
 
 float DistAtten(float dist, float radius)
