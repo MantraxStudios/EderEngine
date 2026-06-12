@@ -40,7 +40,14 @@
       "Bash(ninja EderGame EderPlayer)",
       "Bash(ninja EderGame)",
       "Bash(ninja EderPlayer)",
-      "Bash(grep -h \"^struct\\\\|^class\" \"c:/Users/tupap/OneDrive/Escritorio/EderEngine/EderCore/src/ECS/Components/\"*.h)"
+      "Bash(grep -h \"^struct\\\\|^class\" \"c:/Users/tupap/OneDrive/Escritorio/EderEngine/EderCore/src/ECS/Components/\"*.h)",
+      "Bash(glslc triangle.frag -o triangle.frag.spv)",
+      "Bash(glslc skybox.frag -o skybox.frag.spv)",
+      "Read(//c//**)",
+      "Read(//c/Program Files \\(x86\\)/**)",
+      "Read(//c/Users/tupap/**)",
+      "PowerShell(Get-Command *)",
+      "PowerShell(cmake *)"
     ]
   }
 }

@@ -206,5 +206,14 @@ void main()
     gCol = mix(gCol, gCol * vec3(1.1, 0.75, 0.50), snh * 0.5);
 
     float blend = smoothstep(0.0, 1.0, belowT);
-    finalImage = vec4(mix(sky, gCol, blend), 1.0);
+    vec3  hdrOut = mix(sky, gCol, blend);
+
+    // Same output transform as triangle.frag (exposure → ACES → gamma) so the
+    // sky stays balanced against the tonemapped scene geometry.
+    const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
+    vec3 x      = hdrOut * 1.15;
+    vec3 mapped = clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+    mapped      = pow(mapped, vec3(1.0 / 2.2));
+
+    finalImage = vec4(mapped, 1.0);
 }

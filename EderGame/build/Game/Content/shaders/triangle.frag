@@ -52,17 +52,58 @@ layout(set = 1, binding = 3) uniform samplerCubeArray pointShadowMap;
 
 layout(location = 0) out vec4 outColor;
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Cook-Torrance GGX PBR
+//  Diffuse is kept WITHOUT the 1/PI factor (and specular compensated by PI)
+//  so existing scene light intensities keep roughly the same diffuse level —
+//  the upgrade adds physically-based specular shape + energy conservation.
+// ─────────────────────────────────────────────────────────────────────────────
+#define PI 3.14159265359
+
+float DistributionGGX(float NdotH, float a)
+{
+    float a2 = a * a;
+    float d  = NdotH * NdotH * (a2 - 1.0) + 1.0;
+    return a2 / (PI * d * d);
+}
+
+float GeometrySmith(float NdotV, float NdotL, float roughness)
+{
+    float r = roughness + 1.0;
+    float k = (r * r) * 0.125;               // UE4 direct-light remap
+    float gv = NdotV / (NdotV * (1.0 - k) + k);
+    float gl = NdotL / (NdotL * (1.0 - k) + k);
+    return gv * gl;
+}
+
+vec3 FresnelSchlick(float cosTheta, vec3 F0)
+{
+    return F0 + (1.0 - F0) * pow(clamp(1.0 - cosTheta, 0.0, 1.0), 5.0);
+}
+
 vec3 CalcLight(vec3 N, vec3 L, vec3 V, vec3 lightColor, float intensity,
                vec3 baseColor, float roughness, float metallic)
 {
     float NdotL = max(dot(N, L), 0.0);
-    vec3  diff  = baseColor * (1.0 - metallic) * lightColor * intensity * NdotL;
+    if (NdotL <= 0.0) return vec3(0.0);
+
     vec3  H     = normalize(L + V);
+    float NdotV = max(dot(N, V), 1e-4);
     float NdotH = max(dot(N, H), 0.0);
-    float shine = max(1.0, pow(1.0 - roughness, 4.0) * 256.0);
-    float spec  = pow(NdotH, shine) * NdotL;
-    vec3  F0    = mix(vec3(0.04), baseColor, metallic);
-    return diff + F0 * lightColor * intensity * spec;
+    float HdotV = max(dot(H, V), 0.0);
+
+    float a  = max(roughness * roughness, 0.002);
+    vec3  F0 = mix(vec3(0.04), baseColor, metallic);
+
+    float D = DistributionGGX(NdotH, a);
+    float G = GeometrySmith(NdotV, NdotL, roughness);
+    vec3  F = FresnelSchlick(HdotV, F0);
+
+    vec3 spec = (D * G) * F / max(4.0 * NdotV * NdotL, 1e-4);
+    vec3 kd   = (vec3(1.0) - F) * (1.0 - metallic);
+
+    vec3 radiance = lightColor * intensity;
+    return (kd * baseColor + spec * PI) * radiance * NdotL;
 }
 
 vec2 VogelDisk(int i, int n, float phi)
@@ -238,6 +279,19 @@ float ShadowPoint(int slot, vec3 worldPos, vec3 lightPos, vec3 N)
     return shadow / float(PCF_N);
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Output transform: exposure → ACES (Narkowicz) → gamma 2.2.
+//  The swapchain / scene framebuffer is UNORM (not sRGB), so without this the
+//  linear-space lighting is displayed raw — dark, flat and clipped.
+// ─────────────────────────────────────────────────────────────────────────────
+#define EXPOSURE 1.15
+
+vec3 ACESFilm(vec3 x)
+{
+    const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
+    return clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
+}
+
 void main()
 {
     vec4  albedoSample = texture(albedoTex, fragUV);
@@ -252,8 +306,15 @@ void main()
     vec3 N         = normalize(fragNormal) * (gl_FrontFacing ? 1.0 : -1.0);
     vec3 V         = normalize(lights.cameraPos - fragWorldPos);
 
-    float hemi   = N.y * 0.5 + 0.5;
-    vec3  result = baseColor * mix(lights.groundAmbient.rgb, lights.skyAmbient.rgb, hemi);
+    // Hemisphere ambient: diffuse part + a Fresnel-weighted specular ambient so
+    // metals and grazing angles pick up environment colour instead of going black.
+    float hemi    = N.y * 0.5 + 0.5;
+    vec3  ambient = mix(lights.groundAmbient.rgb, lights.skyAmbient.rgb, hemi);
+    float NdotV   = max(dot(N, V), 0.0);
+    vec3  F0      = mix(vec3(0.04), baseColor, fragMetallic);
+    vec3  Fa      = F0 + (max(vec3(1.0 - fragRoughness), F0) - F0)
+                       * pow(1.0 - NdotV, 5.0);
+    vec3  result  = ambient * (baseColor * (1.0 - fragMetallic) + Fa);
 
     for (int i = 0; i < lights.numDirLights; i++)
     {
@@ -306,5 +367,9 @@ void main()
 
     result += baseColor * fragEmissive;
 
-    outColor = vec4(result, alpha);
+    // HDR → display: exposure, filmic tonemap, gamma encode (UNORM target).
+    vec3 mapped = ACESFilm(result * EXPOSURE);
+    mapped      = pow(mapped, vec3(1.0 / 2.2));
+
+    outColor = vec4(mapped, alpha);
 }
