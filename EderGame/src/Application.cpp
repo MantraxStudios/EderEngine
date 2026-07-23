@@ -198,8 +198,10 @@ int Application::Run()
         if (m_playerProcess)
             UpdatePlayerWindowPos();
 
+        m_deferred = m_editor.IsDeferred();
         RenderShadowPasses(cmd);
-        RenderSceneView(cmd);
+        if (m_deferred) RenderSceneViewDeferred(cmd);
+        else            RenderSceneView(cmd);
         RenderPostProcess(cmd);
         RenderMainPass(cmd);
 
@@ -250,6 +252,18 @@ void Application::Init()
         "shaders/triangle.frag.spv",
         VulkanSwapchain::Get().GetFormat(),
         VulkanRenderer::Get().GetDepthFormat());
+
+    // Deferred geometry pipeline — same vertex shader / material + bone layouts as
+    // the forward pipeline, but writes the G-buffer (MRT) via gbuffer.frag.
+    {
+        const auto& gbFormats = VulkanGBuffer::ColorFormats();
+        m_gbufferPipeline.Create(
+            "shaders/triangle.vert.spv",
+            "shaders/gbuffer.frag.spv",
+            VulkanSwapchain::Get().GetFormat(),
+            VulkanRenderer::Get().GetDepthFormat(),
+            VulkanGBuffer::COLOR_COUNT, gbFormats.data());
+    }
 
     InitMaterials();
 
@@ -359,6 +373,12 @@ void Application::InitPostProcess()
                              *m_pipeline.GetLightDescriptorSetLayout());
     m_volumetricFog.Create(m_debugFb.GetColorFormat(), w, h,
                            *m_pipeline.GetLightDescriptorSetLayout());
+
+    // Deferred targets (rendered only when m_deferred is on).
+    m_gbuffer.Create(w, h, depthFmt);
+    m_ssao.Create(w, h);
+    m_deferredLighting.Create(m_debugFb.GetColorFormat(), depthFmt,
+                              *m_pipeline.GetLightDescriptorSetLayout());
 }
 
 void Application::RebuildPostProcessPasses()
@@ -982,6 +1002,10 @@ void Application::Shutdown()
     m_volumetricLight.Destroy();
     m_volumetricFog.Destroy();
     m_sunShafts.Destroy();
+    m_deferredLighting.Destroy();
+    m_ssao.Destroy();
+    m_gbuffer.Destroy();
+    m_gbufferPipeline.Destroy();
     m_debugOverlay.Destroy();
     m_skybox.Destroy();
     m_debugFb.Destroy();
@@ -1111,6 +1135,9 @@ void Application::HandleSceneViewResize()
     m_occlusionPass.Resize(svW, svH);
     m_volumetricLight.Resize(svW, svH);
     m_volumetricFog.Resize(svW, svH);
+    m_gbuffer.Recreate(svW, svH);
+    m_ssao.Resize(svW, svH);
+    m_deferredLighting.ResetBindings();
     for (auto& pass : m_ppPasses)
         pass->Resize(svW, svH);
 }
@@ -1900,6 +1927,64 @@ void Application::RenderSceneView(vk::CommandBuffer cmd)
         m_gizmo.Draw(cmd, m_registry, vp, selected,
                      gv == GizmoVisibility::SelectedOnly);
 
+    m_uiRenderer.Draw(cmd, m_debugFb.GetExtent().width, m_debugFb.GetExtent().height);
+
+    m_debugFb.EndRendering(cmd);
+    m_debugFb.TransitionToShaderRead(cmd);
+}
+
+// Deferred scene view: geometry → G-buffer, SSAO, then a full-screen lighting
+// composite into m_debugFb (re-emitting depth) so the rest of the pipeline
+// (volumetrics / sun shafts / post-process / editor) is reused unchanged.
+// v1 limitations: no procedural skybox (flat sky) and transparents are skipped.
+void Application::RenderSceneViewDeferred(vk::CommandBuffer cmd)
+{
+    const float aspect = SceneViewAspect();
+    glm::mat4 view  = m_camera.GetView();
+    glm::mat4 proj  = m_camera.GetProjection(aspect);
+    glm::mat4 invVP = glm::inverse(proj * view);
+
+    // 1) Geometry pass → G-buffer (opaque + skinned).
+    m_gbuffer.BeginRendering(cmd);
+    m_gbufferPipeline.Bind(cmd);
+    m_boneSSBO.Bind(cmd, *m_gbufferPipeline.GetLayout());
+    m_scene.Draw(cmd, m_gbufferPipeline, m_camera, aspect, m_lights);
+    m_gbufferPipeline.Bind(cmd);
+    m_scene.DrawSkinned(cmd, m_gbufferPipeline, m_camera, aspect, m_lights,
+        [this, &cmd](uint32_t entityId)
+        {
+            auto it = m_entityBoneSSBO.find(entityId);
+            if (it != m_entityBoneSSBO.end() && it->second)
+                it->second->Bind(cmd, *m_gbufferPipeline.GetLayout());
+            else
+                m_boneSSBO.Bind(cmd, *m_gbufferPipeline.GetLayout());
+        });
+    m_gbuffer.EndRendering(cmd);
+    m_gbuffer.TransitionToShaderRead(cmd);
+
+    // 2) SSAO from the G-buffer.
+    float radius    = m_ssaoEnabled ? m_ssaoRadius    : 0.0f;
+    float intensity = m_ssaoEnabled ? m_ssaoIntensity : 0.0f;
+    m_ssao.Draw(cmd, m_gbuffer.GetNormalView(), m_gbuffer.GetDepthView(), m_gbuffer.GetSampler(),
+                proj, view, radius, m_ssaoBias, intensity, m_ssaoPower);
+    m_ssao.GetOutput().TransitionToShaderRead(cmd);
+
+    // 3) Deferred lighting composite into m_debugFb. Draw the procedural skybox
+    //    first so sky pixels (which the composite discards) show through.
+    m_debugFb.BeginRendering(cmd);
+    m_skybox.Draw(cmd, view, proj, -m_activeDirDir);
+    m_deferredLighting.Record(cmd,
+        m_gbuffer.GetAlbedoView(), m_gbuffer.GetNormalView(), m_gbuffer.GetMaterialView(),
+        m_gbuffer.GetDepthView(), m_gbuffer.GetSampler(),
+        m_ssao.GetOutput().GetColorView(), m_ssao.GetOutput().GetSampler(),
+        invVP, m_lights.GetDescriptorSet());
+
+    // Gizmos + UI overlay on top (depth-tested against the re-emitted depth).
+    glm::mat4 vp = proj * view;
+    Entity selected = m_editor.GetSelected();
+    const GizmoVisibility gv = m_editor.GetGizmoVisibility();
+    if (gv != GizmoVisibility::None)
+        m_gizmo.Draw(cmd, m_registry, vp, selected, gv == GizmoVisibility::SelectedOnly);
     m_uiRenderer.Draw(cmd, m_debugFb.GetExtent().width, m_debugFb.GetExtent().height);
 
     m_debugFb.EndRendering(cmd);

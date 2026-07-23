@@ -1,0 +1,4 @@
+guid=bcf5c857d91c0838
+type=Shader
+name=deferred_lighting
+path=shaders/deferred_lighting.frag

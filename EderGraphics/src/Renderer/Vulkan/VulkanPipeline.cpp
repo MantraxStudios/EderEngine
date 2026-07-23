@@ -4,6 +4,8 @@
 #include <IO/AssetManager.h>
 #include <fstream>
 #include <cstring>
+#include <vector>
+#include <algorithm>
 
 std::vector<uint32_t> VulkanPipeline::LoadSpv(const std::string& path)
 {
@@ -38,8 +40,11 @@ vk::raii::ShaderModule VulkanPipeline::CreateShaderModule(const std::vector<uint
     return vk::raii::ShaderModule(VulkanInstance::Get().GetDevice(), createInfo);
 }
 
-void VulkanPipeline::Create(const std::string& vertPath, const std::string& fragPath, vk::Format swapchainFormat, vk::Format depthFormat)
+void VulkanPipeline::Create(const std::string& vertPath, const std::string& fragPath,
+                            vk::Format swapchainFormat, vk::Format depthFormat,
+                            uint32_t colorAttachmentCount, const vk::Format* colorFormats)
 {
+    const bool mrt = colorAttachmentCount > 1;
     auto& device = VulkanInstance::Get().GetDevice();
 
     auto vertCode = LoadSpv(vertPath);
@@ -109,9 +114,13 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
         vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG |
         vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA;
 
+    // One (non-blending) attachment state per color target for MRT.
+    std::vector<vk::PipelineColorBlendAttachmentState> blendAttachments(
+        std::max<uint32_t>(colorAttachmentCount, 1u), colorBlendAttachment);
+
     vk::PipelineColorBlendStateCreateInfo colorBlending{};
-    colorBlending.attachmentCount = 1;
-    colorBlending.pAttachments    = &colorBlendAttachment;
+    colorBlending.attachmentCount = static_cast<uint32_t>(blendAttachments.size());
+    colorBlending.pAttachments    = blendAttachments.data();
 
     std::array<vk::DynamicState, 2> dynamicStates = {
         vk::DynamicState::eViewport,
@@ -216,8 +225,8 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
     depthStencil.stencilTestEnable     = vk::False;
 
     vk::PipelineRenderingCreateInfo renderingInfo{};
-    renderingInfo.colorAttachmentCount    = 1;
-    renderingInfo.pColorAttachmentFormats = &swapchainFormat;
+    renderingInfo.colorAttachmentCount    = std::max<uint32_t>(colorAttachmentCount, 1u);
+    renderingInfo.pColorAttachmentFormats = mrt ? colorFormats : &swapchainFormat;
     renderingInfo.depthAttachmentFormat   = depthFormat;
 
     vk::GraphicsPipelineCreateInfo pipelineInfo{};
@@ -236,6 +245,9 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
 
     pipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
     std::cout << "[Vulkan] Pipeline OK" << std::endl;
+
+    // MRT (G-buffer) pipelines don't need the alpha-blend variant.
+    if (mrt) return;
 
     // -----------------------------------------------------------------------
     // Transparent pipeline — mismo shader, blend habilitado, depth write off

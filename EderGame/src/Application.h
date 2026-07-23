@@ -24,6 +24,9 @@
 #include "Renderer/Vulkan/VulkanVolumetricLight.h"
 #include "Renderer/Vulkan/VulkanVolumetricFog.h"
 #include "Renderer/Vulkan/VulkanPostProcessPass.h"
+#include "Renderer/Vulkan/VulkanGBuffer.h"
+#include "Renderer/Vulkan/VulkanSSAO.h"
+#include "Renderer/Vulkan/VulkanDeferredLighting.h"
 #include "Renderer/Vulkan/BoneSSBO.h"
 #include "UI/UIRenderer.h"
 #include "EderCore.h"
@@ -136,6 +139,19 @@ private:
     std::unordered_map<uint32_t, std::unique_ptr<BoneSSBO>> m_entityBoneSSBO; // one per skinned entity
     VulkanFramebuffer  m_debugFb;          // primary scene-view framebuffer
     UIRenderer         m_uiRenderer;
+
+    // ── Deferred path (parallel to forward, toggled by m_deferred) ────────────
+    bool                   m_deferred = false;   // false = forward (default), true = deferred
+    VulkanGBuffer          m_gbuffer;
+    VulkanPipeline         m_gbufferPipeline;     // geometry pass (MRT), shares material/bone layouts
+    VulkanSSAO             m_ssao;
+    VulkanDeferredLighting m_deferredLighting;
+    bool  m_ssaoEnabled   = true;
+    float m_ssaoRadius    = 0.5f;
+    float m_ssaoBias      = 0.025f;
+    float m_ssaoIntensity = 1.0f;
+    float m_ssaoPower     = 2.0f;
+    void RenderSceneViewDeferred(vk::CommandBuffer cmd);
 
     // ── Shadow system ────────────────────────────────────────────────────────
     VulkanShadowMap           m_shadowMap;

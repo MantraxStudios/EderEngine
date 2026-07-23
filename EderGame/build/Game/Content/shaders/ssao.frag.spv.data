@@ -1,0 +1,4 @@
+guid=22e16c8291c35c5f
+type=Shader
+name=ssao.frag
+path=shaders/ssao.frag.spv

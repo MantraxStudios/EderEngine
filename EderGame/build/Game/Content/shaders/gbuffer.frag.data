@@ -1,0 +1,4 @@
+guid=507d7fc3494c5ef9
+type=Shader
+name=gbuffer
+path=shaders/gbuffer.frag

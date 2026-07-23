@@ -1,0 +1,4 @@
+guid=f9fabbd390ba8b50
+type=Shader
+name=gbuffer.frag
+path=shaders/gbuffer.frag.spv

@@ -1,0 +1,4 @@
+guid=46f2921be0e95966
+type=Shader
+name=ssao
+path=shaders/ssao.frag

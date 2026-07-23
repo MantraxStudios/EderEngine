@@ -6,7 +6,14 @@
 class EDERGRAPHICS_API VulkanPipeline
 {
 public:
-    void Create(const std::string& vertPath, const std::string& fragPath, vk::Format swapchainFormat, vk::Format depthFormat);
+    // colorAttachmentCount > 1 builds a multi-render-target (G-buffer) pipeline:
+    // `colorFormats` must point to that many formats, no blending, and the
+    // transparent variant is skipped. The single-attachment default keeps the
+    // existing forward pipeline behaviour unchanged.
+    void Create(const std::string& vertPath, const std::string& fragPath,
+                vk::Format swapchainFormat, vk::Format depthFormat,
+                uint32_t colorAttachmentCount = 1,
+                const vk::Format* colorFormats = nullptr);
     void Bind            (vk::CommandBuffer cmd);  // opaque
     void BindTransparent (vk::CommandBuffer cmd);  // alpha-blend, depth-write off
     void Destroy();

@@ -634,6 +634,7 @@ void Editor::DrawMenuBar()
         ImGui::MenuItem("Material Editor",  nullptr, &materialEditor.open);
         ImGui::MenuItem("Post Process",     nullptr, &postProcess   .open);
         ImGui::Separator();
+        ImGui::MenuItem("Deferred Rendering (+SSAO)", nullptr, &deferredRendering);
         if (ImGui::MenuItem("Reset Layout"))
             m_resetLayout = true;
         ImGui::Separator();

@@ -43,6 +43,7 @@ public:
     bool WantCaptureMouse()    const;
     bool WantCaptureKeyboard() const;
 
+    bool            IsDeferred()         const { return deferredRendering; }
     PlayState       GetPlayState()       const { return playState;       }
     GizmoMode       GetGizmoMode()       const { return gizmoMode;       }
     GizmoVisibility GetGizmoVisibility() const { return gizmoVisibility; }
@@ -140,6 +141,7 @@ private:
 
     bool showDemo          = false;
     bool firstLayout       = true;
+    bool deferredRendering = false;   // toggles the deferred render path in Application
     bool m_resetLayout     = false;   // set by "Window > Reset Layout" to rebuild the dock
 
     PlayState       playState        = PlayState::Stopped;
