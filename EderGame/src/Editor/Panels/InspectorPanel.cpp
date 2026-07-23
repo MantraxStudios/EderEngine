@@ -23,6 +23,9 @@
 #include <imgui/imgui.h>
 #include <imgui/imgui_internal.h>
 #include <cstring>
+#include <string>
+#include <algorithm>
+#include <cctype>
 
 static void ComponentStripe(ImVec4 color)
 {
@@ -1124,33 +1127,57 @@ void InspectorPanel::DrawAddComponent()
 
     if (ImGui::BeginPopup("##add_comp_popup"))
     {
-        ImGui::TextDisabled("COMPONENTS");
+        // Search filter — focus it the first frame the popup opens so you can
+        // just start typing to narrow the list.
+        static char filter[64] = {};
+        if (ImGui::IsWindowAppearing())
+        {
+            filter[0] = '\0';
+            ImGui::SetKeyboardFocusHere();
+        }
+        ImGui::SetNextItemWidth(-1);
+        ImGui::InputTextWithHint("##compfilter", "Search...", filter, sizeof(filter));
         ImGui::Separator();
-        if (canAddTransform    && ImGui::MenuItem("   Transform"))      registry->Add<TransformComponent>(selected);
-        if (canAddMeshRenderer && ImGui::MenuItem("   Mesh Renderer"))  registry->Add<MeshRendererComponent>(selected);
-        if (canAddLight        && ImGui::MenuItem("   Light"))          registry->Add<LightComponent>(selected);
-        if (canAddFog          && ImGui::MenuItem("   Volumetric Fog")) registry->Add<VolumetricFogComponent>(selected);
-        if (canAddAnim         && ImGui::MenuItem("   Animation"))      registry->Add<AnimationComponent>(selected);
-        if (canAddRigidbody && ImGui::MenuItem("   Rigidbody"))
+
+        // Case-insensitive substring match against the filter text.
+        auto match = [](const char* name, const char* f) -> bool
+        {
+            if (!f[0]) return true;
+            std::string a = name, b = f;
+            std::transform(a.begin(), a.end(), a.begin(), ::tolower);
+            std::transform(b.begin(), b.end(), b.begin(), ::tolower);
+            return a.find(b) != std::string::npos;
+        };
+        auto item = [&](bool can, const char* label) -> bool
+        {
+            return can && match(label, filter) && ImGui::MenuItem(label);
+        };
+
+        if (item(canAddTransform,    "Transform"))      registry->Add<TransformComponent>(selected);
+        if (item(canAddMeshRenderer, "Mesh Renderer"))  registry->Add<MeshRendererComponent>(selected);
+        if (item(canAddLight,        "Light"))          registry->Add<LightComponent>(selected);
+        if (item(canAddFog,          "Volumetric Fog")) registry->Add<VolumetricFogComponent>(selected);
+        if (item(canAddAnim,         "Animation"))      registry->Add<AnimationComponent>(selected);
+        if (item(canAddRigidbody,    "Rigidbody"))
         {
             registry->Add<RigidbodyComponent>(selected);
             PhysicsSystem::Get().MarkDirty(selected); // rebuild static->dynamic if collider exists
         }
-        if (canAddCollider  && ImGui::MenuItem("   Collider"))
+        if (item(canAddCollider,     "Collider"))
         {
             registry->Add<ColliderComponent>(selected);
             PhysicsSystem::Get().MarkDirty(selected); // rebuild shapeless->shaped if rigidbody exists
         }
-        if (canAddCC && ImGui::MenuItem("   Character Controller"))
+        if (item(canAddCC,           "Character Controller"))
         {
             registry->Add<CharacterControllerComponent>(selected);
             PhysicsSystem::Get().MarkDirty(selected);
         }
-        if (canAddScript && ImGui::MenuItem("   Script"))
+        if (item(canAddScript,       "Script"))
             registry->Add<ScriptComponent>(selected);
-        if (canAddAudio && ImGui::MenuItem("   Audio Source"))
+        if (item(canAddAudio,        "Audio Source"))
             registry->Add<AudioSourceComponent>(selected);
-        if (!registry->Has<PlayerStartComponent>(selected) && ImGui::MenuItem("   Player Start"))
+        if (item(!registry->Has<PlayerStartComponent>(selected), "Player Start"))
             registry->Add<PlayerStartComponent>(selected);
         ImGui::EndPopup();
     }

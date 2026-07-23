@@ -175,6 +175,18 @@ private:
     // ── Cascade shadow data ───────────────────────────────────────────────────
     glm::mat4 m_cascadeMatrices[VulkanShadowMap::NUM_CASCADES] = {};
     glm::vec4 m_cascadeSplits  = {};
+    // Per-cascade world-space cull sphere (xyz center, w radius).
+    glm::vec4 m_cascadeCullSpheres[VulkanShadowMap::NUM_CASCADES] = {};
+
+    // ── Static directional-shadow cache ───────────────────────────────────────
+    // When neither the cascade matrices nor any shadow caster changed (and there
+    // are no animated casters), the 4 cascade passes are skipped and last frame's
+    // depth map is reused. Big win for a still editor viewport.
+    bool      m_shadowCacheEnabled = true;
+    bool      m_dirShadowValid     = false;   // a valid map was rendered at least once
+    uint64_t  m_prevCasterHash     = 0;
+    glm::mat4 m_prevCascadeMatrices[VulkanShadowMap::NUM_CASCADES] = {};
+    bool DirShadowNeedsRedraw();              // updates cache state, returns true if a redraw is needed
 
     // ── Custom post-process graph ─────────────────────────────────────────────
     Krayon::PostProcessGraph                           m_ppGraph;

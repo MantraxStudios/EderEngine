@@ -100,6 +100,14 @@ void HierarchyPanel::DuplicateSelected()
     selected = copy;
 }
 
+void HierarchyPanel::DeleteSelected()
+{
+    if (!registry || selected == NULL_ENTITY) return;
+    Entity toDelete = selected;
+    selected = NULL_ENTITY;
+    TransformSystem::DestroyWithChildren(toDelete, *registry);
+}
+
 void HierarchyPanel::DrawEntityNode(Entity e)
 {
     if (!registry) return;

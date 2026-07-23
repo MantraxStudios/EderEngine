@@ -133,11 +133,14 @@ private:
     void DrawOpenScenePicker();
     void DrawSaveSceneAsModal();
     void DrawBuildGameModal();
-    void HandleSceneShortcuts();
+    void HandleSceneShortcuts(Camera& cam, Registry& registry);
+    void FocusSelected(Camera& cam, Registry& registry);   // frame the camera on the selection (F)
+    void BuildDefaultLayout(unsigned int dockId, float availW, float availH);
     void ApplyTheme();
 
     bool showDemo          = false;
     bool firstLayout       = true;
+    bool m_resetLayout     = false;   // set by "Window > Reset Layout" to rebuild the dock
 
     PlayState       playState        = PlayState::Stopped;
     GizmoMode       gizmoMode        = GizmoMode::Translate;

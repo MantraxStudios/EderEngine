@@ -13,6 +13,7 @@ public:
     Entity GetSelected()  const     { return selected; }
     void   SetSelected(Entity e)    { selected = e; }
     void   DuplicateSelected();
+    void   DeleteSelected();
 
     // Called when user picks "Save as Prefab" from the context menu.
     // Signature: void(Entity root)

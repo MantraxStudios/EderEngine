@@ -22,12 +22,16 @@ public:
     vk::Format    GetFormat()         const { return format;          }
     uint32_t      GetSize()           const { return mapSize;         }
 
+    // outCullSpheres (optional): per-cascade world-space bounding sphere
+    // (xyz = center, w = radius) used to cull shadow casters that cannot
+    // contribute to that cascade. Pass nullptr to skip.
     void ComputeCascades(
         const glm::mat4& camView,
         const glm::vec3& lightDir,
         float nearPlane, float farPlane,
         glm::mat4 outMatrices[NUM_CASCADES],
-        glm::vec4& outSplits) const;
+        glm::vec4& outSplits,
+        glm::vec4* outCullSpheres = nullptr) const;
 
 private:
     uint32_t   FindMemoryType(uint32_t filter, vk::MemoryPropertyFlags props);

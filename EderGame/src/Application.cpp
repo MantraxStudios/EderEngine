@@ -1242,7 +1242,7 @@ void Application::UpdateLightBuffer()
     m_shadowMap.ComputeCascades(
         m_camera.GetView(),
         m_activeDirDir, m_camera.nearPlane, m_activeDirShadowDist,
-        m_cascadeMatrices, m_cascadeSplits);
+        m_cascadeMatrices, m_cascadeSplits, m_cascadeCullSpheres);
 
     m_lights.SetCascadeData(m_cascadeMatrices, m_cascadeSplits);
     m_lights.SetCameraForward(m_camera.GetForward());
@@ -1716,6 +1716,43 @@ void Application::UpdateAnimations(float dt)
     });
 }
 
+bool Application::DirShadowNeedsRedraw()
+{
+    if (!m_shadowCacheEnabled) return true;
+
+    // FNV-1a hash over all opaque non-skinned casters (mesh pointer + world
+    // matrix). Any skinned caster is treated as animated and forces a redraw.
+    uint64_t h = 1469598103934665603ull;
+    auto fnv = [&h](const void* data, size_t n)
+    {
+        const uint8_t* p = static_cast<const uint8_t*>(data);
+        for (size_t i = 0; i < n; ++i) { h ^= p[i]; h *= 1099511628211ull; }
+    };
+
+    bool animated = false;
+    for (auto& o : m_scene.GetObjects())
+    {
+        if (!o.mesh) continue;
+        if (o.isSkinned) { animated = true; break; }
+        VulkanMesh* mp = o.mesh;
+        fnv(&mp, sizeof(mp));
+        fnv(&o.worldMatrix, sizeof(o.worldMatrix));
+    }
+
+    bool matricesChanged = false;
+    for (uint32_t c = 0; c < VulkanShadowMap::NUM_CASCADES; ++c)
+        if (m_cascadeMatrices[c] != m_prevCascadeMatrices[c]) { matricesChanged = true; break; }
+
+    bool redraw = animated || matricesChanged || (h != m_prevCasterHash) || !m_dirShadowValid;
+
+    // Remember this frame's state for the next comparison.
+    m_prevCasterHash = h;
+    for (uint32_t c = 0; c < VulkanShadowMap::NUM_CASCADES; ++c)
+        m_prevCascadeMatrices[c] = m_cascadeMatrices[c];
+    m_dirShadowValid = true;
+    return redraw;
+}
+
 void Application::RenderShadowPasses(vk::CommandBuffer cmd)
 {
     auto bindBonesFnShadow = [this, &cmd](uint32_t entityId)
@@ -1727,16 +1764,22 @@ void Application::RenderShadowPasses(vk::CommandBuffer cmd)
             m_boneSSBO.BindToSet(cmd, *m_shadowPipeline.GetLayout(), 0);
     };
 
-    for (uint32_t c = 0; c < VulkanShadowMap::NUM_CASCADES; ++c)
+    // Skip the 4 directional cascade passes entirely when nothing that affects
+    // them changed — last frame's depth map is still in ShaderReadOnly layout
+    // and remains valid for sampling.
+    if (DirShadowNeedsRedraw())
     {
-        m_shadowMap.BeginRendering(cmd, c);
-        m_shadowPipeline.Bind(cmd);
-        m_boneSSBO.BindToSet(cmd, *m_shadowPipeline.GetLayout(), 0);
-        m_scene.DrawShadow(cmd, m_shadowPipeline, m_cascadeMatrices[c]);
-        m_scene.DrawSkinnedShadow(cmd, m_shadowPipeline, m_cascadeMatrices[c], bindBonesFnShadow);
-        m_shadowMap.EndRendering(cmd);
+        for (uint32_t c = 0; c < VulkanShadowMap::NUM_CASCADES; ++c)
+        {
+            m_shadowMap.BeginRendering(cmd, c);
+            m_shadowPipeline.Bind(cmd);
+            m_boneSSBO.BindToSet(cmd, *m_shadowPipeline.GetLayout(), 0);
+            m_scene.DrawShadow(cmd, m_shadowPipeline, m_cascadeMatrices[c], &m_cascadeCullSpheres[c]);
+            m_scene.DrawSkinnedShadow(cmd, m_shadowPipeline, m_cascadeMatrices[c], bindBonesFnShadow);
+            m_shadowMap.EndRendering(cmd);
+        }
+        m_shadowMap.TransitionToShaderRead(cmd);
     }
-    m_shadowMap.TransitionToShaderRead(cmd);
 
     if (m_hasSpotShadow)
     {

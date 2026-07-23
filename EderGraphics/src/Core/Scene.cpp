@@ -9,6 +9,42 @@
 #include <glm/glm.hpp>
 #include <algorithm>
 
+namespace
+{
+    // Conservative world-space bounding sphere of an object, from its mesh's
+    // local AABB transformed by the world matrix. If the mesh has no valid
+    // bounds (empty geometry) the radius is left huge so the object is never
+    // culled — the safe failure mode for a shadow caster.
+    inline void ObjectWorldSphere(const SceneObject& obj, glm::vec3& outCenter, float& outRadius)
+    {
+        glm::vec3 mn = obj.mesh->GetBoundsMin();
+        glm::vec3 mx = obj.mesh->GetBoundsMax();
+        if (mn.x > mx.x) { outCenter = glm::vec3(obj.worldMatrix[3]); outRadius = 1e30f; return; }
+
+        glm::vec3 localCenter = 0.5f * (mn + mx);
+        glm::vec3 localExtent = 0.5f * (mx - mn);
+        outCenter = glm::vec3(obj.worldMatrix * glm::vec4(localCenter, 1.0f));
+
+        // Largest scale across the three basis columns → conservative radius.
+        float sx = glm::length(glm::vec3(obj.worldMatrix[0]));
+        float sy = glm::length(glm::vec3(obj.worldMatrix[1]));
+        float sz = glm::length(glm::vec3(obj.worldMatrix[2]));
+        float maxScale = std::max(sx, std::max(sy, sz));
+        outRadius = glm::length(localExtent) * maxScale;
+    }
+
+    // Sphere-vs-cull-sphere test. cull == nullptr means "keep everything".
+    inline bool CasterVisible(const SceneObject& obj, const glm::vec4* cull)
+    {
+        if (!cull) return true;
+        glm::vec3 c; float r;
+        ObjectWorldSphere(obj, c, r);
+        float maxDist = cull->w + r;
+        glm::vec3 d = c - glm::vec3(*cull);
+        return glm::dot(d, d) <= maxDist * maxDist;
+    }
+}
+
 SceneObject& Scene::Add(VulkanMesh& mesh, Material& material)
 {
     objects.push_back({ &mesh, &material, glm::mat4(1.0f), 0 });
@@ -201,79 +237,84 @@ void Scene::DrawTransparent(vk::CommandBuffer cmd, VulkanPipeline& pipeline, con
     }
 }
 
-void Scene::DrawShadow(vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeline, const glm::mat4& lightViewProj)
+void Scene::DrawShadow(vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeline, const glm::mat4& lightViewProj,
+                       const glm::vec4* cullSphere)
 {
     vk::PipelineLayout layout = *shadowPipeline.GetLayout();
     cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &lightViewProj);
 
     // --- Opaque single-material, non-skinned objects (instanced) ---
-    std::map<VulkanMesh*, std::vector<glm::mat4>> groups;
+    // Collect into a scratch list, sort by mesh so identical meshes are
+    // contiguous, then issue one instanced draw per run. No per-frame allocs.
+    m_scratchGroups.clear();
     for (auto& obj : objects)
     {
         if (!obj.mesh || !obj.material) continue;
         if (obj.isSkinned) continue;                        // skinned drawn separately via DrawSkinnedShadow
         if (obj.material->IsTransparent()) continue;        // alpha-blend casts no shadow
         if (!obj.subMeshMaterials.empty()) continue;        // handled below per-submesh
-        groups[obj.mesh].push_back(obj.worldMatrix);
+        if (!CasterVisible(obj, cullSphere)) continue;
+        m_scratchGroups.push_back({ obj.mesh, obj.worldMatrix });
     }
 
-    if (!groups.empty())
+    if (!m_scratchGroups.empty())
     {
-        std::vector<glm::mat4> allMatrices;
-        for (auto& [mesh, matrices] : groups)
-            for (auto& m : matrices)
-                allMatrices.push_back(m);
+        std::sort(m_scratchGroups.begin(), m_scratchGroups.end(),
+                  [](const ShadowGroupEntry& a, const ShadowGroupEntry& b){ return a.mesh < b.mesh; });
 
-        shadowInstanceBuffer.Upload(allMatrices);
+        m_scratchMatrices.clear();
+        for (auto& g : m_scratchGroups) m_scratchMatrices.push_back(g.matrix);
+
+        shadowInstanceBuffer.Upload(m_scratchMatrices);
         shadowInstanceBuffer.Bind(cmd);
 
         uint32_t first = 0;
-        for (auto& [mesh, matrices] : groups)
+        while (first < m_scratchGroups.size())
         {
-            mesh->DrawInstanced(cmd, first, static_cast<uint32_t>(matrices.size()));
-            first += static_cast<uint32_t>(matrices.size());
+            VulkanMesh* mesh = m_scratchGroups[first].mesh;
+            uint32_t count = 1;
+            while (first + count < m_scratchGroups.size() &&
+                   m_scratchGroups[first + count].mesh == mesh)
+                ++count;
+            mesh->DrawInstanced(cmd, first, count);
+            first += count;
         }
     }
 
     // --- Multi-material objects: draw only opaque, non-skinned submeshes ---
     {
-        std::vector<SceneObject*> mmObjs;
+        m_scratchSmMats.clear();
+        m_scratchSmDraw.clear();
+
         for (auto& obj : objects)
         {
             if (!obj.mesh || obj.subMeshMaterials.empty()) continue;
             if (obj.isSkinned) continue;                        // skinned drawn via DrawSkinnedShadow
-            mmObjs.push_back(&obj);
+            if (!CasterVisible(obj, cullSphere)) continue;
+
+            uint32_t smCount  = obj.mesh->GetSubmeshCount();
+            uint32_t matCount = static_cast<uint32_t>(obj.subMeshMaterials.size());
+            uint32_t tCount   = static_cast<uint32_t>(obj.subMeshLocalTransforms.size());
+            for (uint32_t si = 0; si < smCount; si++)
+            {
+                Material* mat = (si < matCount && obj.subMeshMaterials[si])
+                              ? obj.subMeshMaterials[si]
+                              : obj.material;
+                glm::mat4 local = (si < tCount) ? obj.subMeshLocalTransforms[si] : glm::mat4(1.0f);
+                m_scratchSmMats.push_back(obj.worldMatrix * local);
+                m_scratchSmDraw.push_back({ &obj, si, mat && !mat->IsTransparent() });
+            }
         }
 
-        if (!mmObjs.empty())
+        if (!m_scratchSmDraw.empty())
         {
-            struct ShadowEntry { SceneObject* obj; uint32_t si; bool opaque; };
-            std::vector<glm::mat4> smMats;
-            std::vector<ShadowEntry> drawList;
-
-            for (auto* obj : mmObjs)
-            {
-                uint32_t smCount  = obj->mesh->GetSubmeshCount();
-                uint32_t matCount = static_cast<uint32_t>(obj->subMeshMaterials.size());
-                uint32_t tCount   = static_cast<uint32_t>(obj->subMeshLocalTransforms.size());
-                for (uint32_t si = 0; si < smCount; si++)
-                {
-                    Material* mat = (si < matCount && obj->subMeshMaterials[si])
-                                  ? obj->subMeshMaterials[si]
-                                  : obj->material;
-                    glm::mat4 local = (si < tCount) ? obj->subMeshLocalTransforms[si] : glm::mat4(1.0f);
-                    smMats.push_back(obj->worldMatrix * local);
-                    drawList.push_back({obj, si, mat && !mat->IsTransparent()});
-                }
-            }
-
-            shadowSubMeshInstanceBuffer.Upload(smMats);
+            shadowSubMeshInstanceBuffer.Upload(m_scratchSmMats);
             shadowSubMeshInstanceBuffer.Bind(cmd);
 
-            for (uint32_t i = 0; i < static_cast<uint32_t>(drawList.size()); i++)
+            for (uint32_t i = 0; i < static_cast<uint32_t>(m_scratchSmDraw.size()); i++)
             {
-                if (!drawList[i].opaque) continue;
-                drawList[i].obj->mesh->DrawSubMesh(cmd, drawList[i].si, i, 1);
+                if (!m_scratchSmDraw[i].opaque) continue;
+                m_scratchSmDraw[i].obj->mesh->DrawSubMesh(cmd, m_scratchSmDraw[i].si, i, 1);
             }
         }
     }
@@ -292,74 +333,80 @@ void Scene::DrawShadowPoint(vk::CommandBuffer cmd, VulkanPointShadowPipeline& pi
         vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment,
         0, static_cast<uint32_t>(sizeof(PushData)), &push);
 
+    // A point light only lights within `farPlane` of its position, so cull any
+    // caster whose world sphere doesn't reach the light's range sphere.
+    const glm::vec4 rangeSphere(lightPos, farPlane);
+
     // --- Opaque single-material, non-skinned objects (instanced) ---
-    std::map<VulkanMesh*, std::vector<glm::mat4>> groups;
+    m_scratchGroups.clear();
     for (auto& obj : objects)
     {
         if (!obj.mesh || !obj.material) continue;
         if (obj.isSkinned) continue;                    // skinned drawn via DrawSkinnedShadowPoint
         if (obj.material->IsTransparent()) continue;
         if (!obj.subMeshMaterials.empty()) continue;
-        groups[obj.mesh].push_back(obj.worldMatrix);
+        if (!CasterVisible(obj, &rangeSphere)) continue;
+        m_scratchGroups.push_back({ obj.mesh, obj.worldMatrix });
     }
 
-    if (!groups.empty())
+    if (!m_scratchGroups.empty())
     {
-        std::vector<glm::mat4> allMatrices;
-        for (auto& [mesh, matrices] : groups)
-            for (auto& m : matrices)
-                allMatrices.push_back(m);
+        std::sort(m_scratchGroups.begin(), m_scratchGroups.end(),
+                  [](const ShadowGroupEntry& a, const ShadowGroupEntry& b){ return a.mesh < b.mesh; });
 
-        shadowInstanceBuffer.Upload(allMatrices);
+        m_scratchMatrices.clear();
+        for (auto& g : m_scratchGroups) m_scratchMatrices.push_back(g.matrix);
+
+        shadowInstanceBuffer.Upload(m_scratchMatrices);
         shadowInstanceBuffer.Bind(cmd);
 
         uint32_t first = 0;
-        for (auto& [mesh, matrices] : groups)
+        while (first < m_scratchGroups.size())
         {
-            mesh->DrawInstanced(cmd, first, static_cast<uint32_t>(matrices.size()));
-            first += static_cast<uint32_t>(matrices.size());
+            VulkanMesh* mesh = m_scratchGroups[first].mesh;
+            uint32_t count = 1;
+            while (first + count < m_scratchGroups.size() &&
+                   m_scratchGroups[first + count].mesh == mesh)
+                ++count;
+            mesh->DrawInstanced(cmd, first, count);
+            first += count;
         }
     }
 
     // --- Multi-material objects (point/spot shadow — dedicated buffer) ---
     {
-        std::vector<SceneObject*> mmObjs;
+        m_scratchSmMats.clear();
+        m_scratchSmDraw.clear();
+
         for (auto& obj : objects)
         {
             if (!obj.mesh || obj.subMeshMaterials.empty()) continue;
             if (obj.isSkinned) continue;                        // skinned drawn via DrawSkinnedShadowPoint
-            mmObjs.push_back(&obj);
+            if (!CasterVisible(obj, &rangeSphere)) continue;
+
+            uint32_t smCount  = obj.mesh->GetSubmeshCount();
+            uint32_t matCount = static_cast<uint32_t>(obj.subMeshMaterials.size());
+            uint32_t tCount   = static_cast<uint32_t>(obj.subMeshLocalTransforms.size());
+            for (uint32_t si = 0; si < smCount; si++)
+            {
+                Material* mat = (si < matCount && obj.subMeshMaterials[si])
+                              ? obj.subMeshMaterials[si]
+                              : obj.material;
+                glm::mat4 local = (si < tCount) ? obj.subMeshLocalTransforms[si] : glm::mat4(1.0f);
+                m_scratchSmMats.push_back(obj.worldMatrix * local);
+                m_scratchSmDraw.push_back({ &obj, si, mat && !mat->IsTransparent() });
+            }
         }
 
-        if (!mmObjs.empty())
+        if (!m_scratchSmDraw.empty())
         {
-            struct ShadowEntry { SceneObject* obj; uint32_t si; bool opaque; };
-            std::vector<glm::mat4> smMats;
-            std::vector<ShadowEntry> drawList;
-
-            for (auto* obj : mmObjs)
-            {
-                uint32_t smCount  = obj->mesh->GetSubmeshCount();
-                uint32_t matCount = static_cast<uint32_t>(obj->subMeshMaterials.size());
-                uint32_t tCount   = static_cast<uint32_t>(obj->subMeshLocalTransforms.size());
-                for (uint32_t si = 0; si < smCount; si++)
-                {
-                    Material* mat = (si < matCount && obj->subMeshMaterials[si])
-                                  ? obj->subMeshMaterials[si]
-                                  : obj->material;
-                    glm::mat4 local = (si < tCount) ? obj->subMeshLocalTransforms[si] : glm::mat4(1.0f);
-                    smMats.push_back(obj->worldMatrix * local);
-                    drawList.push_back({obj, si, mat && !mat->IsTransparent()});
-                }
-            }
-
-            pointShadowSubMeshInstanceBuffer.Upload(smMats);
+            pointShadowSubMeshInstanceBuffer.Upload(m_scratchSmMats);
             pointShadowSubMeshInstanceBuffer.Bind(cmd);
 
-            for (uint32_t i = 0; i < static_cast<uint32_t>(drawList.size()); i++)
+            for (uint32_t i = 0; i < static_cast<uint32_t>(m_scratchSmDraw.size()); i++)
             {
-                if (!drawList[i].opaque) continue;
-                drawList[i].obj->mesh->DrawSubMesh(cmd, drawList[i].si, i, 1);
+                if (!m_scratchSmDraw[i].opaque) continue;
+                m_scratchSmDraw[i].obj->mesh->DrawSubMesh(cmd, m_scratchSmDraw[i].si, i, 1);
             }
         }
     }
@@ -367,8 +414,11 @@ void Scene::DrawShadowPoint(vk::CommandBuffer cmd, VulkanPointShadowPipeline& pi
 
 void Scene::DrawSkinnedShadow(vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeline,
                                const glm::mat4& lightViewProj,
-                               const std::function<void(uint32_t)>& bindBonesFn)
+                               const std::function<void(uint32_t)>& bindBonesFn,
+                               const glm::vec4* /*cullSphere*/)
 {
+    // NOTE: skinned casters are not frustum-culled — their bind-pose AABB does
+    // not bound the animated pose, so culling could clip valid shadows.
     vk::PipelineLayout layout = *shadowPipeline.GetLayout();
     cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &lightViewProj);
 

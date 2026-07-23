@@ -175,7 +175,8 @@ void VulkanShadowMap::ComputeCascades(
     const glm::vec3& lightDir,
     float nearPlane, float farPlane,
     glm::mat4 outMatrices[NUM_CASCADES],
-    glm::vec4& outSplits) const
+    glm::vec4& outSplits,
+    glm::vec4* outCullSpheres) const
 {
     // Practical split scheme (log + linear blend).
     // lambda=0.70 gives larger near cascades (~8 units) vs 0.85 (~4 units),
@@ -233,6 +234,13 @@ void VulkanShadowMap::ComputeCascades(
         lightProj[1][1] *= -1.0f;  // Vulkan Y-flip
 
         outMatrices[c] = lightProj * lightView;
+
+        // World-space cull sphere for this cascade. The ortho frustum spans
+        // ±extRadius in light-space XY and ~extRadius*2 in depth, all centred
+        // near centerSnapped, so a sphere of radius 2*extRadius conservatively
+        // encloses every caster that can write into this cascade.
+        if (outCullSpheres)
+            outCullSpheres[c] = glm::vec4(centerSnapped, extRadius * 2.0f);
     }
 }
 

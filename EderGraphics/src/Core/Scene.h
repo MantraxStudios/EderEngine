@@ -22,9 +22,13 @@ public:
     void         DrawSkinned     (vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights,
                                   const std::function<void(uint32_t entityId)>& bindBonesFn);
     void         DrawTransparent (vk::CommandBuffer cmd, VulkanPipeline& pipeline, const Camera& camera, float aspect, LightBuffer& lights);
-    void         DrawShadow            (vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeline, const glm::mat4& lightViewProj);
+    // cullSphere (optional): world-space sphere (xyz = center, w = radius).
+    // Casters whose world bounding sphere does not intersect it are skipped.
+    void         DrawShadow            (vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeline, const glm::mat4& lightViewProj,
+                                        const glm::vec4* cullSphere = nullptr);
     void         DrawSkinnedShadow     (vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeline, const glm::mat4& lightViewProj,
-                                        const std::function<void(uint32_t entityId)>& bindBonesFn);
+                                        const std::function<void(uint32_t entityId)>& bindBonesFn,
+                                        const glm::vec4* cullSphere = nullptr);
     void         DrawShadowPoint       (vk::CommandBuffer cmd, VulkanPointShadowPipeline& pipeline,
                                         const glm::mat4& lightViewProj, const glm::vec3& lightPos, float farPlane);
     void         DrawSkinnedShadowPoint(vk::CommandBuffer cmd, VulkanPointShadowPipeline& pipeline,
@@ -36,6 +40,16 @@ public:
     std::vector<SceneObject>& GetObjects() { return objects; }
 
 private:
+    // Reusable scratch buffers for the shadow passes — kept as members so the
+    // per-frame draw paths don't allocate (they retain capacity across frames).
+    struct ShadowGroupEntry { VulkanMesh* mesh; glm::mat4 matrix; };
+    struct ShadowSubMeshEntry { SceneObject* obj; uint32_t si; bool opaque; };
+    std::vector<ShadowGroupEntry>   m_scratchGroups;
+    std::vector<glm::mat4>          m_scratchMatrices;
+    std::vector<glm::mat4>          m_scratchSmMats;
+    std::vector<ShadowSubMeshEntry> m_scratchSmDraw;
+    std::vector<glm::mat4>          m_scratchSkinned;
+
     std::vector<SceneObject> objects;
     VulkanInstanceBuffer     instanceBuffer;
     VulkanInstanceBuffer     shadowInstanceBuffer;

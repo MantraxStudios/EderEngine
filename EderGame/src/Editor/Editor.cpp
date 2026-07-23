@@ -9,9 +9,17 @@
 #include <IO/AssetManager.h>
 #include <filesystem>
 #include "ECS/Components/TagComponent.h"
+#include "ECS/Components/TransformComponent.h"
+#include "ECS/Components/MeshRendererComponent.h"
+#include "ECS/Systems/TransformSystem.h"
+#include "Core/MeshManager.h"
+#include "Renderer/Vulkan/VulkanMesh.h"
 #include <Events/EventBus.h>
 #include <Events/Events.h>
+#include <glm/glm.hpp>
 #include <cstring>
+#include <cmath>
+#include <algorithm>
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Theme
@@ -272,7 +280,7 @@ void Editor::Draw(Camera& cam, Registry& registry, float dt)
     }
     inspector  .SetSelected(hierarchy.GetSelected());
 
-    HandleSceneShortcuts();
+    HandleSceneShortcuts(cam, registry);
     DrawMenuBar();
     DrawToolbar();
     DrawDockspace();
@@ -341,7 +349,7 @@ bool Editor::WantCaptureMouse()    const { return ImGui::GetIO().WantCaptureMous
 bool Editor::WantCaptureKeyboard() const { return ImGui::GetIO().WantCaptureKeyboard; }
 
 // ──────────────────────────────────────────────────────────────────────────────
-void Editor::HandleSceneShortcuts()
+void Editor::HandleSceneShortcuts(Camera& cam, Registry& registry)
 {
     const ImGuiIO& io    = ImGui::GetIO();
     const bool     ctrl  = io.KeyCtrl;
@@ -374,6 +382,25 @@ void Editor::HandleSceneShortcuts()
         hierarchy.DuplicateSelected();
     }
 
+    // Delete selected entity (Del) — no modifier, and not while typing in a field.
+    if (!ctrl && !shift && !io.WantTextInput &&
+        (ImGui::IsKeyPressed(ImGuiKey_Delete, false)))
+    {
+        hierarchy.DeleteSelected();
+    }
+
+    // Gizmo mode (W/E/R) and focus (F). These letters double as camera controls,
+    // but WASD only moves the camera while the right mouse button is held, so we
+    // only switch modes when RMB is up and no text field is active.
+    const bool rmbHeld = ImGui::IsMouseDown(ImGuiMouseButton_Right);
+    if (!ctrl && !shift && !rmbHeld && !io.WantTextInput)
+    {
+        if (ImGui::IsKeyPressed(ImGuiKey_W, false)) gizmoMode = GizmoMode::Translate;
+        if (ImGui::IsKeyPressed(ImGuiKey_E, false)) gizmoMode = GizmoMode::Rotate;
+        if (ImGui::IsKeyPressed(ImGuiKey_R, false)) gizmoMode = GizmoMode::Scale;
+        if (ImGui::IsKeyPressed(ImGuiKey_F, false)) FocusSelected(cam, registry);
+    }
+
     // Build
     if (ctrl && !shift && ImGui::IsKeyPressed(ImGuiKey_B, false))
     {
@@ -401,6 +428,44 @@ void Editor::HandleSceneShortcuts()
             if (m_onStop) m_onStop();
         }
     }
+}
+
+// Frame the editor camera on the current selection: keep the current view
+// direction and move the camera back far enough to fit the object's bounds.
+void Editor::FocusSelected(Camera& cam, Registry& registry)
+{
+    Entity sel = hierarchy.GetSelected();
+    if (sel == NULL_ENTITY || !registry.Has<TransformComponent>(sel)) return;
+
+    glm::mat4 world = TransformSystem::GetWorldMatrix(sel, registry);
+
+    // Object bounds → world-space center + radius (unit-cube fallback if no mesh).
+    glm::vec3 bmin(-0.5f), bmax(0.5f);
+    if (registry.Has<MeshRendererComponent>(sel))
+    {
+        const auto& mr = registry.Get<MeshRendererComponent>(sel);
+        if (!mr.meshPath.empty() && MeshManager::Get().Has(mr.meshPath))
+        {
+            VulkanMesh& mesh = MeshManager::Get().Load(mr.meshPath);
+            bmin = mesh.GetBoundsMin();
+            bmax = mesh.GetBoundsMax();
+        }
+    }
+    glm::vec3 localCenter = 0.5f * (bmin + bmax);
+    glm::vec3 center = glm::vec3(world * glm::vec4(localCenter, 1.0f));
+
+    float sx = glm::length(glm::vec3(world[0]));
+    float sy = glm::length(glm::vec3(world[1]));
+    float sz = glm::length(glm::vec3(world[2]));
+    float radius = glm::length(0.5f * (bmax - bmin)) * std::max(sx, std::max(sy, sz));
+    if (radius < 0.01f) radius = 0.5f;
+
+    // Distance so the sphere fits vertically in the view.
+    float halfFov = glm::radians(cam.fov * 0.5f);
+    float dist = radius / std::max(std::sin(halfFov), 0.05f);
+    dist = std::max(dist, radius + cam.nearPlane + 0.1f);
+
+    cam.fpsPos = center - cam.GetForward() * dist;
 }
 
 // ──────────────────────────────────────────────────────────────────────────────
@@ -568,6 +633,9 @@ void Editor::DrawMenuBar()
         ImGui::MenuItem("Asset Browser",    nullptr, &assetBrowser  .open);
         ImGui::MenuItem("Material Editor",  nullptr, &materialEditor.open);
         ImGui::MenuItem("Post Process",     nullptr, &postProcess   .open);
+        ImGui::Separator();
+        if (ImGui::MenuItem("Reset Layout"))
+            m_resetLayout = true;
         ImGui::Separator();
         ImGui::MenuItem("ImGui Demo",     nullptr, &showDemo);
         ImGui::EndMenu();
@@ -816,39 +884,50 @@ void Editor::DrawDockspace()
     ImGuiID dockId = ImGui::GetID("MainDock");
     ImGui::DockSpace(dockId, ImVec2(0, 0), ImGuiDockNodeFlags_PassthruCentralNode);
 
-    // ── Default layout (runs only once on first startup) ─────────────────────
+    // ── Default layout ───────────────────────────────────────────────────────
+    // firstLayout: only auto-build when there is no saved layout (imgui.ini).
+    // m_resetLayout: user asked to reset — always rebuild from scratch.
     if (firstLayout && ImGui::DockBuilderGetNode(dockId) == nullptr)
     {
         firstLayout = false;
-
-        ImGui::DockBuilderRemoveNode(dockId);
-        ImGui::DockBuilderAddNode  (dockId, ImGuiDockNodeFlags_DockSpace);
-        ImGui::DockBuilderSetNodeSize(dockId, ImVec2(vp->Size.x, vp->Size.y - offsetY));
-
-        // Split: left panel (Outliner) | center (Viewport) | right panel (Details)
-        ImGuiID left, center, right;
-        ImGui::DockBuilderSplitNode(dockId,  ImGuiDir_Left,  0.18f, &left,   &center);
-        ImGui::DockBuilderSplitNode(center,  ImGuiDir_Right, 0.22f, &right,  &center);
-
-        // Split center bottom for Asset Browser
-        ImGuiID centerTop, bottom;
-        ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.25f, &bottom, &centerTop);
-
-        // Split left panel vertically: Outliner top | Camera bottom
-        ImGuiID leftTop, leftBot;
-        ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.35f, &leftBot, &leftTop);
-
-        ImGui::DockBuilderDockWindow("World Outliner", leftTop);
-        ImGui::DockBuilderDockWindow("Camera",         leftBot);
-        ImGui::DockBuilderDockWindow("Viewport",       centerTop);
-        ImGui::DockBuilderDockWindow("Details",        right);
-        ImGui::DockBuilderDockWindow("Stats",          right);  // stacked with Details
-        ImGui::DockBuilderDockWindow("Asset Browser",  bottom);
-
-        ImGui::DockBuilderFinish(dockId);
+        BuildDefaultLayout(dockId, vp->Size.x, vp->Size.y - offsetY);
+    }
+    else if (m_resetLayout)
+    {
+        m_resetLayout = false;
+        BuildDefaultLayout(dockId, vp->Size.x, vp->Size.y - offsetY);
     }
 
     ImGui::End();
+}
+
+void Editor::BuildDefaultLayout(unsigned int dockId, float availW, float availH)
+{
+    ImGui::DockBuilderRemoveNode(dockId);
+    ImGui::DockBuilderAddNode  (dockId, ImGuiDockNodeFlags_DockSpace);
+    ImGui::DockBuilderSetNodeSize(dockId, ImVec2(availW, availH));
+
+    // Split: left panel (Outliner) | center (Viewport) | right panel (Details)
+    ImGuiID left, center, right;
+    ImGui::DockBuilderSplitNode(dockId,  ImGuiDir_Left,  0.17f, &left,   &center);
+    ImGui::DockBuilderSplitNode(center,  ImGuiDir_Right, 0.24f, &right,  &center);
+
+    // Split center bottom for Asset Browser
+    ImGuiID centerTop, bottom;
+    ImGui::DockBuilderSplitNode(center, ImGuiDir_Down, 0.26f, &bottom, &centerTop);
+
+    // Split left panel vertically: Outliner (big) top | Camera (small) bottom
+    ImGuiID leftTop, leftBot;
+    ImGui::DockBuilderSplitNode(left, ImGuiDir_Down, 0.28f, &leftBot, &leftTop);
+
+    ImGui::DockBuilderDockWindow("World Outliner", leftTop);
+    ImGui::DockBuilderDockWindow("Camera",         leftBot);
+    ImGui::DockBuilderDockWindow("Viewport",       centerTop);
+    ImGui::DockBuilderDockWindow("Details",        right);
+    ImGui::DockBuilderDockWindow("Stats",          right);  // stacked with Details
+    ImGui::DockBuilderDockWindow("Asset Browser",  bottom);
+
+    ImGui::DockBuilderFinish(dockId);
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

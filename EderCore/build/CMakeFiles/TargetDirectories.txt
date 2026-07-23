@@ -1,2 +1,0 @@
-C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderCore/build/CMakeFiles/edit_cache.dir
-C:/Users/tupap/OneDrive/Escritorio/EderEngine/EderCore/build/CMakeFiles/rebuild_cache.dir
