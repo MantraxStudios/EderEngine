@@ -23,6 +23,12 @@ public:
     MaterialLayout& AddVec4 (const std::string& name);
     MaterialLayout& AddMat4 (const std::string& name);
 
+    // The standard PBR material block used by triangle.frag. Centralised here so
+    // every material creation site stays byte-compatible with the shader UBO.
+    //   vec4 albedo; float roughness, metallic, emissiveIntensity, alphaThreshold;
+    //   float hasNormalMap, hasRoughMap, hasEmissiveMap;
+    static MaterialLayout Standard();
+
     const std::vector<MaterialFieldInfo>& GetFields()    const { return fields; }
     size_t                                GetBlockSize() const;
     const MaterialFieldInfo*              Find(const std::string& name) const;

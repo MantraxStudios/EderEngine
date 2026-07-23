@@ -596,6 +596,14 @@ void InspectorPanel::DrawLightComponent()
             l.type = static_cast<LightType>(typeIdx);
         ImGui::ColorEdit3("Color",     &l.color.x);
         ImGui::DragFloat ("Intensity", &l.intensity, 0.05f, 0.0f, 100.0f);
+
+        // Colour temperature (Kelvin) — tints the light colour when enabled.
+        ImGui::Checkbox("Use Temperature", &l.useTemperature);
+        if (l.useTemperature)
+            ImGui::SliderFloat("Temperature (K)", &l.colorTemperature, 1000.0f, 15000.0f, "%.0f K");
+
+        if (l.type == LightType::Directional)
+            ImGui::DragFloat("Ambient Intensity", &l.ambientIntensity, 0.02f, 0.0f, 4.0f);
         if (l.type != LightType::Directional)
             ImGui::DragFloat("Range", &l.range, 0.5f, 0.0f, 1000.0f);
         if (l.type == LightType::Spot)

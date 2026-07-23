@@ -128,13 +128,18 @@ void VulkanPipeline::Create(const std::string& vertPath, const std::string& frag
     uboBinding.descriptorCount = 1;
     uboBinding.stageFlags      = vk::ShaderStageFlagBits::eVertex | vk::ShaderStageFlagBits::eFragment;
 
-    vk::DescriptorSetLayoutBinding samplerBinding{};
-    samplerBinding.binding         = 1;
-    samplerBinding.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
-    samplerBinding.descriptorCount = 1;
-    samplerBinding.stageFlags      = vk::ShaderStageFlagBits::eFragment;
+    // Material texture samplers (fragment): 1=albedo, 2=normal, 3=roughness/metallic, 4=emissive.
+    auto makeSampler = [](uint32_t b) {
+        vk::DescriptorSetLayoutBinding s{};
+        s.binding         = b;
+        s.descriptorType  = vk::DescriptorType::eCombinedImageSampler;
+        s.descriptorCount = 1;
+        s.stageFlags      = vk::ShaderStageFlagBits::eFragment;
+        return s;
+    };
 
-    std::array<vk::DescriptorSetLayoutBinding, 2> bindings = { uboBinding, samplerBinding };
+    std::array<vk::DescriptorSetLayoutBinding, 5> bindings = {
+        uboBinding, makeSampler(1), makeSampler(2), makeSampler(3), makeSampler(4) };
 
     vk::DescriptorSetLayoutCreateInfo dslInfo{};
     dslInfo.bindingCount = static_cast<uint32_t>(bindings.size());

@@ -24,6 +24,20 @@ MaterialLayout& MaterialLayout::AddVec3 (const std::string& name) { return Add(n
 MaterialLayout& MaterialLayout::AddVec4 (const std::string& name) { return Add(name, MaterialPropertyType::Vec4);  }
 MaterialLayout& MaterialLayout::AddMat4 (const std::string& name) { return Add(name, MaterialPropertyType::Mat4);  }
 
+MaterialLayout MaterialLayout::Standard()
+{
+    MaterialLayout l;
+    l.AddVec4 ("albedo")
+     .AddFloat("roughness")
+     .AddFloat("metallic")
+     .AddFloat("emissiveIntensity")
+     .AddFloat("alphaThreshold")
+     .AddFloat("hasNormalMap")
+     .AddFloat("hasRoughMap")
+     .AddFloat("hasEmissiveMap");
+    return l;
+}
+
 size_t MaterialLayout::GetBlockSize() const
 {
     if (rawSize == 0) return 0;

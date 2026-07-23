@@ -190,6 +190,9 @@ public:
                 f << "light.outerCone=" << l.outerConeAngle << "\n";
                 f << "light.castShadow="    << (l.castShadow ? 1 : 0) << "\n";
                 f << "light.shadowDist="   << l.shadowDistance << "\n";
+                f << "light.useTemp="      << (l.useTemperature ? 1 : 0) << "\n";
+                f << "light.temp="         << l.colorTemperature << "\n";
+                f << "light.ambient="      << l.ambientIntensity << "\n";
 
                 // Volumetric
                 f << "light.vol.enabled="    << (l.volumetricEnabled ? 1 : 0) << "\n";
@@ -584,6 +587,9 @@ private:
                 if (kv.count("light.outerCone"))  l.outerConeAngle  = std::stof(kv.at("light.outerCone"));
                 if (kv.count("light.castShadow")) l.castShadow      = kv.at("light.castShadow") == "1";
                 if (kv.count("light.shadowDist")) l.shadowDistance  = std::stof(kv.at("light.shadowDist"));
+                if (kv.count("light.useTemp"))    l.useTemperature  = kv.at("light.useTemp") == "1";
+                if (kv.count("light.temp"))       l.colorTemperature= std::stof(kv.at("light.temp"));
+                if (kv.count("light.ambient"))    l.ambientIntensity= std::stof(kv.at("light.ambient"));
                 // Volumetric
                 if (kv.count("light.vol.enabled"))    l.volumetricEnabled = kv.at("light.vol.enabled") == "1";
                 if (kv.count("light.vol.steps"))      l.volNumSteps       = std::stoi(kv.at("light.vol.steps"));

@@ -10,6 +10,8 @@
 #include <filesystem>
 #include <iostream>
 #include <sstream>
+#include <array>
+#include <unordered_map>
 #include <cstdio>
 #ifdef _WIN32
 #  define WIN32_LEAN_AND_MEAN
@@ -285,7 +287,10 @@ void Application::InitMaterials()
           .AddFloat("roughness")
           .AddFloat("metallic")
           .AddFloat("emissiveIntensity")
-          .AddFloat("alphaThreshold");
+          .AddFloat("alphaThreshold")
+                                 .AddFloat("hasNormalMap")
+                                 .AddFloat("hasRoughMap")
+                                 .AddFloat("hasEmissiveMap");
 
     MaterialManager::Get().Add("default", layout, m_pipeline);
     m_floorMat.Build(layout, m_pipeline);
@@ -1113,6 +1118,7 @@ void Application::HandleSceneViewResize()
 void Application::UpdateLightBuffer()
 {
     Registry& reg = *m_activeReg;
+    float dirAmbientScale = 1.0f;   // set from the directional light's ambientIntensity
     auto& sc     = VulkanSwapchain::Get();
     float aspect = static_cast<float>(sc.GetExtent().width) /
                    static_cast<float>(sc.GetExtent().height);
@@ -1142,19 +1148,21 @@ void Application::UpdateLightBuffer()
             glm::mat4 mat = TransformSystem::GetWorldMatrix(e, reg);
             glm::vec3 dir = glm::normalize(glm::vec3(mat * glm::vec4(0, -1, 0, 0)));
 
+            glm::vec3 effColor = EffectiveLightColor(l);
             if (!m_hasDir)
             {
                 m_activeDirDir          = dir;
-                m_activeDirColor        = l.color;
+                m_activeDirColor        = effColor;
                 m_activeDirIntensity    = l.intensity;
                 m_activeDirShadowDist   = l.shadowDistance;
+                dirAmbientScale         = l.ambientIntensity;
                 m_hasDir                = true;
             }
 
             float sunHorizon = glm::clamp(-dir.y * 5.0f + 1.0f, 0.0f, 1.0f);
             DirectionalLight dl{};
             dl.direction = dir;
-            dl.color     = l.color;
+            dl.color     = effColor;
             dl.intensity = l.intensity * sunHorizon;
             m_lights.AddDirectional(dl);
         }
@@ -1186,7 +1194,7 @@ void Application::UpdateLightBuffer()
         auto&  l        = reg.Get<LightComponent>(e);
         PointLight pl{};
         pl.position  = glm::vec3(TransformSystem::GetWorldMatrix(e, reg)[3]);
-        pl.color     = l.color;
+        pl.color     = EffectiveLightColor(l);
         pl.intensity = l.intensity;
         pl.radius    = l.range;
 
@@ -1217,7 +1225,7 @@ void Application::UpdateLightBuffer()
         sl.direction = dir;
         sl.innerCos  = std::cos(glm::radians(l.innerConeAngle));
         sl.outerCos  = std::cos(glm::radians(l.outerConeAngle));
-        sl.color     = l.color;
+        sl.color     = EffectiveLightColor(l);
         sl.intensity = l.intensity;
         sl.radius    = l.range;
 
@@ -1247,8 +1255,33 @@ void Application::UpdateLightBuffer()
     m_lights.SetCascadeData(m_cascadeMatrices, m_cascadeSplits);
     m_lights.SetCameraForward(m_camera.GetForward());
     m_lights.SetNearPlane(m_camera.nearPlane);
-    m_lights.SetSkyAmbient(glm::vec3(0.20f, 0.24f, 0.30f), glm::vec3(0.08f, 0.07f, 0.06f));
+    m_lights.SetSkyAmbient(glm::vec3(0.20f, 0.24f, 0.30f) * dirAmbientScale,
+                           glm::vec3(0.08f, 0.07f, 0.06f) * dirAmbientScale);
     m_lights.Update(m_camera.GetPosition());
+}
+
+// Bind a material's PBR maps (normal / roughness-metallic / emissive) and set the
+// shader "hasXxxMap" flags. Texture binds are cached per material+guid so we never
+// rewrite a descriptor that an in-flight frame might still be using.
+static void ApplyPBRMaps(Material& mat, const std::string& key, const Krayon::MaterialAsset& a)
+{
+    static std::unordered_map<std::string, std::array<uint64_t, 3>> cache;
+    auto& c = cache[key];
+    auto bind = [&](uint32_t slot, uint64_t guid, int idx, const char* flag)
+    {
+        mat.SetFloat(flag, guid != 0 ? 1.0f : 0.0f);
+        if (guid == 0 || c[idx] == guid) return;
+        const Krayon::AssetMeta* tm = Krayon::AssetManager::Get().FindByGuid(guid);
+        if (!tm) return;
+        try {
+            VulkanTexture& t = TextureManager::Get().Load(tm->path);
+            mat.BindTexture(slot, t);
+            c[idx] = guid;
+        } catch (const std::exception&) {}
+    };
+    bind(1, a.normalTexGuid,    0, "hasNormalMap");
+    bind(2, a.roughnessTexGuid, 1, "hasRoughMap");
+    bind(3, a.emissiveTexGuid,  2, "hasEmissiveMap");
 }
 
 void Application::SyncECSToScene()
@@ -1302,7 +1335,10 @@ void Application::SyncECSToScene()
                                  .AddFloat("roughness")
                                  .AddFloat("metallic")
                                  .AddFloat("emissiveIntensity")
-                                 .AddFloat("alphaThreshold");
+                                 .AddFloat("alphaThreshold")
+                                 .AddFloat("hasNormalMap")
+                                 .AddFloat("hasRoughMap")
+                                 .AddFloat("hasEmissiveMap");
                         MaterialManager::Get().Add(matKey, matLayout, m_pipeline);
                     }
                     Material& rMat = MaterialManager::Get().Get(matKey);
@@ -1337,6 +1373,7 @@ void Application::SyncECSToScene()
                         }
                     }
 
+                    ApplyPBRMaps(rMat, matKey, matAsset);
                     mr.materialName = matKey;
                 }
             }
@@ -1365,7 +1402,10 @@ void Application::SyncECSToScene()
                             .AddFloat("roughness")
                             .AddFloat("metallic")
                             .AddFloat("emissiveIntensity")
-                            .AddFloat("alphaThreshold");
+                            .AddFloat("alphaThreshold")
+                                 .AddFloat("hasNormalMap")
+                                 .AddFloat("hasRoughMap")
+                                 .AddFloat("hasEmissiveMap");
                     MaterialManager::Get().Add(resolvedName, smLayout, m_pipeline);
                 }
                 Material& smMat = MaterialManager::Get().Get(resolvedName);
@@ -1393,6 +1433,7 @@ void Application::SyncECSToScene()
                         }
                     }
                 }
+                ApplyPBRMaps(smMat, resolvedName, smAsset);
             }
             else if (smMeta->type == Krayon::AssetType::Texture)
             {
@@ -1407,7 +1448,10 @@ void Application::SyncECSToScene()
                             .AddFloat("roughness")
                             .AddFloat("metallic")
                             .AddFloat("emissiveIntensity")
-                            .AddFloat("alphaThreshold");
+                            .AddFloat("alphaThreshold")
+                                 .AddFloat("hasNormalMap")
+                                 .AddFloat("hasRoughMap")
+                                 .AddFloat("hasEmissiveMap");
                     MaterialManager::Get().Add(resolvedName, smLayout, m_pipeline);
                     Material& smMat = MaterialManager::Get().Get(resolvedName);
                     smMat.SetVec4 ("albedo", glm::vec4(1.0f));

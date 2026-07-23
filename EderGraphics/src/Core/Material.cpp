@@ -31,7 +31,7 @@ void Material::Build(const MaterialLayout& inLayout, VulkanPipeline& pipeline)
 
     vk::DescriptorPoolSize samplerPoolSize{};
     samplerPoolSize.type            = vk::DescriptorType::eCombinedImageSampler;
-    samplerPoolSize.descriptorCount = 1;
+    samplerPoolSize.descriptorCount = 4;   // albedo, normal, roughness/metallic, emissive
 
     std::array<vk::DescriptorPoolSize, 2> poolSizes = { uboPoolSize, samplerPoolSize };
 
@@ -70,9 +70,18 @@ void Material::Build(const MaterialLayout& inLayout, VulkanPipeline& pipeline)
     write.pBufferInfo     = &bufferInfo;
 
     device.updateDescriptorSets(write, nullptr);
-    
+
     std::cout << "[Material] UBO descriptor updated" << std::endl;
-    
+
+    // Bind a valid default texture to every sampler binding (1..4). Vulkan
+    // requires all descriptors in the set to be written before a draw; sites
+    // that assign real maps override these, unused slots stay on the default
+    // (and are ignored by the shader via the hasXxxMap flags).
+    static VulkanTexture s_defaultTex;
+    if (!s_defaultTex.IsValid()) s_defaultTex.CreateDefault();
+    for (uint32_t slot = 0; slot < 4; ++slot)
+        BindTexture(slot, s_defaultTex);
+
     dirty = true;
 }
 

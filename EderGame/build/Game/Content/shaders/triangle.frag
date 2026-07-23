@@ -7,8 +7,13 @@ layout(location = 3) in float fragRoughness;
 layout(location = 4) in float fragMetallic;
 layout(location = 5) in float fragEmissive;
 layout(location = 6) in vec3 fragWorldPos;
+layout(location = 7) in vec3 fragTangent;
+layout(location = 8) in vec3 fragBitangent;
 
 layout(set = 0, binding = 1) uniform sampler2D albedoTex;
+layout(set = 0, binding = 2) uniform sampler2D normalTex;       // tangent-space normal map
+layout(set = 0, binding = 3) uniform sampler2D roughMetalTex;   // glTF: G = roughness, B = metallic
+layout(set = 0, binding = 4) uniform sampler2D emissiveTex;
 
 layout(set = 0, binding = 0) uniform MaterialUBO {
     vec4  albedo;
@@ -16,6 +21,9 @@ layout(set = 0, binding = 0) uniform MaterialUBO {
     float metallic;
     float emissiveIntensity;
     float alphaThreshold;
+    float hasNormalMap;
+    float hasRoughMap;
+    float hasEmissiveMap;
 } material;
 
 #define MAX_DIR_LIGHTS   4
@@ -307,21 +315,45 @@ void main()
         discard;
 
     vec3 baseColor = fragColor.rgb * albedoSample.rgb;
-    // Flip normal for back-faces (inverted-winding meshes).
+
+    // Geometric normal, flipped for back-faces (inverted-winding meshes).
     // Without this, N points inward → normal-offset bias pushes the sample point
     // INTO the geometry → false self-shadowing / phantom shadows on every back-face.
-    vec3 N         = normalize(fragNormal) * (gl_FrontFacing ? 1.0 : -1.0);
-    vec3 V         = normalize(lights.cameraPos - fragWorldPos);
+    float facing = gl_FrontFacing ? 1.0 : -1.0;
+    vec3  Ng     = normalize(fragNormal) * facing;
+
+    // Tangent-space normal mapping (only when the material supplies a normal map).
+    vec3 N = Ng;
+    if (material.hasNormalMap > 0.5)
+    {
+        vec3 T  = normalize(fragTangent);
+        vec3 B  = normalize(fragBitangent) * facing;
+        vec3 ts = texture(normalTex, fragUV).xyz * 2.0 - 1.0;
+        N = normalize(mat3(T, B, Ng) * ts);
+    }
+
+    // Roughness / metallic — from the material scalars, modulated by an optional
+    // packed map (glTF convention: G = roughness, B = metallic).
+    float roughness = fragRoughness;
+    float metallic  = fragMetallic;
+    if (material.hasRoughMap > 0.5)
+    {
+        vec3 rm    = texture(roughMetalTex, fragUV).rgb;
+        roughness *= rm.g;
+        metallic  *= rm.b;
+    }
+
+    vec3 V = normalize(lights.cameraPos - fragWorldPos);
 
     // Hemisphere ambient: diffuse part + a Fresnel-weighted specular ambient so
     // metals and grazing angles pick up environment colour instead of going black.
     float hemi    = N.y * 0.5 + 0.5;
     vec3  ambient = mix(lights.groundAmbient.rgb, lights.skyAmbient.rgb, hemi);
     float NdotV   = max(dot(N, V), 0.0);
-    vec3  F0      = mix(vec3(0.04), baseColor, fragMetallic);
-    vec3  Fa      = F0 + (max(vec3(1.0 - fragRoughness), F0) - F0)
+    vec3  F0      = mix(vec3(0.04), baseColor, metallic);
+    vec3  Fa      = F0 + (max(vec3(1.0 - roughness), F0) - F0)
                        * pow(1.0 - NdotV, 5.0);
-    vec3  result  = ambient * (baseColor * (1.0 - fragMetallic) + Fa);
+    vec3  result  = ambient * (baseColor * (1.0 - metallic) + Fa);
 
     for (int i = 0; i < lights.numDirLights; i++)
     {
@@ -329,7 +361,7 @@ void main()
         float shadow = (i == 0) ? ShadowFactor(fragWorldPos, N, L) : 1.0;
         result += shadow * CalcLight(N, L, V,
             lights.dirLights[i].color, lights.dirLights[i].intensity,
-            baseColor, fragRoughness, fragMetallic);
+            baseColor, roughness, metallic);
     }
 
     for (int i = 0; i < lights.numPointLights; i++)
@@ -341,13 +373,17 @@ void main()
         if (dist >= r) continue;
         float normDist = dist / r;
         float window   = max(0.0, 1.0 - normDist * normDist * normDist * normDist);
-        float atten    = window * window;
+        window        *= window;
+        // Bounded inverse-square falloff: physical 1/d² rolloff shape without the
+        // singularity at the light centre (peaks at 1), so existing point-light
+        // intensities stay usable while the near-field falls off more naturally.
+        float atten    = window / (1.0 + 8.0 * normDist * normDist);
         float shadow   = (lights.pointLights[i].shadowIdx >= 0)
                        ? ShadowPoint(lights.pointLights[i].shadowIdx, fragWorldPos,
                                      lights.pointLights[i].position, N) : 1.0;
         result += shadow * CalcLight(N, toLight / dist, V,
             lights.pointLights[i].color, lights.pointLights[i].intensity * atten,
-            baseColor, fragRoughness, fragMetallic);
+            baseColor, roughness, metallic);
     }
 
     for (int i = 0; i < lights.numSpotLights; i++)
@@ -360,7 +396,8 @@ void main()
         if (dist >= r) continue;
         float normDist = dist / r;
         float window   = max(0.0, 1.0 - normDist * normDist * normDist * normDist);
-        float atten    = window * window;
+        window        *= window;
+        float atten    = window / (1.0 + 8.0 * normDist * normDist);
         float theta    = dot(L, normalize(-lights.spotLights[i].direction));
         float eps      = lights.spotLights[i].innerCos - lights.spotLights[i].outerCos;
         float cone     = clamp((theta - lights.spotLights[i].outerCos) / max(eps, 0.0001), 0.0, 1.0);
@@ -369,10 +406,14 @@ void main()
                        ? ShadowSpot(lights.spotLights[i].shadowIdx, fragWorldPos, N, L) : 1.0;
         result += shadow * CalcLight(N, L, V,
             lights.spotLights[i].color, lights.spotLights[i].intensity * atten * cone,
-            baseColor, fragRoughness, fragMetallic);
+            baseColor, roughness, metallic);
     }
 
-    result += baseColor * fragEmissive;
+    // Emission: tinted by the albedo by default, or by a dedicated emissive map.
+    vec3 emission = baseColor * fragEmissive;
+    if (material.hasEmissiveMap > 0.5)
+        emission = texture(emissiveTex, fragUV).rgb * fragEmissive;
+    result += emission;
 
     // HDR → display: exposure, filmic tonemap, gamma encode (UNORM target).
     vec3 mapped = ACESFilm(result * EXPOSURE);

@@ -38,6 +38,8 @@ layout(location = 3) out float fragRoughness;
 layout(location = 4) out float fragMetallic;
 layout(location = 5) out float fragEmissive;
 layout(location = 6) out vec3 fragWorldPos;
+layout(location = 7) out vec3 fragTangent;
+layout(location = 8) out vec3 fragBitangent;
 
 void main()
 {
@@ -51,6 +53,8 @@ void main()
 
     vec4 localPos;
     vec3 localNormal;
+    vec3 localTangent;
+    vec3 localBitangent;
 
     if (totalWeight > 0.0001)
     {
@@ -64,12 +68,17 @@ void main()
 
         // Usar solo mat3(skinMat) para rotar la normal por los huesos
         // sin inverse(): skinMat ya es ortonormal si los bones estan bien normalizados
-        localNormal = mat3(skinMat) * inNormal;
+        mat3 skin3     = mat3(skinMat);
+        localNormal    = skin3 * inNormal;
+        localTangent   = skin3 * inTangent;
+        localBitangent = skin3 * inBitangent;
     }
     else
     {
-        localPos    = vec4(inPosition, 1.0);
-        localNormal = inNormal;
+        localPos       = vec4(inPosition, 1.0);
+        localNormal    = inNormal;
+        localTangent   = inTangent;
+        localBitangent = inBitangent;
     }
 
     vec4 worldPos = model * localPos;
@@ -77,6 +86,8 @@ void main()
 
     // Aplicar la normal matrix del modelo (calculada una sola vez arriba)
     fragNormal    = normalize(modelNormalMat * localNormal);
+    fragTangent   = normalize(modelNormalMat * localTangent);
+    fragBitangent = normalize(modelNormalMat * localBitangent);
     fragUV        = inUV;
     fragColor     = inColor * material.albedo;
     fragRoughness = material.roughness;

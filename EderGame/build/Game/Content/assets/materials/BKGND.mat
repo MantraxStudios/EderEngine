@@ -1,11 +1,11 @@
 name=BKGND
-vertShaderGuid=0
-fragShaderGuid=0
+vertShaderGuid=9d5e16b7f2113a92
+fragShaderGuid=1a419198c3718385
 albedo=1.000000,1.000000,1.000000,1.000000
-roughness=0.5
+roughness=0.13
 metallic=0
 emissive=0.000000,0.000000,0.000000
-albedoTexGuid=2a279c93a8a85c51
-normalTexGuid=0
-roughnessTexGuid=0
+albedoTexGuid=3786dcd751b3cd
+normalTexGuid=9ffaf8eaba987db7
+roughnessTexGuid=e204c551a56d72a0
 emissiveTexGuid=0
