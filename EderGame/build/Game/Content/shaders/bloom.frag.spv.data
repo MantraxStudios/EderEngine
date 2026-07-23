@@ -1,0 +1,4 @@
+guid=d5d84df4c5909790
+type=Shader
+name=bloom.frag
+path=shaders/bloom.frag.spv

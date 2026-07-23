@@ -1,0 +1,4 @@
+guid=ab7021811841b39d
+type=Shader
+name=scanlines.frag
+path=shaders/scanlines.frag.spv

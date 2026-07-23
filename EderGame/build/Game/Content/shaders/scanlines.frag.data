@@ -1,0 +1,4 @@
+guid=43449971afcd6c28
+type=Shader
+name=scanlines
+path=shaders/scanlines.frag

@@ -1,0 +1,27 @@
+# EderEngine post-process preset
+effect.count=3
+effect.0.name=Color Grading
+effect.0.shader=shaders/colorgrade.frag.spv
+effect.0.enabled=1
+effect.0.paramcount=8
+effect.0.param.0=1
+effect.0.param.1=1.05
+effect.0.param.2=1.1
+effect.0.param.3=0
+effect.0.param.4=0
+effect.0.param.5=2
+effect.0.param.6=1
+effect.0.param.7=0
+effect.1.name=Vignette
+effect.1.shader=shaders/vignette.frag.spv
+effect.1.enabled=1
+effect.1.paramcount=3
+effect.1.param.0=0.45
+effect.1.param.1=0.3
+effect.1.param.2=0
+effect.2.name=Film Grain
+effect.2.shader=shaders/grain.frag.spv
+effect.2.enabled=1
+effect.2.paramcount=2
+effect.2.param.0=0.04
+effect.2.param.1=1

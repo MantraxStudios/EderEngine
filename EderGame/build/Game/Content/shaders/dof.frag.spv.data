@@ -1,0 +1,4 @@
+guid=aace5ad1530199de
+type=Shader
+name=dof.frag
+path=shaders/dof.frag.spv

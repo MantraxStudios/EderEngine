@@ -1,0 +1,4 @@
+guid=34f9ca59644897b9
+type=Shader
+name=bloom
+path=shaders/bloom.frag

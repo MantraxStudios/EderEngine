@@ -1,0 +1,4 @@
+guid=dc720f3123ee439a
+type=Shader
+name=chromatic
+path=shaders/chromatic.frag

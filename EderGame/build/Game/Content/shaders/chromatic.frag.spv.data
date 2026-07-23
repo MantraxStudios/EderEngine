@@ -1,0 +1,4 @@
+guid=df4a04e9f29d64b3
+type=Shader
+name=chromatic.frag
+path=shaders/chromatic.frag.spv

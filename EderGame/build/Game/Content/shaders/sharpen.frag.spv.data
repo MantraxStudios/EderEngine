@@ -1,0 +1,4 @@
+guid=547de8f413ea0fec
+type=Shader
+name=sharpen.frag
+path=shaders/sharpen.frag.spv

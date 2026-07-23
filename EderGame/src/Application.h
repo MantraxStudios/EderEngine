@@ -181,8 +181,17 @@ private:
     // ── Static directional-shadow cache ───────────────────────────────────────
     // When neither the cascade matrices nor any shadow caster changed (and there
     // are no animated casters), the 4 cascade passes are skipped and last frame's
-    // depth map is reused. Big win for a still editor viewport.
-    bool      m_shadowCacheEnabled = true;
+    // depth map is reused.
+    //
+    // DISABLED by default: the shadow map is a SINGLE image shared across
+    // MAX_FRAMES_IN_FLIGHT (2) frames, with no cross-frame synchronisation.
+    // Writing it every frame is self-consistent (each frame re-establishes the
+    // content it reads via an intra-frame barrier). Skipping the write makes a
+    // frame read content written by a still-in-flight previous frame → a
+    // read/write race that shows up as shimmering shadows when the camera moves.
+    // To enable this safely the directional shadow map must be double-buffered
+    // (one image per frame in flight) or gated by a fence/semaphore.
+    bool      m_shadowCacheEnabled = false;
     bool      m_dirShadowValid     = false;   // a valid map was rendered at least once
     uint64_t  m_prevCasterHash     = 0;
     glm::mat4 m_prevCascadeMatrices[VulkanShadowMap::NUM_CASCADES] = {};

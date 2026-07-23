@@ -1,0 +1,4 @@
+guid=dc466d5412d332ff
+type=Shader
+name=colorgrade.frag
+path=shaders/colorgrade.frag.spv
