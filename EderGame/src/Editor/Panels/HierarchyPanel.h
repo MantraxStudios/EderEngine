@@ -27,6 +27,11 @@ private:
     Entity    selected       = NULL_ENTITY;
     Entity    pendingDestroy = NULL_ENTITY;
 
+    // Inline rename (double-click / F2, Unity-style)
+    Entity    m_renaming     = NULL_ENTITY;
+    bool      m_renameFocus  = false;
+    char      m_renameBuf[128] = {};
+
     struct PendingAttach { Entity child = NULL_ENTITY; Entity parent = NULL_ENTITY; };
     PendingAttach pendingAttach;
     Entity        pendingDetach = NULL_ENTITY;

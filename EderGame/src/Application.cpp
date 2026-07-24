@@ -119,6 +119,11 @@ int Application::Run()
                 ++steps;
             }
 
+            // Smooth rendering between fixed steps: blend body poses by the
+            // leftover accumulator fraction so motion doesn't stutter when the
+            // render rate isn't a multiple of the 60 Hz sim.
+            PhysicsSystem::Get().WriteBackInterpolated(m_registry, physAccum / PHYSICS_DT);
+
             {
                 glm::vec3 fwd = m_camera.GetForward() * -1.0f;;
                 glm::vec3 up  = m_camera.GetUp();
@@ -247,10 +252,12 @@ void Application::Init()
     VulkanRenderer::Get().SetWindow(m_window);
     m_editor.Init(m_window);
 
+    // The forward pipeline renders into the HDR scene framebuffer (RGBA16F),
+    // not the swapchain — the final tonemap pass handles the LDR conversion.
     m_pipeline.Create(
         "shaders/triangle.vert.spv",
         "shaders/triangle.frag.spv",
-        VulkanSwapchain::Get().GetFormat(),
+        vk::Format::eR16G16B16A16Sfloat,
         VulkanRenderer::Get().GetDepthFormat());
 
     // Deferred geometry pipeline — same vertex shader / material + bone layouts as
@@ -268,7 +275,7 @@ void Application::Init()
     InitMaterials();
 
     m_shadowMap.Create(2048);
-    m_shadowPipeline.Create(m_shadowMap.GetFormat());
+    m_shadowPipeline.Create(m_shadowMap.GetFormat(), *m_pipeline.GetDescriptorSetLayout());
     m_spotShadowMap.Create(1024);
     m_pointShadowMap.Create(512);
     m_pointShadowPipeline.Create(m_pointShadowMap.GetFormat());
@@ -286,7 +293,7 @@ void Application::Init()
 
     UISystem::Get().Init();
     UISystem::Get().SetWindow(m_window);
-    m_uiRenderer.Create(vk::Format::eB8G8R8A8Unorm, VulkanRenderer::Get().GetDepthFormat());
+    m_uiRenderer.Create(vk::Format::eR16G16B16A16Sfloat, VulkanRenderer::Get().GetDepthFormat());
 
     PhysicsSystem::Get().Init();
     LuaScriptSystem::Get().Init();
@@ -304,7 +311,8 @@ void Application::InitMaterials()
           .AddFloat("alphaThreshold")
                                  .AddFloat("hasNormalMap")
                                  .AddFloat("hasRoughMap")
-                                 .AddFloat("hasEmissiveMap");
+                                 .AddFloat("hasEmissiveMap")
+                                 .AddFloat("normalStrength");
 
     MaterialManager::Get().Add("default", layout, m_pipeline);
     m_floorMat.Build(layout, m_pipeline);
@@ -363,9 +371,10 @@ void Application::InitPostProcess()
     uint32_t h    = sc.GetExtent().height / 2;
     auto depthFmt = rd.GetDepthFormat();
 
-    m_debugFb.Create(w, h, vk::Format::eB8G8R8A8Unorm, depthFmt);
+    // Linear HDR scene target — tonemapped once at the end of the chain.
+    m_debugFb.Create(w, h, vk::Format::eR16G16B16A16Sfloat, depthFmt);
     m_debugOverlay.Create(sc.GetFormat(), depthFmt);
-    m_skybox.Create(sc.GetFormat(), depthFmt);
+    m_skybox.Create(m_debugFb.GetColorFormat(), depthFmt);
     m_gizmo.Create(m_debugFb.GetColorFormat(), depthFmt);
     m_occlusionPass.Create(w, h);
     m_sunShafts.Create(m_debugFb.GetColorFormat(), w, h);
@@ -379,6 +388,9 @@ void Application::InitPostProcess()
     m_ssao.Create(w, h);
     m_deferredLighting.Create(m_debugFb.GetColorFormat(), depthFmt,
                               *m_pipeline.GetLightDescriptorSetLayout());
+
+    // Final display transform: HDR chain → LDR image for the editor viewport.
+    m_tonemapPass.Create(vk::Format::eB8G8R8A8Unorm, w, h, "shaders/tonemap.frag.spv");
 }
 
 void Application::RebuildPostProcessPasses()
@@ -413,6 +425,18 @@ void Application::WireEditorCallbacks()
     m_editor.SetNewSceneCallback([this]() { NewScene(); });
 
     m_editor.SetPostProcessGraph(&m_ppGraph, [this]() { m_ppDirty = true; });
+
+    // SSAO + exposure live-edit from the Post Process panel.
+    {
+        PostProcessPanel::SSAOControls c;
+        c.enabled   = &m_ssaoEnabled;
+        c.radius    = &m_ssaoRadius;
+        c.bias      = &m_ssaoBias;
+        c.intensity = &m_ssaoIntensity;
+        c.power     = &m_ssaoPower;
+        c.exposure  = &m_tonemapExposure;
+        m_editor.SetSSAOControls(c);
+    }
 
     m_editor.SetSaveSceneCallback([this]()
     {
@@ -1002,6 +1026,7 @@ void Application::Shutdown()
     m_volumetricLight.Destroy();
     m_volumetricFog.Destroy();
     m_sunShafts.Destroy();
+    m_tonemapPass.Destroy();
     m_deferredLighting.Destroy();
     m_ssao.Destroy();
     m_gbuffer.Destroy();
@@ -1138,6 +1163,7 @@ void Application::HandleSceneViewResize()
     m_gbuffer.Recreate(svW, svH);
     m_ssao.Resize(svW, svH);
     m_deferredLighting.ResetBindings();
+    m_tonemapPass.Resize(svW, svH);
     for (auto& pass : m_ppPasses)
         pass->Resize(svW, svH);
 }
@@ -1294,21 +1320,23 @@ static void ApplyPBRMaps(Material& mat, const std::string& key, const Krayon::Ma
 {
     static std::unordered_map<std::string, std::array<uint64_t, 3>> cache;
     auto& c = cache[key];
-    auto bind = [&](uint32_t slot, uint64_t guid, int idx, const char* flag)
+    auto bind = [&](uint32_t slot, uint64_t guid, int idx, const char* flag, bool srgb)
     {
         mat.SetFloat(flag, guid != 0 ? 1.0f : 0.0f);
         if (guid == 0 || c[idx] == guid) return;
         const Krayon::AssetMeta* tm = Krayon::AssetManager::Get().FindByGuid(guid);
         if (!tm) return;
         try {
-            VulkanTexture& t = TextureManager::Get().Load(tm->path);
+            VulkanTexture& t = TextureManager::Get().Load(tm->path, srgb);
             mat.BindTexture(slot, t);
             c[idx] = guid;
         } catch (const std::exception&) {}
     };
-    bind(1, a.normalTexGuid,    0, "hasNormalMap");
-    bind(2, a.roughnessTexGuid, 1, "hasRoughMap");
-    bind(3, a.emissiveTexGuid,  2, "hasEmissiveMap");
+    // Normal and roughness/metallic are DATA maps → linear; emissive is colour → sRGB.
+    bind(1, a.normalTexGuid,    0, "hasNormalMap",   false);
+    bind(2, a.roughnessTexGuid, 1, "hasRoughMap",    false);
+    bind(3, a.emissiveTexGuid,  2, "hasEmissiveMap", true);
+    mat.SetFloat("normalStrength", a.normalStrength);
 }
 
 void Application::SyncECSToScene()
@@ -1365,7 +1393,8 @@ void Application::SyncECSToScene()
                                  .AddFloat("alphaThreshold")
                                  .AddFloat("hasNormalMap")
                                  .AddFloat("hasRoughMap")
-                                 .AddFloat("hasEmissiveMap");
+                                 .AddFloat("hasEmissiveMap")
+                                 .AddFloat("normalStrength");
                         MaterialManager::Get().Add(matKey, matLayout, m_pipeline);
                     }
                     Material& rMat = MaterialManager::Get().Get(matKey);
@@ -1432,7 +1461,8 @@ void Application::SyncECSToScene()
                             .AddFloat("alphaThreshold")
                                  .AddFloat("hasNormalMap")
                                  .AddFloat("hasRoughMap")
-                                 .AddFloat("hasEmissiveMap");
+                                 .AddFloat("hasEmissiveMap")
+                                 .AddFloat("normalStrength");
                     MaterialManager::Get().Add(resolvedName, smLayout, m_pipeline);
                 }
                 Material& smMat = MaterialManager::Get().Get(resolvedName);
@@ -1478,7 +1508,8 @@ void Application::SyncECSToScene()
                             .AddFloat("alphaThreshold")
                                  .AddFloat("hasNormalMap")
                                  .AddFloat("hasRoughMap")
-                                 .AddFloat("hasEmissiveMap");
+                                 .AddFloat("hasEmissiveMap")
+                                 .AddFloat("normalStrength");
                     MaterialManager::Get().Add(resolvedName, smLayout, m_pipeline);
                     Material& smMat = MaterialManager::Get().Get(resolvedName);
                     smMat.SetVec4 ("albedo", glm::vec4(1.0f));
@@ -1845,7 +1876,7 @@ void Application::RenderShadowPasses(vk::CommandBuffer cmd)
             m_shadowMap.BeginRendering(cmd, c);
             m_shadowPipeline.Bind(cmd);
             m_boneSSBO.BindToSet(cmd, *m_shadowPipeline.GetLayout(), 0);
-            m_scene.DrawShadow(cmd, m_shadowPipeline, m_cascadeMatrices[c], &m_cascadeCullSpheres[c]);
+            m_scene.DrawShadow(cmd, m_shadowPipeline, m_cascadeMatrices[c], &m_cascadeCullSpheres[c], &m_boneSSBO);
             m_scene.DrawSkinnedShadow(cmd, m_shadowPipeline, m_cascadeMatrices[c], bindBonesFnShadow);
             m_shadowMap.EndRendering(cmd);
         }
@@ -1857,7 +1888,7 @@ void Application::RenderShadowPasses(vk::CommandBuffer cmd)
         m_spotShadowMap.BeginRendering(cmd, 0);
         m_shadowPipeline.Bind(cmd);
         m_boneSSBO.BindToSet(cmd, *m_shadowPipeline.GetLayout(), 0);
-        m_scene.DrawShadow(cmd, m_shadowPipeline, m_activeSpotMatrix);
+        m_scene.DrawShadow(cmd, m_shadowPipeline, m_activeSpotMatrix, nullptr, &m_boneSSBO);
         m_scene.DrawSkinnedShadow(cmd, m_shadowPipeline, m_activeSpotMatrix, bindBonesFnShadow);
         m_spotShadowMap.EndRendering(cmd);
     }
@@ -2129,6 +2160,18 @@ void Application::RenderPostProcess(vk::CommandBuffer cmd)
             m_ppGraph.effects[i].params);
         m_ppPasses[i]->GetOutput().TransitionToShaderRead(cmd);
         m_postFb = &m_ppPasses[i]->GetOutput();
+    }
+
+    // Final display transform (exposure → ACES → gamma) — the only tonemap in
+    // the frame. Everything before this point is linear HDR.
+    {
+        float tp[16] = {};
+        tp[0] = m_tonemapExposure;
+        m_tonemapPass.Draw(cmd,
+            m_postFb->GetColorView(), m_postFb->GetSampler(),
+            m_debugFb.GetDepthView(), m_debugFb.GetSampler(), tp);
+        m_tonemapPass.GetOutput().TransitionToShaderRead(cmd);
+        m_postFb = &m_tonemapPass.GetOutput();
     }
 
     m_editor.SetSceneViewFramebuffer(m_postFb);

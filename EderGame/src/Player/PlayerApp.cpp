@@ -96,16 +96,23 @@ int PlayerApp::Run(const std::string& initialScene, const std::string& gameName)
         SyncECSToScene();
         UpdateAnimations(dt);
 
-        if (physAccum >= PHYSICS_DT)
+        // Fixed-step loop (catches up when the frame rate dips) + interpolated
+        // write-back so rendered motion is smooth between 60 Hz sim steps.
         {
-            physAccum -= PHYSICS_DT;
-            PhysicsSystem::Get().SyncActors(m_registry);
-            PhysicsSystem::Get().SyncControllers(m_registry);
-            PhysicsSystem::Get().Step(PHYSICS_DT);
-            PhysicsSystem::Get().WriteBack(m_registry);
-            PhysicsSystem::Get().WriteBackControllers(m_registry);
-            PhysicsSystem::Get().DispatchEvents(m_registry);
-            LuaScriptSystem::Get().Update(m_registry, PHYSICS_DT);
+            int steps = 0;
+            while (physAccum >= PHYSICS_DT && steps < 5)
+            {
+                physAccum -= PHYSICS_DT;
+                PhysicsSystem::Get().SyncActors(m_registry);
+                PhysicsSystem::Get().SyncControllers(m_registry);
+                PhysicsSystem::Get().Step(PHYSICS_DT);
+                PhysicsSystem::Get().WriteBack(m_registry);
+                PhysicsSystem::Get().WriteBackControllers(m_registry);
+                PhysicsSystem::Get().DispatchEvents(m_registry);
+                LuaScriptSystem::Get().Update(m_registry, PHYSICS_DT);
+                ++steps;
+            }
+            PhysicsSystem::Get().WriteBackInterpolated(m_registry, physAccum / PHYSICS_DT);
         }
 
         UISystem::Get().Update(dt);
@@ -152,13 +159,13 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
     m_pipeline.Create(
         "shaders/triangle.vert.spv",
         "shaders/triangle.frag.spv",
-        VulkanSwapchain::Get().GetFormat(),
+        vk::Format::eR16G16B16A16Sfloat,   // renders into the HDR scene framebuffer
         VulkanRenderer::Get().GetDepthFormat());
 
     InitMaterials();
 
     m_shadowMap.Create(2048);
-    m_shadowPipeline.Create(m_shadowMap.GetFormat());
+    m_shadowPipeline.Create(m_shadowMap.GetFormat(), *m_pipeline.GetDescriptorSetLayout());
     m_spotShadowMap.Create(1024);
     m_pointShadowMap.Create(512);
     m_pointShadowPipeline.Create(m_pointShadowMap.GetFormat());
@@ -168,7 +175,7 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
     m_lights.BindSpotShadowMap (m_spotShadowMap.GetArrayView(),      m_spotShadowMap.GetCompareSampler());
     m_lights.BindPointShadowMap(m_pointShadowMap.GetCubeArrayView(), m_pointShadowMap.GetCompareSampler());
 
-    m_skybox.Create(VulkanSwapchain::Get().GetFormat(),
+    m_skybox.Create(vk::Format::eR16G16B16A16Sfloat,
                     VulkanRenderer::Get().GetDepthFormat());
     m_boneSSBO.Create(m_pipeline);
     InitPostProcess();
@@ -189,7 +196,7 @@ void PlayerApp::Init(const std::string& windowTitle, const std::string& initialS
 
     UISystem::Get().Init();
     UISystem::Get().SetWindow(m_window);
-    m_uiRenderer.Create(VulkanSwapchain::Get().GetFormat(),
+    m_uiRenderer.Create(vk::Format::eR16G16B16A16Sfloat,
                         VulkanRenderer::Get().GetDepthFormat());
     PhysicsSystem::Get().Init();
     LuaScriptSystem::Get().Init();
@@ -260,16 +267,23 @@ int PlayerApp::RunPreview(const std::string& scenePath, bool borderless)
         SyncECSToScene();
         UpdateAnimations(dt);
 
-        if (physAccum >= PHYSICS_DT)
+        // Fixed-step loop (catches up when the frame rate dips) + interpolated
+        // write-back so rendered motion is smooth between 60 Hz sim steps.
         {
-            physAccum -= PHYSICS_DT;
-            PhysicsSystem::Get().SyncActors(m_registry);
-            PhysicsSystem::Get().SyncControllers(m_registry);
-            PhysicsSystem::Get().Step(PHYSICS_DT);
-            PhysicsSystem::Get().WriteBack(m_registry);
-            PhysicsSystem::Get().WriteBackControllers(m_registry);
-            PhysicsSystem::Get().DispatchEvents(m_registry);
-            LuaScriptSystem::Get().Update(m_registry, PHYSICS_DT);
+            int steps = 0;
+            while (physAccum >= PHYSICS_DT && steps < 5)
+            {
+                physAccum -= PHYSICS_DT;
+                PhysicsSystem::Get().SyncActors(m_registry);
+                PhysicsSystem::Get().SyncControllers(m_registry);
+                PhysicsSystem::Get().Step(PHYSICS_DT);
+                PhysicsSystem::Get().WriteBack(m_registry);
+                PhysicsSystem::Get().WriteBackControllers(m_registry);
+                PhysicsSystem::Get().DispatchEvents(m_registry);
+                LuaScriptSystem::Get().Update(m_registry, PHYSICS_DT);
+                ++steps;
+            }
+            PhysicsSystem::Get().WriteBackInterpolated(m_registry, physAccum / PHYSICS_DT);
         }
 
         UISystem::Get().Update(dt);
@@ -318,13 +332,13 @@ void PlayerApp::InitPreview(const std::string& scenePath)
     m_pipeline.Create(
         "shaders/triangle.vert.spv",
         "shaders/triangle.frag.spv",
-        VulkanSwapchain::Get().GetFormat(),
+        vk::Format::eR16G16B16A16Sfloat,   // renders into the HDR scene framebuffer
         VulkanRenderer::Get().GetDepthFormat());
 
     InitMaterials();
 
     m_shadowMap.Create(2048);
-    m_shadowPipeline.Create(m_shadowMap.GetFormat());
+    m_shadowPipeline.Create(m_shadowMap.GetFormat(), *m_pipeline.GetDescriptorSetLayout());
     m_spotShadowMap.Create(1024);
     m_pointShadowMap.Create(512);
     m_pointShadowPipeline.Create(m_pointShadowMap.GetFormat());
@@ -334,7 +348,7 @@ void PlayerApp::InitPreview(const std::string& scenePath)
     m_lights.BindSpotShadowMap (m_spotShadowMap.GetArrayView(),      m_spotShadowMap.GetCompareSampler());
     m_lights.BindPointShadowMap(m_pointShadowMap.GetCubeArrayView(), m_pointShadowMap.GetCompareSampler());
 
-    m_skybox.Create(VulkanSwapchain::Get().GetFormat(),
+    m_skybox.Create(vk::Format::eR16G16B16A16Sfloat,
                     VulkanRenderer::Get().GetDepthFormat());
     m_boneSSBO.Create(m_pipeline);
     InitPostProcess();
@@ -353,7 +367,7 @@ void PlayerApp::InitPreview(const std::string& scenePath)
 
     UISystem::Get().Init();
     UISystem::Get().SetWindow(m_window);
-    m_uiRenderer.Create(VulkanSwapchain::Get().GetFormat(),
+    m_uiRenderer.Create(vk::Format::eR16G16B16A16Sfloat,
                         VulkanRenderer::Get().GetDepthFormat());
     PhysicsSystem::Get().Init();
     LuaScriptSystem::Get().Init();
@@ -472,7 +486,8 @@ void PlayerApp::InitMaterials()
           .AddFloat("alphaThreshold")
                                  .AddFloat("hasNormalMap")
                                  .AddFloat("hasRoughMap")
-                                 .AddFloat("hasEmissiveMap");
+                                 .AddFloat("hasEmissiveMap")
+                                 .AddFloat("normalStrength");
 
     MaterialManager::Get().Add("default", layout, m_pipeline);
     m_floorMat.Build(layout, m_pipeline);
@@ -707,21 +722,22 @@ static void ApplyPBRMaps(Material& mat, const std::string& key, const Krayon::Ma
 {
     static std::unordered_map<std::string, std::array<uint64_t, 3>> cache;
     auto& c = cache[key];
-    auto bind = [&](uint32_t slot, uint64_t guid, int idx, const char* flag)
+    auto bind = [&](uint32_t slot, uint64_t guid, int idx, const char* flag, bool srgb)
     {
         mat.SetFloat(flag, guid != 0 ? 1.0f : 0.0f);
         if (guid == 0 || c[idx] == guid) return;
         const Krayon::AssetMeta* tm = Krayon::AssetManager::Get().FindByGuid(guid);
         if (!tm) return;
         try {
-            VulkanTexture& t = TextureManager::Get().Load(tm->path);
+            VulkanTexture& t = TextureManager::Get().Load(tm->path, srgb);
             mat.BindTexture(slot, t);
             c[idx] = guid;
         } catch (const std::exception&) {}
     };
-    bind(1, a.normalTexGuid,    0, "hasNormalMap");
-    bind(2, a.roughnessTexGuid, 1, "hasRoughMap");
-    bind(3, a.emissiveTexGuid,  2, "hasEmissiveMap");
+    bind(1, a.normalTexGuid,    0, "hasNormalMap",   false);
+    bind(2, a.roughnessTexGuid, 1, "hasRoughMap",    false);
+    bind(3, a.emissiveTexGuid,  2, "hasEmissiveMap", true);
+    mat.SetFloat("normalStrength", a.normalStrength);
 }
 
 void PlayerApp::SyncECSToScene()
@@ -777,7 +793,8 @@ void PlayerApp::SyncECSToScene()
                                  .AddFloat("alphaThreshold")
                                  .AddFloat("hasNormalMap")
                                  .AddFloat("hasRoughMap")
-                                 .AddFloat("hasEmissiveMap");
+                                 .AddFloat("hasEmissiveMap")
+                                 .AddFloat("normalStrength");
                         MaterialManager::Get().Add(matKey, matLayout, m_pipeline);
                     }
                     Material& rMat = MaterialManager::Get().Get(matKey);
@@ -842,7 +859,8 @@ void PlayerApp::SyncECSToScene()
                             .AddFloat("alphaThreshold")
                                  .AddFloat("hasNormalMap")
                                  .AddFloat("hasRoughMap")
-                                 .AddFloat("hasEmissiveMap");
+                                 .AddFloat("hasEmissiveMap")
+                                 .AddFloat("normalStrength");
                     MaterialManager::Get().Add(resolvedName, smLayout, m_pipeline);
                 }
                 Material& smMat = MaterialManager::Get().Get(resolvedName);
@@ -882,7 +900,8 @@ void PlayerApp::SyncECSToScene()
                             .AddFloat("alphaThreshold")
                                  .AddFloat("hasNormalMap")
                                  .AddFloat("hasRoughMap")
-                                 .AddFloat("hasEmissiveMap");
+                                 .AddFloat("hasEmissiveMap")
+                                 .AddFloat("normalStrength");
                     MaterialManager::Get().Add(resolvedName, smLayout, m_pipeline);
                     Material& smMat = MaterialManager::Get().Get(resolvedName);
                     smMat.SetVec4 ("albedo", glm::vec4(1.0f));
@@ -1192,7 +1211,7 @@ void PlayerApp::RenderShadowPasses(vk::CommandBuffer cmd)
         m_shadowMap.BeginRendering(cmd, c);
         m_shadowPipeline.Bind(cmd);
         m_boneSSBO.BindToSet(cmd, *m_shadowPipeline.GetLayout(), 0);
-        m_scene.DrawShadow(cmd, m_shadowPipeline, m_cascadeMatrices[c]);
+        m_scene.DrawShadow(cmd, m_shadowPipeline, m_cascadeMatrices[c], nullptr, &m_boneSSBO);
         m_scene.DrawSkinnedShadow(cmd, m_shadowPipeline, m_cascadeMatrices[c], bindBonesFnShadow);
         m_shadowMap.EndRendering(cmd);
     }
@@ -1203,7 +1222,7 @@ void PlayerApp::RenderShadowPasses(vk::CommandBuffer cmd)
         m_spotShadowMap.BeginRendering(cmd, 0);
         m_shadowPipeline.Bind(cmd);
         m_boneSSBO.BindToSet(cmd, *m_shadowPipeline.GetLayout(), 0);
-        m_scene.DrawShadow(cmd, m_shadowPipeline, m_activeSpotMatrix);
+        m_scene.DrawShadow(cmd, m_shadowPipeline, m_activeSpotMatrix, nullptr, &m_boneSSBO);
         m_scene.DrawSkinnedShadow(cmd, m_shadowPipeline, m_activeSpotMatrix, bindBonesFnShadow);
         m_spotShadowMap.EndRendering(cmd);
     }
@@ -1245,7 +1264,8 @@ void PlayerApp::InitPostProcess()
     uint32_t w    = sc.GetExtent().width;
     uint32_t h    = sc.GetExtent().height;
     auto depthFmt = rd.GetDepthFormat();
-    auto colorFmt = vk::Format::eB8G8R8A8Unorm;
+    // Linear HDR chain — blit.frag applies the final ACES tonemap into the swapchain.
+    auto colorFmt = vk::Format::eR16G16B16A16Sfloat;
 
     m_sceneFb.Create(w, h, colorFmt, depthFmt);
     m_occlusionPass.Create(w, h);

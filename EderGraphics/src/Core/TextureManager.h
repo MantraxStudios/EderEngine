@@ -19,7 +19,8 @@ public:
     /// Load a texture from disk (or return cached instance).
     /// Throws std::runtime_error if loading fails (prints to console on first
     /// attempt; subsequent attempts with the same bad path rethrow silently).
-    VulkanTexture& Load(const std::string& path);
+    // srgb=false loads a linear view (normal / roughness-metallic / AO maps).
+    VulkanTexture& Load(const std::string& path, bool srgb = true);
 
     bool Has(const std::string& path) const;
 

@@ -24,6 +24,7 @@ layout(set = 0, binding = 0) uniform MaterialUBO {
     float hasNormalMap;
     float hasRoughMap;
     float hasEmissiveMap;
+    float normalStrength;
 } material;
 
 #define MAX_DIR_LIGHTS   4
@@ -329,6 +330,7 @@ void main()
         vec3 T  = normalize(fragTangent);
         vec3 B  = normalize(fragBitangent) * facing;
         vec3 ts = texture(normalTex, fragUV).xyz * 2.0 - 1.0;
+        ts.xy  *= material.normalStrength;   // scale bump intensity
         N = normalize(mat3(T, B, Ng) * ts);
     }
 
@@ -349,11 +351,18 @@ void main()
     // metals and grazing angles pick up environment colour instead of going black.
     float hemi    = N.y * 0.5 + 0.5;
     vec3  ambient = mix(lights.groundAmbient.rgb, lights.skyAmbient.rgb, hemi);
-    float NdotV   = max(dot(N, V), 0.0);
+    float NdotV   = max(dot(N, V), 1e-3);
     vec3  F0      = mix(vec3(0.04), baseColor, metallic);
-    vec3  Fa      = F0 + (max(vec3(1.0 - roughness), F0) - F0)
-                       * pow(1.0 - NdotV, 5.0);
-    vec3  result  = ambient * (baseColor * (1.0 - metallic) + Fa);
+    // Split-sum environment BRDF approximation (Karis). Roughness-aware ambient
+    // specular so rough surfaces don't develop a mirror-like grazing sheen when
+    // the normal map tilts the normal toward the horizon.
+    vec4  eb0 = vec4(-1.0, -0.0275, -0.572, 0.022);
+    vec4  eb1 = vec4( 1.0,  0.0425,  1.04,  -0.04);
+    vec4  ebr = roughness * eb0 + eb1;
+    float ebA = min(ebr.x * ebr.x, exp2(-9.28 * NdotV)) * ebr.x + ebr.y;
+    vec2  ebAB = vec2(-1.04, 1.04) * ebA + ebr.zw;
+    vec3  specAmbient = ambient * (F0 * ebAB.x + ebAB.y);
+    vec3  result  = ambient * baseColor * (1.0 - metallic) + specAmbient;
 
     for (int i = 0; i < lights.numDirLights; i++)
     {
@@ -415,9 +424,9 @@ void main()
         emission = texture(emissiveTex, fragUV).rgb * fragEmissive;
     result += emission;
 
-    // HDR → display: exposure, filmic tonemap, gamma encode (UNORM target).
-    vec3 mapped = ACESFilm(result * EXPOSURE);
-    mapped      = pow(mapped, vec3(1.0 / 2.2));
-
-    outColor = vec4(mapped, alpha);
+    // Linear HDR out — the frame is tonemapped ONCE at the end of the chain
+    // (tonemap.frag in the editor, blit.frag in the player). Volumetrics, fog
+    // and sun shafts composite in linear space before that, which is what makes
+    // scattering physically plausible instead of washed out.
+    outColor = vec4(result, alpha);
 }

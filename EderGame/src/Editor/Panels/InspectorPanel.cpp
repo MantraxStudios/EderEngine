@@ -125,7 +125,6 @@ bool InspectorPanel::AssetDropField(const char*         label,
     // Show truncated stem + small arrow indicator
     std::string btnLabel = stem;
     if (btnLabel.size() > 22) btnLabel = btnLabel.substr(0, 19) + "...";
-    btnLabel += "  \xce\xb2"; // β as a small "select" hint glyph
     ImGui::Button(btnLabel.c_str(), ImVec2(btnW, 0));
 
     ImGui::PopStyleColor(3);
@@ -173,16 +172,24 @@ void InspectorPanel::OnDraw()
         return;
     }
 
-    const char* entityName = registry->Has<TagComponent>(selected)
-        ? registry->Get<TagComponent>(selected).name.c_str()
-        : "Entity";
-    ImGui::TextColored(ImVec4(0.92f, 0.92f, 0.92f, 1.0f), "%s", entityName);
-    ImGui::SameLine();
-    ImGui::TextDisabled("  #%u", selected);
+    // Unity-style header: editable name + entity id (replaces the old Tag section)
+    {
+        char nameBuf[128] = "Entity";
+        if (registry->Has<TagComponent>(selected))
+        {
+            strncpy(nameBuf, registry->Get<TagComponent>(selected).name.c_str(), sizeof(nameBuf) - 1);
+            nameBuf[sizeof(nameBuf) - 1] = '\0';
+        }
+        ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - 60.0f);
+        if (ImGui::InputText("##entname", nameBuf, sizeof(nameBuf)) &&
+            registry->Has<TagComponent>(selected))
+            registry->Get<TagComponent>(selected).name = nameBuf;
+        ImGui::SameLine();
+        ImGui::TextDisabled("#%u", selected);
+    }
     ImGui::Separator();
     ImGui::Spacing();
 
-    DrawTagComponent();
     DrawHierarchyComponent();
     DrawTransformComponent();
     DrawMeshRendererComponent();
@@ -582,6 +589,25 @@ void InspectorPanel::DrawMeshRendererComponent()
     ImGui::PopID();
 }
 
+// ── Unity-style two-column property rows (label left, widget right) ─────────
+static bool PropsBegin(const char* id)
+{
+    if (!ImGui::BeginTable(id, 2, ImGuiTableFlags_None)) return false;
+    ImGui::TableSetupColumn("l", ImGuiTableColumnFlags_WidthFixed, 120.0f);
+    ImGui::TableSetupColumn("v", ImGuiTableColumnFlags_WidthStretch);
+    return true;
+}
+static void PropRow(const char* label)
+{
+    ImGui::TableNextRow();
+    ImGui::TableSetColumnIndex(0);
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label);
+    ImGui::TableSetColumnIndex(1);
+    ImGui::SetNextItemWidth(-1);
+}
+static void PropsEnd() { ImGui::EndTable(); }
+
 void InspectorPanel::DrawLightComponent()
 {
     if (!registry->Has<LightComponent>(selected)) return;
@@ -590,72 +616,91 @@ void InspectorPanel::DrawLightComponent()
             "Light", registry, selected, ImVec4(1.0f, 0.85f, 0.20f, 1.0f)))
     {
         auto& l = registry->Get<LightComponent>(selected);
-        const char* types[] = { "Directional", "Point", "Spot" };
-        int typeIdx = static_cast<int>(l.type);
-        if (ImGui::Combo("Type", &typeIdx, types, IM_ARRAYSIZE(types)))
-            l.type = static_cast<LightType>(typeIdx);
-        ImGui::ColorEdit3("Color",     &l.color.x);
-        ImGui::DragFloat ("Intensity", &l.intensity, 0.05f, 0.0f, 100.0f);
 
-        // Colour temperature (Kelvin) — tints the light colour when enabled.
-        ImGui::Checkbox("Use Temperature", &l.useTemperature);
-        if (l.useTemperature)
-            ImGui::SliderFloat("Temperature (K)", &l.colorTemperature, 1000.0f, 15000.0f, "%.0f K");
-
-        if (l.type == LightType::Directional)
-            ImGui::DragFloat("Ambient Intensity", &l.ambientIntensity, 0.02f, 0.0f, 4.0f);
-        if (l.type != LightType::Directional)
-            ImGui::DragFloat("Range", &l.range, 0.5f, 0.0f, 1000.0f);
-        if (l.type == LightType::Spot)
+        if (PropsBegin("##light"))
         {
-            ImGui::DragFloat("Inner Angle", &l.innerConeAngle, 0.5f, 0.0f, 89.0f);
-            ImGui::DragFloat("Outer Angle", &l.outerConeAngle, 0.5f, 1.0f, 90.0f);
-        }
-        ImGui::Spacing();
-        ImGui::Checkbox("Cast Shadow", &l.castShadow);
-        if (l.castShadow && l.type == LightType::Directional)
-            ImGui::DragFloat("Shadow Distance", &l.shadowDistance, 1.0f, 10.0f, 2000.0f);
+            PropRow("Type");
+            const char* types[] = { "Directional", "Point", "Spot" };
+            int typeIdx = static_cast<int>(l.type);
+            if (ImGui::Combo("##type", &typeIdx, types, IM_ARRAYSIZE(types)))
+                l.type = static_cast<LightType>(typeIdx);
 
-        // -- Volumetric Light (all light types) --
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::TextColored(ImVec4(0.4f, 0.8f, 1.0f, 1.0f), "Volumetric Light");
-        ImGui::Checkbox("Enabled##vol", &l.volumetricEnabled);
-        if (l.volumetricEnabled)
-        {
-            ImGui::TextDisabled("-- Ray March --");
-            ImGui::DragInt  ("Steps##vol",        &l.volNumSteps,    1,     8,    256);
-            ImGui::DragFloat("Max Distance##vol", &l.volMaxDistance, 1.0f,  1.0f, 500.0f);
-            ImGui::DragFloat("Jitter##vol",       &l.volJitter,      0.05f, 0.0f, 2.0f);
-            ImGui::TextDisabled("-- Participating Medium --");
-            ImGui::DragFloat("Density##vol",      &l.volDensity,     0.001f, 0.0f, 1.0f, "%.4f");
-            ImGui::DragFloat("Absorption##vol",   &l.volAbsorption,  0.001f, 0.0f, 1.0f, "%.4f");
-            ImGui::DragFloat("Anisotropy g##vol", &l.volG,           0.01f, -0.99f, 0.99f);
-            ImGui::TextDisabled("-- Output --");
-            ImGui::DragFloat("Intensity##vol",    &l.volIntensity,   0.01f, 0.0f, 5.0f);
-            ImGui::ColorEdit3("Tint##vol",        &l.volTint.x);
-        }
+            PropRow("Color");     ImGui::ColorEdit3("##col", &l.color.x);
+            PropRow("Intensity"); ImGui::DragFloat("##int", &l.intensity, 0.05f, 0.0f, 100.0f);
 
-        if (l.type == LightType::Directional)
-        {
-            // -- Sun Shafts (Directional only) --
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::TextColored(ImVec4(1.0f, 0.7f, 0.2f, 1.0f), "Sun Shafts");
-            ImGui::Checkbox("Enabled##ss", &l.sunShaftsEnabled);
-            if (l.sunShaftsEnabled)
+            PropRow("Use Temperature"); ImGui::Checkbox("##useTemp", &l.useTemperature);
+            if (l.useTemperature)
             {
-                ImGui::TextDisabled("-- Shafts (god rays) --");
-                ImGui::DragFloat("Density##ss",     &l.shaftsDensity,    0.05f,  0.0f, 20.0f);
-                ImGui::DragFloat("Weight##ss",      &l.shaftsWeight,     0.01f,  0.0f,  3.0f);
-                ImGui::DragFloat("Decay##ss",       &l.shaftsDecay,      0.005f, 0.5f,  0.999f);
-                ImGui::DragFloat("Sun Radius##ss",  &l.shaftsSunRadius,  0.002f, 0.005f, 0.2f);
-                ImGui::TextDisabled("-- Bloom / Glare --");
-                ImGui::DragFloat("Bloom Scale##ss", &l.shaftsBloomScale, 0.05f, 0.0f, 10.0f);
-                ImGui::DragFloat("Exposure##ss",    &l.shaftsExposure,   0.005f, 0.0f, 1.0f);
-                ImGui::Separator();
-                ImGui::ColorEdit3("Tint##ss",       &l.shaftsTint.x);
+                PropRow("Temperature");
+                ImGui::SliderFloat("##temp", &l.colorTemperature, 1000.0f, 15000.0f, "%.0f K");
             }
+
+            if (l.type == LightType::Directional)
+            {
+                PropRow("Ambient");
+                ImGui::DragFloat("##amb", &l.ambientIntensity, 0.02f, 0.0f, 4.0f);
+            }
+            else
+            {
+                PropRow("Range");
+                ImGui::DragFloat("##range", &l.range, 0.5f, 0.0f, 1000.0f);
+            }
+            if (l.type == LightType::Spot)
+            {
+                PropRow("Inner Angle"); ImGui::DragFloat("##inner", &l.innerConeAngle, 0.5f, 0.0f, 89.0f);
+                PropRow("Outer Angle"); ImGui::DragFloat("##outer", &l.outerConeAngle, 0.5f, 1.0f, 90.0f);
+            }
+
+            PropRow("Cast Shadow"); ImGui::Checkbox("##shadow", &l.castShadow);
+            if (l.castShadow && l.type == LightType::Directional)
+            {
+                PropRow("Shadow Distance");
+                ImGui::DragFloat("##shdist", &l.shadowDistance, 1.0f, 10.0f, 2000.0f);
+            }
+            PropsEnd();
+        }
+
+        // Advanced blocks collapsed by default so the inspector stays scannable.
+        ImGui::Spacing();
+        if (ImGui::TreeNode("Volumetric Light"))
+        {
+            if (PropsBegin("##vol"))
+            {
+                PropRow("Enabled"); ImGui::Checkbox("##ven", &l.volumetricEnabled);
+                if (l.volumetricEnabled)
+                {
+                    PropRow("Steps");        ImGui::DragInt  ("##vsteps", &l.volNumSteps,    1,     8,    256);
+                    PropRow("Max Distance"); ImGui::DragFloat("##vmax",   &l.volMaxDistance, 1.0f,  1.0f, 500.0f);
+                    PropRow("Jitter");       ImGui::DragFloat("##vjit",   &l.volJitter,      0.05f, 0.0f, 2.0f);
+                    PropRow("Density");      ImGui::DragFloat("##vden",   &l.volDensity,     0.001f, 0.0f, 1.0f, "%.4f");
+                    PropRow("Absorption");   ImGui::DragFloat("##vabs",   &l.volAbsorption,  0.001f, 0.0f, 1.0f, "%.4f");
+                    PropRow("Anisotropy");   ImGui::DragFloat("##vg",     &l.volG,           0.01f, -0.99f, 0.99f);
+                    PropRow("Intensity");    ImGui::DragFloat("##vint",   &l.volIntensity,   0.01f, 0.0f, 5.0f);
+                    PropRow("Tint");         ImGui::ColorEdit3("##vtint", &l.volTint.x);
+                }
+                PropsEnd();
+            }
+            ImGui::TreePop();
+        }
+
+        if (l.type == LightType::Directional && ImGui::TreeNode("Sun Shafts"))
+        {
+            if (PropsBegin("##shafts"))
+            {
+                PropRow("Enabled"); ImGui::Checkbox("##sen", &l.sunShaftsEnabled);
+                if (l.sunShaftsEnabled)
+                {
+                    PropRow("Density");     ImGui::DragFloat("##sden",  &l.shaftsDensity,    0.05f,  0.0f, 20.0f);
+                    PropRow("Weight");      ImGui::DragFloat("##swgt",  &l.shaftsWeight,     0.01f,  0.0f,  3.0f);
+                    PropRow("Decay");       ImGui::DragFloat("##sdec",  &l.shaftsDecay,      0.005f, 0.5f,  0.999f);
+                    PropRow("Sun Radius");  ImGui::DragFloat("##srad",  &l.shaftsSunRadius,  0.002f, 0.005f, 0.2f);
+                    PropRow("Bloom Scale"); ImGui::DragFloat("##sblm",  &l.shaftsBloomScale, 0.05f,  0.0f, 10.0f);
+                    PropRow("Exposure");    ImGui::DragFloat("##sexp",  &l.shaftsExposure,   0.005f, 0.0f,  1.0f);
+                    PropRow("Tint");        ImGui::ColorEdit3("##stint", &l.shaftsTint.x);
+                }
+                PropsEnd();
+            }
+            ImGui::TreePop();
         }
     }
     ImGui::PopID();

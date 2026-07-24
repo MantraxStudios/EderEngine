@@ -35,13 +35,6 @@ static constexpr uint32_t kAssimpFlags =
     aiProcess_JoinIdenticalVertices |
     aiProcess_LimitBoneWeights;
 
-// FBX files export in centimeters by default → apply 0.01 scale to convert to meters
-static bool IsFbx(const std::string& hint)
-{
-    auto ext = hint.substr(hint.size() > 4 ? hint.size() - 4 : 0);
-    for (auto& c : ext) c = (char)tolower((unsigned char)c);
-    return ext == ".fbx";
-}
 
 void VulkanMesh::Load(const std::string& path)
 {
@@ -70,10 +63,18 @@ void VulkanMesh::LoadFromMemory(const uint8_t* data, size_t size, const std::str
     Assimp::Importer importer;
 
     uint32_t flags = kAssimpFlags;
-    if (IsFbx(hint))
+    // Unity-style import Scale Factor from the asset sidecar. Assimp already
+    // converts FBX units natively, so the default (1.0) imports at correct
+    // size — the old hardcoded 0.01 double-converted and shrank FBX 100x.
     {
-        importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, 0.01f);
-        flags |= aiProcess_GlobalScale;
+        float importScale = 1.0f;
+        if (const auto* meta = Krayon::AssetManager::Get().Find(hint))
+            importScale = meta->importScale;
+        if (importScale != 1.0f)
+        {
+            importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, importScale);
+            flags |= aiProcess_GlobalScale;
+        }
     }
 
     const aiScene* scene = importer.ReadFileFromMemory(
@@ -126,10 +127,18 @@ void VulkanMesh::_LoadFromPath(const std::string& path)
     Assimp::Importer importer;
 
     uint32_t flags = kAssimpFlags;
-    if (IsFbx(path))
+    // Unity-style import Scale Factor from the asset sidecar. Assimp already
+    // converts FBX units natively, so the default (1.0) imports at correct
+    // size — the old hardcoded 0.01 double-converted and shrank FBX 100x.
     {
-        importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, 0.01f);
-        flags |= aiProcess_GlobalScale;
+        float importScale = 1.0f;
+        if (const auto* meta = Krayon::AssetManager::Get().Find(path))
+            importScale = meta->importScale;
+        if (importScale != 1.0f)
+        {
+            importer.SetPropertyFloat(AI_CONFIG_GLOBAL_SCALE_FACTOR_KEY, importScale);
+            flags |= aiProcess_GlobalScale;
+        }
     }
 
     const aiScene* scene = importer.ReadFile(path, flags);

@@ -99,6 +99,12 @@ public:
         postProcess.SetOnChanged(std::move(onChanged));
     }
 
+    // Expose the deferred SSAO / exposure settings in the Post Process panel.
+    void SetSSAOControls(const PostProcessPanel::SSAOControls& c)
+    {
+        postProcess.SetSSAOControls(c);
+    }
+
     // Let the application provide a callback so the inspector can query
     // how many sub-meshes a given mesh GUID has.
     void SetMeshSubmeshCountQuery(std::function<uint32_t(uint64_t)> fn)
@@ -139,9 +145,16 @@ private:
     void BuildDefaultLayout(unsigned int dockId, float availW, float availH);
     void ApplyTheme();
 
+    // Toolbar PNG icons (VkDescriptorSet handles, loaded from build/Icons)
+    void  EnsureToolbarIcons();
+    bool  m_toolbarIconsLoaded = false;
+    void* m_icoPlay  = nullptr;
+    void* m_icoPause = nullptr;
+    void* m_icoStop  = nullptr;
+
     bool showDemo          = false;
     bool firstLayout       = true;
-    bool deferredRendering = false;   // toggles the deferred render path in Application
+    bool deferredRendering = true;    // deferred is the default render path (+SSAO)
     bool m_resetLayout     = false;   // set by "Window > Reset Layout" to rebuild the dock
 
     PlayState       playState        = PlayState::Stopped;

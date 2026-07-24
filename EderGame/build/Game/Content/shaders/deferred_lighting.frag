@@ -96,9 +96,16 @@ vec2 VogelDisk(int i, int n, float phi)
     float theta = float(i) * 2.399963 + phi;
     return vec2(r * cos(theta), r * sin(theta));
 }
-float WorldPhi(vec3 p)
+// PCF rotation angle. In the deferred path the world position is RECONSTRUCTED
+// from the depth buffer, so it carries tiny camera-dependent error every frame.
+// Hashing that (like the forward path does with exact positions) re-randomizes
+// the PCF disk each frame -> shadows boil whenever the camera changes at all.
+// Interleaved Gradient Noise over the screen pixel is fully deterministic:
+// zero frame-to-frame variance, so shadows stay rock stable.
+float PixelPhi(vec2 pixel)
 {
-    return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453) * 6.28318530;
+    return fract(52.9829189 * fract(0.06711056 * pixel.x + 0.00583715 * pixel.y))
+           * 6.28318530;
 }
 
 #define DIR_FILTER_TEXELS  3.0
@@ -116,12 +123,14 @@ float SampleCascade(vec3 worldPos, vec3 N, vec3 L, int cascade)
     vec2 uv    = proj.xy * 0.5 + 0.5;
     if (proj.z < 0.0 || proj.z > 1.0 || uv.x < 0.0 || uv.x > 1.0 || uv.y < 0.0 || uv.y > 1.0)
         return 1.0;
-    float slopeBias  = 0.0005 * cascadeBiasScale[cascade];
+    // Slightly larger than the forward path: the reconstructed world position
+    // carries depth-buffer error that the bias must absorb to avoid acne flicker.
+    float slopeBias  = 0.0007 * cascadeBiasScale[cascade];
     float slopeScale = clamp(sinAngle, 0.0, 1.0);
     float recvZ      = proj.z - slopeBias * (1.0 + slopeScale * 3.0);
     vec2  ts     = 1.0 / vec2(textureSize(shadowMap, 0).xy);
     float fR     = DIR_FILTER_TEXELS * ts.x;
-    float phi    = WorldPhi(worldPos);
+    float phi    = PixelPhi(gl_FragCoord.xy);
     float shadow = 0.0;
     for (int i = 0; i < PCF_N; i++)
     {
@@ -168,7 +177,7 @@ float ShadowSpot(int slot, vec3 worldPos, vec3 N, vec3 L)
     float spotSlope = clamp(sinAngle, 0.0, 1.0);
     float recvZ  = proj.z - 0.0002 * (1.0 + spotSlope * 4.0);
     float fR     = 3.0 / vec2(textureSize(spotShadowMap, 0).xy).x;
-    float phi    = WorldPhi(worldPos);
+    float phi    = PixelPhi(gl_FragCoord.xy);
     float shadow = 0.0;
     for (int i = 0; i < PCF_N; i++)
     {
@@ -193,7 +202,7 @@ float ShadowPoint(int slot, vec3 worldPos, vec3 lightPos, vec3 N)
     vec3 tang = abs(dirN.y) < 0.9 ? vec3(0.0, 1.0, 0.0) : vec3(1.0, 0.0, 0.0);
     tang = normalize(tang - dot(tang, dirN) * dirN);
     vec3 btan = cross(dirN, tang);
-    float phi    = WorldPhi(worldPos);
+    float phi    = PixelPhi(gl_FragCoord.xy);
     float shadow = 0.0;
     for (int i = 0; i < PCF_N; i++)
     {
@@ -237,7 +246,15 @@ void main()
     vec2  rm        = texture(gMaterial, fragUV).rg;
     float roughness = rm.r;
     float metallic  = rm.g;
-    float ao        = texture(ssaoTex, fragUV).r;
+
+    // Blur the SSAO (5x5 box) — the raw AO is noisy and screen-space, which
+    // otherwise looks like shadows swimming across surfaces as the camera moves.
+    vec2  aoTexel = 1.0 / vec2(textureSize(ssaoTex, 0));
+    float ao = 0.0;
+    for (int ax = -2; ax <= 2; ++ax)
+    for (int ay = -2; ay <= 2; ++ay)
+        ao += texture(ssaoTex, fragUV + vec2(ax, ay) * aoTexel).r;
+    ao /= 25.0;
 
     vec3 worldPos = ReconstructWorldPos(fragUV, depth);
     vec3 V        = normalize(lights.cameraPos - worldPos);
@@ -245,10 +262,17 @@ void main()
     // Hemisphere ambient, modulated by SSAO.
     float hemi    = N.y * 0.5 + 0.5;
     vec3  ambient = mix(lights.groundAmbient.rgb, lights.skyAmbient.rgb, hemi) * ao;
-    float NdotV   = max(dot(N, V), 0.0);
+    float NdotV   = max(dot(N, V), 1e-3);
     vec3  F0      = mix(vec3(0.04), baseColor, metallic);
-    vec3  Fa      = F0 + (max(vec3(1.0 - roughness), F0) - F0) * pow(1.0 - NdotV, 5.0);
-    vec3  result  = ambient * (baseColor * (1.0 - metallic) + Fa);
+    // Split-sum environment BRDF approximation (Karis) — roughness-aware ambient
+    // specular (no mirror-like grazing sheen from tilted normals).
+    vec4  eb0 = vec4(-1.0, -0.0275, -0.572, 0.022);
+    vec4  eb1 = vec4( 1.0,  0.0425,  1.04,  -0.04);
+    vec4  ebr = roughness * eb0 + eb1;
+    float ebA = min(ebr.x * ebr.x, exp2(-9.28 * NdotV)) * ebr.x + ebr.y;
+    vec2  ebAB = vec2(-1.04, 1.04) * ebA + ebr.zw;
+    vec3  specAmbient = ambient * (F0 * ebAB.x + ebAB.y);
+    vec3  result  = ambient * baseColor * (1.0 - metallic) + specAmbient;
 
     for (int i = 0; i < lights.numDirLights; i++)
     {
@@ -299,7 +323,6 @@ void main()
 
     result += baseColor * emissive;
 
-    vec3 mapped = ACESFilm(result * EXPOSURE);
-    mapped      = pow(mapped, vec3(1.0 / 2.2));
-    outColor    = vec4(mapped, 1.0);
+    // Linear HDR out — single tonemap at the end of the frame chain.
+    outColor = vec4(result, 1.0);
 }

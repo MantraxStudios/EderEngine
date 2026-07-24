@@ -35,12 +35,14 @@ vec3 Tonemap(vec3 hdr)
 
 void main()
 {
+    // The scene is LINEAR HDR here; shafts are added as linear light and the
+    // whole frame is tonemapped once at the end of the chain.
     vec3  scene    = texture(sceneTex, fragUV).rgb;
     float sunAbove = smoothstep(0.0, 0.30, sunHeight);
 
     if (sunAbove < 0.001)
     {
-        outColor = vec4(Tonemap(scene), 1.0);
+        outColor = vec4(scene, 1.0);
         return;
     }
 
@@ -77,7 +79,6 @@ void main()
     float shaftStrength = clamp(pow(shaftsNorm, 0.45) * weight * exposure * sunAbove * proxFactor, 0.0, 3.0);
 
     vec3 sunColor  = mix(vec3(1.1, 0.9, 0.55), tint, 0.35);
-    vec3 finalHDR  = scene + sunColor * shaftStrength * depthFactor;
-
-    outColor = vec4(Tonemap(finalHDR), 1.0);
+    // Additive HDR composite; no clamp/tonemap here (single tonemap at end).
+    outColor = vec4(scene + sunColor * shaftStrength * depthFactor, 1.0);
 }

@@ -28,7 +28,7 @@ std::vector<uint32_t> VulkanShadowPipeline::LoadSpv(const std::string& path)
     return buf;
 }
 
-void VulkanShadowPipeline::Create(vk::Format depthFormat)
+void VulkanShadowPipeline::Create(vk::Format depthFormat, vk::DescriptorSetLayout materialDSL)
 {
     auto& device = VulkanInstance::Get().GetDevice();
 
@@ -147,6 +147,42 @@ void VulkanShadowPipeline::Create(vk::Format depthFormat)
     pipelineInfo.layout              = *pipelineLayout;
 
     pipeline = vk::raii::Pipeline(device, nullptr, pipelineInfo);
+
+    // ── Alpha-tested variant ────────────────────────────────────────────────
+    // Samples the material's albedo and discards transparent texels so foliage
+    // and other cut-out casters shadow their texture shape, not the full quad.
+    if (materialDSL)
+    {
+        auto avCode = LoadSpv("shaders/shadow_alpha.vert.spv");
+        auto afCode = LoadSpv("shaders/shadow_alpha.frag.spv");
+        vk::ShaderModuleCreateInfo avci{}; avci.codeSize = avCode.size()*sizeof(uint32_t); avci.pCode = avCode.data();
+        vk::ShaderModuleCreateInfo afci{}; afci.codeSize = afCode.size()*sizeof(uint32_t); afci.pCode = afCode.data();
+        vk::raii::ShaderModule avMod(device, avci);
+        vk::raii::ShaderModule afMod(device, afci);
+
+        vk::PipelineShaderStageCreateInfo stages[2]{};
+        stages[0].stage = vk::ShaderStageFlagBits::eVertex;   stages[0].module = *avMod; stages[0].pName = "main";
+        stages[1].stage = vk::ShaderStageFlagBits::eFragment; stages[1].module = *afMod; stages[1].pName = "main";
+
+        // Alpha casters are often double-sided (leaf cards) — disable culling.
+        vk::PipelineRasterizationStateCreateInfo alphaRaster = rasterizer;
+        alphaRaster.cullMode = vk::CullModeFlagBits::eNone;
+
+        std::array<vk::DescriptorSetLayout, 2> sets = { materialDSL, *boneDescriptorSetLayout };
+        vk::PipelineLayoutCreateInfo alci{};
+        alci.setLayoutCount         = 2;
+        alci.pSetLayouts            = sets.data();
+        alci.pushConstantRangeCount = 1;
+        alci.pPushConstantRanges    = &pushConstant;
+        alphaPipelineLayout = vk::raii::PipelineLayout(device, alci);
+
+        vk::GraphicsPipelineCreateInfo api = pipelineInfo;
+        api.stageCount          = 2;
+        api.pStages             = stages;
+        api.pRasterizationState = &alphaRaster;
+        api.layout              = *alphaPipelineLayout;
+        alphaPipeline = vk::raii::Pipeline(device, nullptr, api);
+    }
 }
 
 void VulkanShadowPipeline::Bind(vk::CommandBuffer cmd)
@@ -154,8 +190,15 @@ void VulkanShadowPipeline::Bind(vk::CommandBuffer cmd)
     cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *pipeline);
 }
 
+void VulkanShadowPipeline::BindAlpha(vk::CommandBuffer cmd)
+{
+    cmd.bindPipeline(vk::PipelineBindPoint::eGraphics, *alphaPipeline);
+}
+
 void VulkanShadowPipeline::Destroy()
 {
+    alphaPipeline           = nullptr;
+    alphaPipelineLayout     = nullptr;
     pipeline                = nullptr;
     pipelineLayout          = nullptr;
     boneDescriptorSetLayout = nullptr;

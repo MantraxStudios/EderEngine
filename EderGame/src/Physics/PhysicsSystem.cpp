@@ -736,6 +736,15 @@ void PhysicsSystem::Step(float dt)
 
     m_events.clear();
 
+    // Snapshot pre-step poses of dynamic bodies for render interpolation.
+    m_prevPose.clear();
+    for (auto& [e, state] : m_actors)
+    {
+        if (!state.dynamic || state.kinematic) continue;
+        m_prevPose[e] = { ToGlm(BodyIface().GetPosition(state.bodyId)),
+                          ToGlm(BodyIface().GetRotation(state.bodyId)) };
+    }
+
     // Advance Jolt physics
     m_physicsSystem->Update(dt, 1, m_tempAllocator.get(), m_jobSystem.get());
 
@@ -866,6 +875,48 @@ void PhysicsSystem::WriteBack(Registry& registry)
             JPH::Vec3 av = BodyIface().GetAngularVelocity(state.bodyId);
             rb.linearVelocity  = ToGlm(lv);
             rb.angularVelocity = ToGlm(av);
+        }
+    }
+}
+
+void PhysicsSystem::WriteBackInterpolated(Registry& registry, float alpha)
+{
+    if (!m_initialized) return;
+    alpha = glm::clamp(alpha, 0.0f, 1.0f);
+
+    for (auto& [e, state] : m_actors)
+    {
+        if (!state.dynamic || state.kinematic) continue;
+        if (!registry.Has<TransformComponent>(e)) continue;
+
+        glm::vec3 pos = ToGlm(BodyIface().GetPosition(state.bodyId));
+        glm::quat rot = ToGlm(BodyIface().GetRotation(state.bodyId));
+
+        // Blend from the pre-step pose toward the current one. A body with no
+        // snapshot (just spawned) simply snaps to its current pose.
+        auto it = m_prevPose.find(e);
+        if (it != m_prevPose.end())
+        {
+            pos = glm::mix(it->second.pos, pos, alpha);
+            rot = glm::slerp(it->second.rot, rot, alpha);
+        }
+
+        if (registry.Has<ColliderComponent>(e))
+            pos -= rot * registry.Get<ColliderComponent>(e).center;
+
+        auto& tr = registry.Get<TransformComponent>(e);
+        tr.position = pos;
+
+        bool allFrozen = false;
+        if (registry.Has<RigidbodyComponent>(e))
+        {
+            const auto& rb = registry.Get<RigidbodyComponent>(e);
+            allFrozen = rb.freezeRotationX && rb.freezeRotationY && rb.freezeRotationZ;
+        }
+        if (!allFrozen)
+        {
+            tr.usePhysicsQuat = true;
+            tr.physicsQuat    = rot;
         }
     }
 }

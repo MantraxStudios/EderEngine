@@ -153,6 +153,13 @@ private:
     float m_ssaoPower     = 2.0f;
     void RenderSceneViewDeferred(vk::CommandBuffer cmd);
 
+    // ── HDR display transform ─────────────────────────────────────────────────
+    // The scene chain is linear RGBA16F end-to-end; this pass applies the single
+    // exposure → ACES → gamma transform and produces the LDR image the editor
+    // viewport displays.
+    VulkanPostProcessPass m_tonemapPass;
+    float m_tonemapExposure = 1.15f;
+
     // ── Shadow system ────────────────────────────────────────────────────────
     VulkanShadowMap           m_shadowMap;
     VulkanShadowPipeline      m_shadowPipeline;

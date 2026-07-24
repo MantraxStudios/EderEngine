@@ -12,6 +12,7 @@
 #include <Jolt/Physics/Character/CharacterVirtual.h>
 
 #include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -76,6 +77,12 @@ public:
     void WriteBack           (Registry& registry);
     void WriteBackControllers(Registry& registry);
     void DispatchEvents      (Registry& registry);
+
+    // Render-side smoothing ("Fix Your Timestep"): writes transforms blended
+    // between the pre-step and post-step body poses. Call once per RENDER frame
+    // after the fixed-step loop with alpha = accumulator / fixedDt. Without this
+    // the fixed 60 Hz sim makes objects visibly stutter frame-to-frame.
+    void WriteBackInterpolated(Registry& registry, float alpha);
 
     // Move a character controller by a world-space displacement vector.
     // Updates isGrounded and velocity fields on the component.
@@ -197,6 +204,11 @@ private:
 
     std::vector<RawEvent>                                      m_events;
     std::unordered_map<Entity, ActorState>                     m_actors;
+
+    // Pre-step body poses for render interpolation (entity → pos/rot before the
+    // most recent Step()). Missing entry = body just appeared → snap, no lerp.
+    struct PrevPose { glm::vec3 pos; glm::quat rot; };
+    std::unordered_map<Entity, PrevPose>                       m_prevPose;
     std::unordered_map<Entity, JPH::Ref<JPH::CharacterVirtual>> m_controllers;
 
     // body index → entity / isSensor (for contact removal lookup)

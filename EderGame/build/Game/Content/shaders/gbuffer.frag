@@ -27,6 +27,7 @@ layout(set = 0, binding = 0) uniform MaterialUBO {
     float hasNormalMap;
     float hasRoughMap;
     float hasEmissiveMap;
+    float normalStrength;
 } material;
 
 layout(location = 0) out vec4 outAlbedo;    // rgb = albedo, a = emissiveIntensity
@@ -50,6 +51,7 @@ void main()
         vec3 T  = normalize(fragTangent);
         vec3 B  = normalize(fragBitangent) * facing;
         vec3 ts = texture(normalTex, fragUV).xyz * 2.0 - 1.0;
+        ts.xy  *= material.normalStrength;
         N = normalize(mat3(T, B, Ng) * ts);
     }
 

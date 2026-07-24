@@ -4,6 +4,7 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <unordered_map>
 #include <filesystem>
 #include <thread>
 #include <atomic>
@@ -69,6 +70,7 @@ private:
 
     // ── State ─────────────────────────────────────────────────────
     std::string m_selectedDir;          // relative to workDir (empty = root)
+    char        m_search[64] = {};      // non-empty = Unity-style project-wide search
 
     // Rename state
     bool        m_renameOpen        = false;
@@ -118,6 +120,17 @@ private:
     std::thread       m_watchThread;
     std::atomic<bool> m_watchStop{false};
     std::atomic<bool> m_watchDirty{false};
+
+    // ── Icon textures (PNG files in <workdir>/../../Icons) ────────
+    struct ContentItem;                       // fwd for IconFor
+    void  EnsureIcons();
+    void* IconFor(const struct ContentItem& item);   // VkDescriptorSet (or null)
+    bool  m_iconsLoaded = false;
+    std::unordered_map<int, void*> m_iconDS;  // key: -1 = folder, else (int)AssetType
+
+    // Texture thumbnails (real image previews), cached per asset guid
+    void* ThumbFor(const struct ContentItem& item);
+    std::unordered_map<uint64_t, void*> m_thumbDS;
 
     // ── Helpers ───────────────────────────────────────────────────
     static const char* IconForType(Krayon::AssetType t);

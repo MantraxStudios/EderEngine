@@ -34,7 +34,8 @@ MaterialLayout MaterialLayout::Standard()
      .AddFloat("alphaThreshold")
      .AddFloat("hasNormalMap")
      .AddFloat("hasRoughMap")
-     .AddFloat("hasEmissiveMap");
+     .AddFloat("hasEmissiveMap")
+     .AddFloat("normalStrength");
     return l;
 }
 

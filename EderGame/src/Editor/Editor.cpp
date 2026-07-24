@@ -6,6 +6,7 @@
 #include <imgui/ImGuizmo.h>
 #include "Renderer/Vulkan/VulkanInstance.h"
 #include "Renderer/Vulkan/VulkanSwapchain.h"
+#include "Renderer/Vulkan/VulkanTexture.h"
 #include <IO/AssetManager.h>
 #include <filesystem>
 #include "ECS/Components/TagComponent.h"
@@ -29,52 +30,49 @@ void Editor::ApplyTheme()
 {
     ImGuiStyle& s = ImGui::GetStyle();
 
-    // ── Shape ────────────────────────────────────────────────────────────────
-    s.WindowRounding    = 4.0f;
-    s.ChildRounding     = 4.0f;
-    s.FrameRounding     = 3.0f;
-    s.PopupRounding     = 4.0f;
-    s.ScrollbarRounding = 3.0f;
-    s.GrabRounding      = 3.0f;
-    s.TabRounding       = 4.0f;
+    // ── Shape — Unity-style: flat, square, subtle 1px field borders ──────────
+    s.WindowRounding    = 0.0f;
+    s.ChildRounding     = 0.0f;
+    s.FrameRounding     = 0.0f;
+    s.PopupRounding     = 0.0f;
+    s.ScrollbarRounding = 0.0f;
+    s.GrabRounding      = 0.0f;
+    s.TabRounding       = 0.0f;
 
     s.WindowBorderSize  = 1.0f;
-    s.FrameBorderSize   = 0.0f;
+    s.FrameBorderSize   = 1.0f;
     s.PopupBorderSize   = 1.0f;
 
-    s.WindowPadding     = ImVec2(10.0f, 8.0f);
-    s.FramePadding      = ImVec2(6.0f,  4.0f);
-    s.ItemSpacing       = ImVec2(8.0f,  5.0f);
-    s.ItemInnerSpacing  = ImVec2(5.0f,  4.0f);
-    s.IndentSpacing     = 18.0f;
-    s.ScrollbarSize     = 12.0f;
-    s.GrabMinSize       = 8.0f;
+    s.WindowPadding     = ImVec2(8.0f, 6.0f);
+    s.FramePadding      = ImVec2(6.0f, 3.0f);
+    s.ItemSpacing       = ImVec2(6.0f, 4.0f);
+    s.ItemInnerSpacing  = ImVec2(4.0f, 4.0f);
+    s.IndentSpacing     = 14.0f;
+    s.ScrollbarSize     = 13.0f;
+    s.GrabMinSize       = 10.0f;
 
-    // ── Palette ──────────────────────────────────────────────────────────────
-    // Blacks / dark grays
-    const ImVec4 bg0   = ImVec4(0.08f, 0.08f, 0.08f, 1.00f); // deepest bg
-    const ImVec4 bg1   = ImVec4(0.12f, 0.12f, 0.12f, 1.00f); // window bg
-    const ImVec4 bg2   = ImVec4(0.16f, 0.16f, 0.16f, 1.00f); // child / header
-    const ImVec4 bg3   = ImVec4(0.20f, 0.20f, 0.20f, 1.00f); // frame bg
-    const ImVec4 bg4   = ImVec4(0.26f, 0.26f, 0.26f, 1.00f); // hovered frame
-    const ImVec4 bg5   = ImVec4(0.32f, 0.32f, 0.32f, 1.00f); // active frame
+    // ── Palette — Unity dark (Professional) ─────────────────────────────────
+    const ImVec4 bg0   = ImVec4(0.13f, 0.13f, 0.13f, 1.00f); // deepest bg (#212121)
+    const ImVec4 bg1   = ImVec4(0.22f, 0.22f, 0.22f, 1.00f); // window bg  (#383838)
+    const ImVec4 bg2   = ImVec4(0.17f, 0.17f, 0.17f, 1.00f); // header / tab strip
+    const ImVec4 bg3   = ImVec4(0.16f, 0.16f, 0.16f, 1.00f); // input fields (#2A2A2A)
+    const ImVec4 bg4   = ImVec4(0.25f, 0.25f, 0.25f, 1.00f); // hovered
+    const ImVec4 bg5   = ImVec4(0.30f, 0.30f, 0.30f, 1.00f); // active
 
-    // Grays for borders / separators
-    const ImVec4 border   = ImVec4(0.24f, 0.24f, 0.24f, 1.00f);
-    const ImVec4 borderHv = ImVec4(0.40f, 0.40f, 0.40f, 1.00f);
+    const ImVec4 border   = ImVec4(0.14f, 0.14f, 0.14f, 1.00f);
+    const ImVec4 borderHv = ImVec4(0.35f, 0.35f, 0.35f, 1.00f);
 
-    // Whites / text
-    const ImVec4 textFull = ImVec4(0.92f, 0.92f, 0.92f, 1.00f);
-    const ImVec4 textDim  = ImVec4(0.55f, 0.55f, 0.55f, 1.00f);
+    const ImVec4 textFull = ImVec4(0.83f, 0.83f, 0.83f, 1.00f); // #D2D2D2
+    const ImVec4 textDim  = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
 
-    // Red accent (Unreal-style)
-    const ImVec4 accent   = ImVec4(0.80f, 0.10f, 0.10f, 1.00f);
-    const ImVec4 accentHv = ImVec4(0.90f, 0.18f, 0.18f, 1.00f);
-    const ImVec4 accentAc = ImVec4(0.65f, 0.06f, 0.06f, 1.00f);
-    const ImVec4 accentDim = ImVec4(0.80f, 0.10f, 0.10f, 0.35f);
+    // Unity selection blue (#2C5D87 family)
+    const ImVec4 accent    = ImVec4(0.17f, 0.36f, 0.53f, 1.00f);
+    const ImVec4 accentHv  = ImVec4(0.22f, 0.44f, 0.64f, 1.00f);
+    const ImVec4 accentAc  = ImVec4(0.14f, 0.30f, 0.45f, 1.00f);
+    const ImVec4 accentDim = ImVec4(0.17f, 0.36f, 0.53f, 0.55f);
 
     // Tab active tint
-    const ImVec4 tabAct   = ImVec4(0.22f, 0.22f, 0.22f, 1.00f);
+    const ImVec4 tabAct   = ImVec4(0.26f, 0.26f, 0.26f, 1.00f);
 
     // ── Colors ───────────────────────────────────────────────────────────────
     ImVec4* c = s.Colors;
@@ -108,9 +106,10 @@ void Editor::ApplyTheme()
     c[ImGuiCol_SliderGrab]            = accent;
     c[ImGuiCol_SliderGrabActive]      = accentHv;
 
-    c[ImGuiCol_Button]                = bg3;
-    c[ImGuiCol_ButtonHovered]         = accentDim;
-    c[ImGuiCol_ButtonActive]          = accent;
+    // Unity buttons: mid-gray, slightly lighter on hover (no colour shift)
+    c[ImGuiCol_Button]                = ImVec4(0.35f, 0.35f, 0.35f, 1.00f);
+    c[ImGuiCol_ButtonHovered]         = ImVec4(0.42f, 0.42f, 0.42f, 1.00f);
+    c[ImGuiCol_ButtonActive]          = ImVec4(0.28f, 0.28f, 0.28f, 1.00f);
 
     c[ImGuiCol_Header]                = accentDim;
     c[ImGuiCol_HeaderHovered]         = accentHv;
@@ -686,6 +685,38 @@ void Editor::DrawMenuBar()
     DrawOpenScenePicker();
 }
 
+// Load the playback PNG icons once from <workdir>/../../Icons (build/Icons).
+// Textures are intentionally leaked (3 tiny editor-only images) to dodge
+// Vulkan teardown-order issues at shutdown.
+void Editor::EnsureToolbarIcons()
+{
+    if (m_toolbarIconsLoaded) return;
+    const std::string wd = Krayon::AssetManager::Get().GetWorkDir();
+    if (wd.empty()) return;   // retry next frame
+    m_toolbarIconsLoaded = true;
+
+    namespace fs = std::filesystem;
+    std::error_code ec;
+    fs::path dir = fs::path(wd).parent_path().parent_path() / "Icons";
+    if (!fs::exists(dir, ec)) dir = "Icons";
+
+    auto load = [&](void** out, const char* file)
+    {
+        fs::path p = dir / file;
+        std::error_code e2;
+        if (!fs::exists(p, e2)) return;
+        auto* tex = new VulkanTexture();
+        try { tex->Load(p.string()); }
+        catch (...) { delete tex; return; }
+        *out = (void*)ImGui_ImplVulkan_AddTexture(
+            (VkSampler)tex->GetSampler(), (VkImageView)tex->GetImageView(),
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    };
+    load(&m_icoPlay,  "playmode.png");
+    load(&m_icoPause, "pausemode.png");
+    load(&m_icoStop,  "stopmode.png");
+}
+
 void Editor::DrawToolbar()
 {
     ImGuiViewport* vp     = ImGui::GetMainViewport();
@@ -758,16 +789,31 @@ void Editor::DrawToolbar()
         VizBtn("GN", GizmoVisibility::None,         "Gizmos: Hidden");
     }
 
-    // ── Play / Pause / Stop (center) ─────────────────────────────────────────
-    // Total width: Play(60) + Pause(60) + Stop(60) + arrow(20) + 4 gaps(4) = 216
-    float centerX = (vp->Size.x - (60.0f + 60.0f + 60.0f + 20.0f + 4.0f * 4.0f)) * 0.5f;
+    // ── Play / Pause / Stop (center, icon buttons) ───────────────────────────
+    EnsureToolbarIcons();
+    const float pbW = 22.0f + ImGui::GetStyle().FramePadding.x * 2.0f;
+    float centerX = (vp->Size.x - (pbW * 3.0f + 20.0f + 4.0f * 4.0f)) * 0.5f;
     ImGui::SameLine(centerX);
+
+    // Icon button with text fallback (used if the PNG is missing).
+    auto PlaybackBtn = [&](const char* id, void* icon, const char* fallback,
+                           bool tint, ImVec4 tintCol) -> bool
+    {
+        bool clicked;
+        if (tint) ImGui::PushStyleColor(ImGuiCol_Button, tintCol);
+        if (icon)
+            clicked = ImGui::ImageButton(id,
+                ImTextureRef((ImTextureID)(uint64_t)icon), ImVec2(22, 22));
+        else
+            clicked = ImGui::Button(fallback, ImVec2(pbW, 28));
+        if (tint) ImGui::PopStyleColor();
+        return clicked;
+    };
 
     // Play
     {
         bool playing = (playState == PlayState::Playing);
-        if (playing) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.10f, 0.55f, 0.10f, 1.0f));
-        if (ImGui::Button(playing ? "|| Play" : "> Play", ImVec2(60, 24)))
+        if (PlaybackBtn("##tb_play", m_icoPlay, ">", playing, ImVec4(0.10f, 0.55f, 0.10f, 1.0f)))
         {
             if (playState == PlayState::Stopped || playState == PlayState::Paused)
             {
@@ -775,7 +821,6 @@ void Editor::DrawToolbar()
                 if (m_onPlay) m_onPlay();
             }
         }
-        if (playing) ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Play  [F5]");
     }
     ImGui::SameLine();
@@ -783,15 +828,13 @@ void Editor::DrawToolbar()
     // Pause
     {
         bool paused = (playState == PlayState::Paused);
-        if (paused) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.65f, 0.50f, 0.05f, 1.0f));
         ImGui::BeginDisabled(playState == PlayState::Stopped);
-        if (ImGui::Button("|| Pause", ImVec2(60, 24)))
+        if (PlaybackBtn("##tb_pause", m_icoPause, "||", paused, ImVec4(0.65f, 0.50f, 0.05f, 1.0f)))
         {
-            if (playState == PlayState::Playing) playState = PlayState::Paused;
-            else if (playState == PlayState::Paused) playState = PlayState::Playing;
+            if (playState == PlayState::Playing)      playState = PlayState::Paused;
+            else if (playState == PlayState::Paused)  playState = PlayState::Playing;
         }
         ImGui::EndDisabled();
-        if (paused) ImGui::PopStyleColor();
         if (ImGui::IsItemHovered()) ImGui::SetTooltip("Pause  [F6]");
     }
     ImGui::SameLine();
@@ -799,7 +842,7 @@ void Editor::DrawToolbar()
     // Stop
     {
         ImGui::BeginDisabled(playState == PlayState::Stopped);
-        if (ImGui::Button("[ ] Stop", ImVec2(60, 24)))
+        if (PlaybackBtn("##tb_stop", m_icoStop, "[]", false, ImVec4(0, 0, 0, 0)))
         {
             playState = PlayState::Stopped;
             if (m_onStop) m_onStop();

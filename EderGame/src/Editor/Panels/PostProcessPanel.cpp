@@ -41,7 +41,9 @@ static const std::vector<PPEffectDesc>& Builtins()
             { "Saturation",  0.0f, 2.0f,  1.0f },
             { "Temperature",-1.0f, 1.0f,  0.0f },
             { "Tint",       -1.0f, 1.0f,  0.0f },
-            { "Tonemap",     0.0f, 2.0f,  2.0f, "Off\0Reinhard\0ACES\0" },
+            // Default Off: the engine now applies a final ACES tonemap at the end
+            // of the frame, so grading here should not tonemap again.
+            { "Tonemap",     0.0f, 2.0f,  0.0f, "Off\0Reinhard\0ACES\0" },
             { "Gamma",       0.5f, 2.5f,  1.0f },
             { "Brightness", -0.5f, 0.5f,  0.0f },
           } },
@@ -156,7 +158,6 @@ static bool ShaderDropField(const char* label, std::string& shaderPath)
 
     std::string btnLabel = stem;
     if (btnLabel.size() > 22) btnLabel = btnLabel.substr(0, 19) + "...";
-    btnLabel += "  \xce\xb2";
     ImGui::Button(btnLabel.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0));
     ImGui::PopStyleColor(3);
 
@@ -494,6 +495,30 @@ void PostProcessPanel::OnDraw()
         ImGui::TextDisabled("No PostProcessGraph bound.");
         ImGui::End();
         return;
+    }
+
+    // ── Rendering (SSAO + exposure) — live-edits Application state ──────────
+    if (m_ssaoCtl.enabled)
+    {
+        ImGui::TextColored(ImVec4(0.65f, 0.85f, 1.0f, 1.0f), "RENDERING");
+        if (m_ssaoCtl.exposure)
+        {
+            ImGui::SetNextItemWidth(-90);
+            ImGui::SliderFloat("Exposure", m_ssaoCtl.exposure, 0.2f, 4.0f);
+        }
+        ImGui::Checkbox("SSAO (Deferred)", m_ssaoCtl.enabled);
+        if (*m_ssaoCtl.enabled)
+        {
+            ImGui::SetNextItemWidth(-90);
+            ImGui::SliderFloat("Radius",    m_ssaoCtl.radius,    0.05f, 2.0f);
+            ImGui::SetNextItemWidth(-90);
+            ImGui::SliderFloat("Bias",      m_ssaoCtl.bias,      0.0f,  0.1f, "%.4f");
+            ImGui::SetNextItemWidth(-90);
+            ImGui::SliderFloat("Intensity", m_ssaoCtl.intensity, 0.0f,  3.0f);
+            ImGui::SetNextItemWidth(-90);
+            ImGui::SliderFloat("Power",     m_ssaoCtl.power,     0.1f,  8.0f);
+        }
+        ImGui::Separator();
     }
 
     DrawPresetBar();

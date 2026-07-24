@@ -5,10 +5,12 @@ class EDERGRAPHICS_API VulkanTexture
 {
 public:
     // Load from a file path.  Internally routes through AssetManager when available.
-    void Load           (const std::string& path);
+    // srgb=true (default) for colour maps (albedo/emissive); srgb=false for data
+    // maps that must stay linear (normal, roughness/metallic, AO).
+    void Load           (const std::string& path, bool srgb = true);
 
     // Load from raw bytes already in memory (e.g. from PAK / AssetManager).
-    void LoadFromMemory (const uint8_t* data, size_t size);
+    void LoadFromMemory (const uint8_t* data, size_t size, bool srgb = true);
 
     void CreateDefault();
     void Destroy();
@@ -33,4 +35,5 @@ private:
     vk::raii::Sampler      sampler     = nullptr;
     vk::raii::CommandPool  oneTimePool = nullptr;
     bool                   created     = false;
+    bool                   m_srgb      = true;
 };

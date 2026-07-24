@@ -26,6 +26,19 @@ public:
     void SetGraph    (Krayon::PostProcessGraph* graph) { m_graph = graph; }
     void SetOnChanged(std::function<void()>     cb)    { m_onChanged = std::move(cb); }
 
+    // Live pointers into Application's SSAO settings (deferred path) so the
+    // panel can edit them directly, Unity-style.
+    struct SSAOControls
+    {
+        bool*  enabled   = nullptr;
+        float* radius    = nullptr;
+        float* bias      = nullptr;
+        float* intensity = nullptr;
+        float* power     = nullptr;
+        float* exposure  = nullptr;   // final tonemap exposure
+    };
+    void SetSSAOControls(const SSAOControls& c) { m_ssaoCtl = c; }
+
 private:
     void DrawPresetBar();
     void DrawAddMenu();
@@ -39,6 +52,7 @@ private:
     Krayon::PostProcessGraph* m_graph     = nullptr;
     std::function<void()>     m_onChanged;
     int                       m_selected  = -1;
+    SSAOControls              m_ssaoCtl;
 
     // Preset browser state
     std::vector<std::string>  m_presetFiles;   // absolute paths of *.pp presets

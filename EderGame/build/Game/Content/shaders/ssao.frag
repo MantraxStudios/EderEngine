@@ -35,10 +35,13 @@ void main()
     if (depth >= 0.9999) { outColor = vec4(1.0); return; }   // sky = unoccluded
 
     float radius = ubo.params.x;
-    float bias   = ubo.params.y;
     float power  = max(ubo.params.w, 0.01);
 
     vec3 P = ViewPos(fragUV, depth);
+    // Depth-scaled bias: a fixed view-space bias self-occludes distant surfaces
+    // (acne that swims as the camera moves). Growing it with |view z| keeps the
+    // offset a roughly constant fraction of the surface's distance.
+    float bias = ubo.params.y * (1.0 + 0.03 * abs(P.z));
     vec3 N = normalize(mat3(ubo.view) * normalize(texture(gNormal, fragUV).xyz));
 
     // Per-pixel random rotation angle to decorrelate the kernel.

@@ -146,6 +146,7 @@ namespace Krayon
         uint64_t    normalTexGuid    = 0;   // slot 1  (normal map)
         uint64_t    roughnessTexGuid = 0;   // slot 2  (roughness/metallic)
         uint64_t    emissiveTexGuid  = 0;   // slot 3  (emissive)
+        float       normalStrength   = 1.0f; // scales the normal-map bump intensity
     };
 
     // ─────────────────────────────────────────────────────────────
@@ -158,6 +159,10 @@ namespace Krayon
         AssetType   type = AssetType::Unknown;
         std::string name;   // file stem (no extension)
         std::string path;   // relative to workDir, forward-slashes, lower-case
+
+        // Mesh import scale (Unity-style "Scale Factor"). 1 = use the file's
+        // native units as imported by Assimp. Persisted in the sidecar.
+        float       importScale = 1.0f;
     };
 
     // ─────────────────────────────────────────────────────────────
@@ -283,6 +288,18 @@ namespace Krayon
         }
 
         const std::unordered_map<uint64_t, AssetMeta>& GetAll() const { return m_byGuid; }
+
+        /// Unity-style mesh import Scale Factor: update + persist to sidecar.
+        /// Takes effect the next time the mesh is (re)loaded.
+        bool SetImportScale(uint64_t guid, float scale)
+        {
+            auto it = m_byGuid.find(guid);
+            if (it == m_byGuid.end()) return false;
+            it->second.importScale = scale;
+            if (!m_workDir.empty())
+                WriteSidecar(m_workDir + "/" + it->second.path, it->second);
+            return true;
+        }
 
         bool IsCompiled() const { return m_compiled; }
         const std::string& GetWorkDir() const { return m_workDir; }
@@ -590,6 +607,7 @@ namespace Krayon
                 else if (k == "emissiveTexGuid")   { try { out.emissiveTexGuid   = std::stoull(v, nullptr, 16); } catch (...){} }
                 else if (k == "roughness") { try { out.roughness = std::stof(v); } catch (...){} }
                 else if (k == "metallic")  { try { out.metallic  = std::stof(v); } catch (...){} }
+                else if (k == "normalStrength") { try { out.normalStrength = std::stof(v); } catch (...){} }
                 else if (k == "albedo")
                 {
                     float r=1,g=1,b=1,a=1;
@@ -628,6 +646,7 @@ namespace Krayon
             f << "albedo="         << buf                 << "\n";
             f << "roughness="      << ma.roughness        << "\n";
             f << "metallic="       << ma.metallic         << "\n";
+            f << "normalStrength=" << ma.normalStrength   << "\n";
             snprintf(buf, sizeof(buf), "%.6f,%.6f,%.6f",
                      ma.emissive[0], ma.emissive[1], ma.emissive[2]);
             f << "emissive="       << buf                 << "\n";
@@ -691,6 +710,8 @@ namespace Krayon
             f << "type=" << AssetTypeToString(meta.type) << "\n";
             f << "name=" << meta.name << "\n";
             f << "path=" << meta.path << "\n";
+            if (meta.importScale != 1.0f)
+                f << "importScale=" << std::dec << meta.importScale << "\n";
         }
 
         bool ReadSidecar(const std::string& sidecarAbsPath, AssetMeta& out) const
@@ -718,6 +739,8 @@ namespace Krayon
             out.type = AssetTypeFromString(kv["type"]);
             out.name = kv["name"];
             out.path = NormalizePath(kv["path"]);
+            if (kv.count("importScale"))
+                { try { out.importScale = std::stof(kv["importScale"]); } catch (...) {} }
             return true;
         }
 

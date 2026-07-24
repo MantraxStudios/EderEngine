@@ -6,6 +6,8 @@
 #include "Renderer/Vulkan/VulkanPipeline.h"
 #include "Renderer/Vulkan/VulkanShadowPipeline.h"
 #include "Renderer/Vulkan/VulkanPointShadowPipeline.h"
+#include "Renderer/Vulkan/VulkanShadowPipeline.h"
+#include "Renderer/Vulkan/BoneSSBO.h"
 #include <glm/glm.hpp>
 #include <algorithm>
 
@@ -238,7 +240,7 @@ void Scene::DrawTransparent(vk::CommandBuffer cmd, VulkanPipeline& pipeline, con
 }
 
 void Scene::DrawShadow(vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeline, const glm::mat4& lightViewProj,
-                       const glm::vec4* cullSphere)
+                       const glm::vec4* cullSphere, BoneSSBO* fallbackBones)
 {
     vk::PipelineLayout layout = *shadowPipeline.GetLayout();
     cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &lightViewProj);
@@ -252,6 +254,7 @@ void Scene::DrawShadow(vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeli
         if (!obj.mesh || !obj.material) continue;
         if (obj.isSkinned) continue;                        // skinned drawn separately via DrawSkinnedShadow
         if (obj.material->IsTransparent()) continue;        // alpha-blend casts no shadow
+        if (obj.material->IsAlphaTested()) continue;        // texture-shaped shadow pass below
         if (!obj.subMeshMaterials.empty()) continue;        // handled below per-submesh
         if (!CasterVisible(obj, cullSphere)) continue;
         m_scratchGroups.push_back({ obj.mesh, obj.worldMatrix });
@@ -316,6 +319,55 @@ void Scene::DrawShadow(vk::CommandBuffer cmd, VulkanShadowPipeline& shadowPipeli
                 if (!m_scratchSmDraw[i].opaque) continue;
                 m_scratchSmDraw[i].obj->mesh->DrawSubMesh(cmd, m_scratchSmDraw[i].si, i, 1);
             }
+        }
+    }
+
+    // --- Alpha-tested casters: dedicated pipeline that samples the albedo and
+    //     discards transparent texels, so foliage/fences shadow their texture
+    //     shape rather than the full triangle silhouette. ---
+    if (shadowPipeline.HasAlpha() && fallbackBones)
+    {
+        m_scratchGroups.clear();          // reuse as (mesh, matrix) list
+        for (auto& obj : objects)
+        {
+            if (!obj.mesh || !obj.material) continue;
+            if (obj.isSkinned) continue;
+            if (!obj.subMeshMaterials.empty()) continue;
+            if (!obj.material->IsAlphaTested()) continue;
+            if (!CasterVisible(obj, cullSphere)) continue;
+            m_scratchGroups.push_back({ obj.mesh, obj.worldMatrix });
+        }
+
+        if (!m_scratchGroups.empty())
+        {
+            m_scratchMatrices.clear();
+            for (auto& g : m_scratchGroups) m_scratchMatrices.push_back(g.matrix);
+            alphaShadowInstanceBuffer.Upload(m_scratchMatrices);
+            alphaShadowInstanceBuffer.Bind(cmd);
+
+            shadowPipeline.BindAlpha(cmd);
+            vk::PipelineLayout aLayout = *shadowPipeline.GetAlphaLayout();
+            cmd.pushConstants(aLayout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &lightViewProj);
+            fallbackBones->BindToSet(cmd, aLayout, 1);   // set 1 = bones
+
+            // Walk objects in the same order the instance buffer was filled,
+            // binding each caster's material (set 0) before its instanced draw.
+            uint32_t inst = 0;
+            for (auto& obj : objects)
+            {
+                if (!obj.mesh || !obj.material) continue;
+                if (obj.isSkinned || !obj.subMeshMaterials.empty()) continue;
+                if (!obj.material->IsAlphaTested()) continue;
+                if (!CasterVisible(obj, cullSphere)) continue;
+                obj.material->Bind(cmd, aLayout);        // set 0 = material
+                obj.mesh->DrawInstanced(cmd, inst, 1);
+                ++inst;
+            }
+
+            // Restore the plain depth-only pipeline for subsequent draws (the
+            // caller may still draw skinned casters into the same pass).
+            shadowPipeline.Bind(cmd);
+            cmd.pushConstants(layout, vk::ShaderStageFlagBits::eVertex, 0, sizeof(glm::mat4), &lightViewProj);
         }
     }
 }
@@ -494,5 +546,6 @@ void Scene::Destroy()
     subMeshInstanceBuffer.Destroy();
     shadowSubMeshInstanceBuffer.Destroy();
     pointShadowSubMeshInstanceBuffer.Destroy();
+    alphaShadowInstanceBuffer.Destroy();
     objects.clear();
 }

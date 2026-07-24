@@ -19,14 +19,63 @@
 #include <imgui/imgui.h>
 #include <cstdio>
 #include <cstring>
+#include <cctype>
+#include <string>
 
-// Copy all non-hierarchy components from src to dst.
-static void CopyComponents(Entity src, Entity dst, Registry& reg)
+// Strip a trailing " (123)" enumeration suffix, returning the base name.
+static std::string BaseName(const std::string& s)
+{
+    if (s.size() >= 4 && s.back() == ')')
+    {
+        size_t open = s.rfind(" (");
+        if (open != std::string::npos && open + 2 < s.size() - 1)
+        {
+            bool digits = true;
+            for (size_t i = open + 2; i < s.size() - 1; ++i)
+                if (!std::isdigit(static_cast<unsigned char>(s[i]))) { digits = false; break; }
+            if (digits) return s.substr(0, open);
+        }
+    }
+    return s;
+}
+
+// Unity-style unique name: "Cube" → "Cube (1)", "Cube (1)" → "Cube (2)", picking
+// the next free number among existing entities so names stay short (no crashes
+// from an ever-growing "(copy) (copy) …" string).
+static std::string MakeUniqueName(Registry& reg, const std::string& srcName)
+{
+    const std::string base = BaseName(srcName);
+    int maxN = 0;
+    reg.Each<TagComponent>([&](Entity, TagComponent& t)
+    {
+        const std::string& n = t.name;
+        if (n == base) return;   // base counts as N = 0
+        if (n.size() > base.size() + 3 &&
+            n.compare(0, base.size(), base) == 0 &&
+            n.compare(base.size(), 2, " (") == 0 && n.back() == ')')
+        {
+            bool digits = true; int val = 0;
+            for (size_t i = base.size() + 2; i < n.size() - 1; ++i)
+            {
+                char c = n[i];
+                if (!std::isdigit(static_cast<unsigned char>(c))) { digits = false; break; }
+                val = val * 10 + (c - '0');
+            }
+            if (digits && val > maxN) maxN = val;
+        }
+    });
+    return base + " (" + std::to_string(maxN + 1) + ")";
+}
+
+// Copy all non-hierarchy components from src to dst. renameRoot enumerates the
+// name Unity-style (only the branch root should be renamed; children keep theirs).
+static void CopyComponents(Entity src, Entity dst, Registry& reg, bool renameRoot)
 {
     if (reg.Has<TagComponent>(src))
     {
         auto tag = reg.Get<TagComponent>(src);
-        tag.name += " (copy)";
+        if (renameRoot)
+            tag.name = MakeUniqueName(reg, tag.name);
         reg.Add<TagComponent>(dst) = tag;
     }
     if (reg.Has<TransformComponent>(src))
@@ -58,10 +107,10 @@ static void CopyComponents(Entity src, Entity dst, Registry& reg)
 // Recursively duplicate entity e and all its descendants.
 // newParent = the already-duplicated parent to attach to (NULL_ENTITY for roots).
 // Returns the copy of e.
-static Entity DuplicateBranch(Entity e, Entity newParent, Registry& reg)
+static Entity DuplicateBranch(Entity e, Entity newParent, Registry& reg, bool isRoot)
 {
     Entity copy = reg.Create();
-    CopyComponents(e, copy, reg);
+    CopyComponents(e, copy, reg, isRoot);
 
     // Wire up hierarchy: attach copy to its new parent WITHOUT calling Attach()
     // (which would recalculate local transforms). We preserve local transforms as-is.
@@ -80,7 +129,7 @@ static Entity DuplicateBranch(Entity e, Entity newParent, Registry& reg)
     if (reg.Has<HierarchyComponent>(e))
     {
         for (Entity child : reg.Get<HierarchyComponent>(e).children)
-            DuplicateBranch(child, copy, reg);
+            DuplicateBranch(child, copy, reg, false);
     }
 
     return copy;
@@ -96,7 +145,7 @@ void HierarchyPanel::DuplicateSelected()
     if (registry->Has<HierarchyComponent>(e))
         origParent = registry->Get<HierarchyComponent>(e).parent;
 
-    Entity copy = DuplicateBranch(e, origParent, *registry);
+    Entity copy = DuplicateBranch(e, origParent, *registry, true);
     selected = copy;
 }
 
@@ -123,6 +172,25 @@ void HierarchyPanel::DrawEntityNode(Entity e)
     else if (registry->Has<MeshRendererComponent>(e)) icon = "[M] ";
     else                                               icon = "[A] ";
 
+    // Inline rename row (double-click / F2)
+    if (m_renaming == e)
+    {
+        ImGui::PushID((int)e);
+        ImGui::SetNextItemWidth(-1);
+        if (m_renameFocus) { ImGui::SetKeyboardFocusHere(); m_renameFocus = false; }
+        bool done = ImGui::InputText("##rn", m_renameBuf, sizeof(m_renameBuf),
+                                     ImGuiInputTextFlags_EnterReturnsTrue |
+                                     ImGuiInputTextFlags_AutoSelectAll);
+        if (done || ImGui::IsItemDeactivated())
+        {
+            if (m_renameBuf[0] && registry->Has<TagComponent>(e))
+                registry->Get<TagComponent>(e).name = m_renameBuf;
+            m_renaming = NULL_ENTITY;
+        }
+        ImGui::PopID();
+        return;
+    }
+
     char label[256];
     snprintf(label, sizeof(label), "%s%s", icon, name);
 
@@ -140,6 +208,15 @@ void HierarchyPanel::DrawEntityNode(Entity e)
 
     if (ImGui::IsItemClicked(ImGuiMouseButton_Left) && !ImGui::IsItemToggledOpen())
         selected = (selected == e) ? NULL_ENTITY : e;
+
+    // Double-click on the row = inline rename (Unity-style)
+    if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(ImGuiMouseButton_Left))
+    {
+        m_renaming    = e;
+        m_renameFocus = true;
+        strncpy(m_renameBuf, name, sizeof(m_renameBuf) - 1);
+        m_renameBuf[sizeof(m_renameBuf) - 1] = '\0';
+    }
 
     if (ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
     {
@@ -165,7 +242,15 @@ void HierarchyPanel::DrawEntityNode(Entity e)
         ImGui::TextDisabled("%s%s", icon, name);
         ImGui::Separator();
 
-        if (ImGui::MenuItem("Duplicate"))
+        if (ImGui::MenuItem("Rename", "F2"))
+        {
+            m_renaming    = e;
+            m_renameFocus = true;
+            strncpy(m_renameBuf, name, sizeof(m_renameBuf) - 1);
+            m_renameBuf[sizeof(m_renameBuf) - 1] = '\0';
+        }
+
+        if (ImGui::MenuItem("Duplicate", "Ctrl+D"))
         {
             selected = e;
             DuplicateSelected();
@@ -229,7 +314,6 @@ void HierarchyPanel::OnDraw()
     ImGui::SetNextItemWidth(ImGui::GetContentRegionAvail().x - addBtnW - ImGui::GetStyle().ItemSpacing.x);
     ImGui::InputTextWithHint("##search", "Search...", searchBuf, sizeof(searchBuf));
     ImGui::SameLine();
-    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.80f, 0.10f, 0.10f, 1.0f));
     if (ImGui::Button("+", ImVec2(addBtnW, 0)))
     {
         Entity e = registry->Create();
@@ -237,8 +321,19 @@ void HierarchyPanel::OnDraw()
         registry->Add<TransformComponent>(e);
         selected = e;
     }
-    ImGui::PopStyleColor();
     if (ImGui::IsItemHovered()) ImGui::SetTooltip("Add Entity");
+
+    // F2 renames the selected entity (when this window has focus)
+    if (selected != NULL_ENTITY && ImGui::IsWindowFocused(ImGuiFocusedFlags_ChildWindows) &&
+        ImGui::IsKeyPressed(ImGuiKey_F2, false))
+    {
+        m_renaming    = selected;
+        m_renameFocus = true;
+        const char* nm = registry->Has<TagComponent>(selected)
+            ? registry->Get<TagComponent>(selected).name.c_str() : "Entity";
+        strncpy(m_renameBuf, nm, sizeof(m_renameBuf) - 1);
+        m_renameBuf[sizeof(m_renameBuf) - 1] = '\0';
+    }
 
     ImGui::TextDisabled("%d actor%s", total, total == 1 ? "" : "s");
     ImGui::Separator();

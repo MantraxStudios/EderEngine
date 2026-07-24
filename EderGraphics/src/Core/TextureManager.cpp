@@ -8,29 +8,32 @@ TextureManager& TextureManager::Get()
     return instance;
 }
 
-VulkanTexture& TextureManager::Load(const std::string& path)
+VulkanTexture& TextureManager::Load(const std::string& path, bool srgb)
 {
-    auto it = textures.find(path);
+    // sRGB and linear views of the same file are cached separately.
+    const std::string key = srgb ? path : (path + "\x01lin");
+
+    auto it = textures.find(key);
     if (it != textures.end())
         return *it->second;
 
     // Already known-bad path — rethrow silently (no repeated console spam)
-    if (failedPaths.count(path))
+    if (failedPaths.count(key))
         throw std::runtime_error("[TextureManager] Not found: " + path);
 
     auto tex = std::make_unique<VulkanTexture>();
     try
     {
-        tex->Load(path);
+        tex->Load(path, srgb);
     }
     catch (const std::exception& e)
     {
-        failedPaths.insert(path);
+        failedPaths.insert(key);
         std::cerr << "[TextureManager] No se encontro la textura '" << path << "': " << e.what() << "\n";
         throw;
     }
     VulkanTexture* ptr = tex.get();
-    textures[path] = std::move(tex);
+    textures[key] = std::move(tex);
     return *ptr;
 }
 

@@ -102,9 +102,12 @@ void VulkanTexture::CreateImageResources(uint32_t width, uint32_t height)
 {
     auto& device = VulkanInstance::Get().GetDevice();
 
+    const vk::Format texFormat = m_srgb ? vk::Format::eR8G8B8A8Srgb
+                                        : vk::Format::eR8G8B8A8Unorm;
+
     vk::ImageCreateInfo imgInfo{};
     imgInfo.imageType     = vk::ImageType::e2D;
-    imgInfo.format        = vk::Format::eR8G8B8A8Srgb;
+    imgInfo.format        = texFormat;
     imgInfo.extent        = vk::Extent3D{ width, height, 1 };
     imgInfo.mipLevels     = 1;
     imgInfo.arrayLayers   = 1;
@@ -129,7 +132,7 @@ void VulkanTexture::CreateImageResources(uint32_t width, uint32_t height)
     vk::ImageViewCreateInfo viewInfo{};
     viewInfo.image                           = *image;
     viewInfo.viewType                        = vk::ImageViewType::e2D;
-    viewInfo.format                          = vk::Format::eR8G8B8A8Srgb;
+    viewInfo.format                          = texFormat;
     viewInfo.subresourceRange.aspectMask     = vk::ImageAspectFlagBits::eColor;
     viewInfo.subresourceRange.baseMipLevel   = 0;
     viewInfo.subresourceRange.levelCount     = 1;
@@ -182,8 +185,9 @@ void VulkanTexture::UploadPixels(const uint8_t* pixels, uint32_t width, uint32_t
     created = true;
 }
 
-void VulkanTexture::LoadFromMemory(const uint8_t* data, size_t size)
+void VulkanTexture::LoadFromMemory(const uint8_t* data, size_t size, bool srgb)
 {
+    m_srgb = srgb;
     int w, h, channels;
     stbi_uc* pixels = stbi_load_from_memory(
         data, static_cast<int>(size), &w, &h, &channels, STBI_rgb_alpha);
@@ -197,8 +201,9 @@ void VulkanTexture::LoadFromMemory(const uint8_t* data, size_t size)
     std::cout << "[Texture] LoadedFromMemory " << w << "x" << h << std::endl;
 }
 
-void VulkanTexture::Load(const std::string& path)
+void VulkanTexture::Load(const std::string& path, bool srgb)
 {
+    m_srgb = srgb;
     // Route through AssetManager when available.
     auto& am = Krayon::AssetManager::Get();
     if (!am.GetWorkDir().empty() || am.IsCompiled())
@@ -206,7 +211,7 @@ void VulkanTexture::Load(const std::string& path)
         std::vector<uint8_t> bytes = am.GetBytes(path);
         if (!bytes.empty())
         {
-            LoadFromMemory(bytes.data(), bytes.size());
+            LoadFromMemory(bytes.data(), bytes.size(), srgb);
             std::cout << "[Texture] Loaded via AssetManager: " << path << std::endl;
             return;
         }

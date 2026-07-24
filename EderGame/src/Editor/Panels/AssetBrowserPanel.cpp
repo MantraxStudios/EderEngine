@@ -1,9 +1,13 @@
 #include "AssetBrowserPanel.h"
 #include <imgui/imgui.h>
+#include <imgui/imgui_impl_vulkan.h>
+#include "Renderer/Vulkan/VulkanTexture.h"
+#include "Core/TextureManager.h"
 #include <iostream>
 #include <sstream>
 #include <fstream>
 #include <algorithm>
+#include <cctype>
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -22,6 +26,74 @@ std::string AssetBrowserPanel::WorkDir() const
     return AssetManager::Get().GetWorkDir();
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+//  Icon textures — PNGs in <workdir>/../../Icons (e.g. build/Icons)
+// ─────────────────────────────────────────────────────────────────────────────
+void AssetBrowserPanel::EnsureIcons()
+{
+    if (m_iconsLoaded) return;
+    const std::string wd = WorkDir();
+    if (wd.empty()) return;          // AssetManager not ready yet — retry later
+    m_iconsLoaded = true;
+
+    std::error_code ec;
+    fs::path dir = fs::path(wd).parent_path().parent_path() / "Icons";
+    if (!fs::exists(dir, ec)) dir = "Icons";   // fallback: relative to cwd
+
+    auto load = [&](int key, const char* file)
+    {
+        fs::path p = dir / file;
+        std::error_code e2;
+        if (!fs::exists(p, e2)) return;
+        // Intentionally leaked: 6 tiny editor-only textures, freed at process
+        // exit — avoids Vulkan device-teardown ordering issues at shutdown.
+        auto* tex = new VulkanTexture();
+        try { tex->Load(p.string()); }
+        catch (...) { delete tex; return; }
+        VkDescriptorSet ds = ImGui_ImplVulkan_AddTexture(
+            (VkSampler)tex->GetSampler(), (VkImageView)tex->GetImageView(),
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+        m_iconDS[key] = (void*)ds;
+    };
+
+    load(-1,                                  "folder.png");
+    load(static_cast<int>(AssetType::Mesh),   "meshes.png");
+    load(static_cast<int>(AssetType::Audio),  "audio.png");
+    load(static_cast<int>(AssetType::Scene),  "scene.png");
+    load(static_cast<int>(AssetType::Script), "script.png");
+    load(static_cast<int>(AssetType::Shader), "shader.png");
+    load(static_cast<int>(AssetType::Prefab), "prefab.png");
+}
+
+void* AssetBrowserPanel::IconFor(const ContentItem& item)
+{
+    EnsureIcons();
+    auto it = m_iconDS.find(item.isDir ? -1 : static_cast<int>(item.type));
+    return it == m_iconDS.end() ? nullptr : it->second;
+}
+
+// Unity-style texture thumbnails: image assets preview their actual pixels.
+// The texture is shared with the renderer's TextureManager cache; the ImGui
+// descriptor is cached per-guid (null cached too, so failures don't retry).
+void* AssetBrowserPanel::ThumbFor(const ContentItem& item)
+{
+    if (item.isDir || item.type != AssetType::Texture) return nullptr;
+    auto it = m_thumbDS.find(item.guid);
+    if (it != m_thumbDS.end()) return it->second;
+
+    void* ds = nullptr;
+    try
+    {
+        VulkanTexture& t = TextureManager::Get().Load(item.relPath);
+        ds = (void*)ImGui_ImplVulkan_AddTexture(
+            (VkSampler)t.GetSampler(), (VkImageView)t.GetImageView(),
+            VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+    }
+    catch (...) {}
+    m_thumbDS[item.guid] = ds;
+    return ds;
+}
+
 const char* AssetBrowserPanel::IconForType(AssetType t)
 {
     switch (t)
@@ -36,7 +108,7 @@ const char* AssetBrowserPanel::IconForType(AssetType t)
         case AssetType::Scene:    return "[Scn] ";
         case AssetType::Script:   return "[Lua] ";
         case AssetType::Prefab:   return "[Pfb] ";
-        default:                  return "[?]   ";
+        default:                  return "[File]";
     }
 }
 
@@ -451,6 +523,21 @@ void AssetBrowserPanel::DrawBreadcrumb()
     }
 
     ImGui::PopStyleColor(2);
+
+    // Right-aligned project-wide search (Unity-style)
+    const float searchW = 220.0f;
+    float x = ImGui::GetContentRegionMax().x - searchW;
+    if (x > ImGui::GetCursorPosX() + 60.0f)
+    {
+        ImGui::SameLine(x);
+        ImGui::SetNextItemWidth(searchW);
+        ImGui::InputTextWithHint("##ab_search", "Search...", m_search, sizeof(m_search));
+    }
+    else
+    {
+        ImGui::SetNextItemWidth(searchW);
+        ImGui::InputTextWithHint("##ab_search", "Search...", m_search, sizeof(m_search));
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -586,11 +673,47 @@ void AssetBrowserPanel::DrawContent()
 
     auto items = ContentOf(m_selectedDir);
 
-    int col = 0;
+    // Non-empty search = Unity-style project-wide search across ALL assets,
+    // regardless of the selected folder.
+    if (m_search[0])
+    {
+        std::string needle = m_search;
+        std::transform(needle.begin(), needle.end(), needle.begin(),
+                       [](unsigned char ch){ return (char)std::tolower(ch); });
+
+        items.clear();
+        for (const auto& [guid, meta] : AssetManager::Get().GetAll())
+        {
+            std::string n = meta.name;
+            std::transform(n.begin(), n.end(), n.begin(),
+                           [](unsigned char ch){ return (char)std::tolower(ch); });
+            if (n.find(needle) == std::string::npos) continue;
+
+            ContentItem it;
+            it.isDir   = false;
+            it.guid    = guid;
+            it.name    = meta.name;
+            it.relPath = meta.path;
+            it.ext     = fs::path(meta.path).extension().string();
+            it.type    = meta.type;
+            items.push_back(it);
+        }
+        std::sort(items.begin(), items.end(),
+                  [](const ContentItem& a, const ContentItem& b){ return a.name < b.name; });
+    }
+
+    // Fixed-grid placement: every cell at an exact (col,row) position so column
+    // spacing is identical regardless of each item's icon/label width.
+    const float  cellH  = iconH + 10.0f;
+    const ImVec2 origin = ImGui::GetCursorPos();
+
+    int idx = 0;
     for (auto& item : items)
     {
-        if (col > 0) ImGui::SameLine();
-        if (col >= cols) { col = 0; ImGui::SameLine(0); ImGui::NewLine(); }
+        const int c = idx % cols;
+        const int r = idx / cols;
+        ImGui::SetCursorPos(ImVec2(origin.x + c * (iconW + padX),
+                                   origin.y + r * cellH));
 
         ImGui::BeginGroup();
 
@@ -606,18 +729,39 @@ void AssetBrowserPanel::DrawContent()
             else if (item.type == AssetType::Script)   fileBg = ImVec4(0.28f, 0.18f, 0.10f, 0.85f);
         }
 
-        ImGui::PushStyleColor(ImGuiCol_Button, item.isDir
-            ? ImVec4(0.25f, 0.40f, 0.65f, 0.6f)
-            : fileBg);
-
-        // Build icon label: show extension for files
-        std::string iconLabel = item.isDir ? "[Dir]" : item.ext;
-        if (iconLabel.empty()) iconLabel = IconForType(item.type);
-
         ImGui::PushID(item.isDir ? item.relPath.c_str()
                                  : reinterpret_cast<const void*>(item.guid));
 
-        const bool clicked = ImGui::Button(iconLabel.c_str(), ImVec2(iconW, iconH - 20.0f));
+        bool clicked = false;
+        void* iconDS = ThumbFor(item);          // real image preview for textures
+        if (!iconDS) iconDS = IconFor(item);    // else the type's PNG icon
+        if (iconDS)
+        {
+            // PNG icon: SQUARE (icons are square — a rect stretches them),
+            // horizontally centered inside the cell.
+            const float imgSz = 46.0f;
+            const float btnW  = imgSz + ImGui::GetStyle().FramePadding.x * 2.0f;
+            ImGui::SetCursorPosX(ImGui::GetCursorPosX() + (iconW - btnW) * 0.5f);
+
+            ImGui::PushStyleColor(ImGuiCol_Button,        ImVec4(0, 0, 0, 0));
+            ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(1, 1, 1, 0.08f));
+            ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImVec4(1, 1, 1, 0.16f));
+            clicked = ImGui::ImageButton("##icon",
+                ImTextureRef((ImTextureID)(uint64_t)iconDS),
+                ImVec2(imgSz, imgSz));
+            ImGui::PopStyleColor(3);
+        }
+        else
+        {
+            // Fallback: colour-coded text tile (types without a PNG icon)
+            ImGui::PushStyleColor(ImGuiCol_Button, item.isDir
+                ? ImVec4(0.25f, 0.40f, 0.65f, 0.6f)
+                : fileBg);
+            std::string iconLabel = item.isDir ? "[Dir]" : item.ext;
+            if (iconLabel.empty()) iconLabel = IconForType(item.type);
+            clicked = ImGui::Button(iconLabel.c_str(), ImVec2(iconW, iconH - 20.0f));
+            ImGui::PopStyleColor();
+        }
 
         // Drag source (files only)
         if (!item.isDir && ImGui::BeginDragDropSource(ImGuiDragDropFlags_SourceAllowNullID))
@@ -637,8 +781,6 @@ void AssetBrowserPanel::DrawContent()
             }
             ImGui::EndDragDropTarget();
         }
-
-        ImGui::PopStyleColor();
 
         // Double-click to navigate into folder; single click to select file
         if (item.isDir)
@@ -671,16 +813,30 @@ void AssetBrowserPanel::DrawContent()
             if (m) DrawContextMenuFile(item.guid, *m);
         }
 
-        // Label (truncated)
+        // Label (truncated, centered under the icon)
         std::string label = item.name;
-        if (label.size() > 10) label = label.substr(0, 9) + "~";
+        if (label.size() > 12) label = label.substr(0, 11) + "~";
+        {
+            float textW = ImGui::CalcTextSize(label.c_str()).x;
+            float off   = (iconW - textW) * 0.5f;
+            if (off > 0.0f) ImGui::SetCursorPosX(ImGui::GetCursorPosX() + off);
+        }
         ImGui::TextUnformatted(label.c_str());
-        if (ImGui::IsItemHovered() && item.name.size() > 10)
+        if (ImGui::IsItemHovered() && item.name.size() > 12)
             ImGui::SetTooltip("%s", item.name.c_str());
 
         ImGui::PopID();
         ImGui::EndGroup();
-        ++col;
+        ++idx;
+    }
+
+    // Reserve the full grid rect with a Dummy so the window scroll/height is
+    // correct (ImGui asserts if SetCursorPos extends bounds without an item).
+    if (!items.empty())
+    {
+        const int rows = (static_cast<int>(items.size()) + cols - 1) / cols;
+        ImGui::SetCursorPos(origin);
+        ImGui::Dummy(ImVec2(cols * (iconW + padX), rows * cellH));
     }
 
     // Right-click on background (always active, even when not empty)
@@ -705,6 +861,20 @@ void AssetBrowserPanel::DrawContextMenuFile(uint64_t guid, const AssetMeta& meta
     ImGui::TextDisabled("%s", meta.path.c_str());
     ImGui::TextDisabled("GUID: %016llX", static_cast<unsigned long long>(guid));
     ImGui::Separator();
+
+    // Unity-style import Scale Factor (meshes only). Persisted in the sidecar;
+    // applies the next time the mesh is loaded (reopen the scene / restart).
+    if (meta.type == AssetType::Mesh)
+    {
+        float scale = meta.importScale;
+        ImGui::TextDisabled("Import Scale");
+        ImGui::SetNextItemWidth(140);
+        if (ImGui::DragFloat("##impscale", &scale, 0.01f, 0.0001f, 1000.0f, "%.4f"))
+            AssetManager::Get().SetImportScale(guid, scale);
+        if (ImGui::IsItemHovered())
+            ImGui::SetTooltip("Unity-style Scale Factor.\nTakes effect when the mesh is next loaded\n(reopen the scene or restart the editor).");
+        ImGui::Separator();
+    }
 
     if (ImGui::MenuItem("Rename"))
         OpenRename(guid, meta.name);

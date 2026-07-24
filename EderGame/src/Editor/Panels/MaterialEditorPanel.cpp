@@ -302,7 +302,6 @@ bool MaterialEditorPanel::DrawShaderDropField(const char* label, uint64_t& shade
 
     std::string btn = displayName;
     if (btn.size() > 22) btn = btn.substr(0, 19) + "...";
-    btn += "  \xce\xb2";
     ImGui::Button(btn.c_str(), ImVec2(ImGui::GetContentRegionAvail().x, 0));
 
     ImGui::PopStyleColor(3);
@@ -389,7 +388,6 @@ bool MaterialEditorPanel::DrawTextureDropField(const char* label, uint64_t& texG
 
     std::string btn = displayName;
     if (btn.size() > 20) btn = btn.substr(0, 17) + "...";
-    btn += "  \xce\xb2";
     const float clearW = 26.0f;
     ImGui::Button(btn.c_str(), ImVec2(ImGui::GetContentRegionAvail().x - clearW, 0));
     ImGui::PopStyleColor(3);
@@ -492,6 +490,8 @@ void MaterialEditorPanel::DrawMaterialInspector()
 
     changed |= DrawTextureDropField("Albedo Tex",    m_current.albedoTexGuid);
     changed |= DrawTextureDropField("Normal Tex",    m_current.normalTexGuid);
+    if (m_current.normalTexGuid != 0)
+        changed |= ImGui::SliderFloat("Normal Strength", &m_current.normalStrength, 0.0f, 4.0f);
     changed |= DrawTextureDropField("Roughness Tex", m_current.roughnessTexGuid);
     changed |= DrawTextureDropField("Emissive Tex",  m_current.emissiveTexGuid);
 

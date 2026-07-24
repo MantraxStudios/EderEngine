@@ -152,8 +152,9 @@ void main()
         -1.0
     );
 
+    // NOTE: no axis flips here — the visible sun must sit exactly where the
+    // real light direction projects, so shadows and sun shafts line up with it.
     vec3 rd = normalize((camData.inverseView * vec4(viewRay, 0.0)).xyz);
-    rd.x = -rd.x;
 
     vec3  sun  = normalize(sunDir.xyz);
     float itn  = sunDir.w;
@@ -208,12 +209,8 @@ void main()
     float blend = smoothstep(0.0, 1.0, belowT);
     vec3  hdrOut = mix(sky, gCol, blend);
 
-    // Same output transform as triangle.frag (exposure → ACES → gamma) so the
+    // (final tonemap removed; exposure → ACES → gamma) so the
     // sky stays balanced against the tonemapped scene geometry.
-    const float a = 2.51, b = 0.03, c = 2.43, d = 0.59, e = 0.14;
-    vec3 x      = hdrOut * 1.15;
-    vec3 mapped = clamp((x * (a * x + b)) / (x * (c * x + d) + e), 0.0, 1.0);
-    mapped      = pow(mapped, vec3(1.0 / 2.2));
-
-    finalImage = vec4(mapped, 1.0);
+    // Linear HDR out - the frame is tonemapped once at the very end now.
+    finalImage = vec4(hdrOut, 1.0);
 }
